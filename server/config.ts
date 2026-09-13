@@ -1,7 +1,10 @@
 import { resolve } from 'node:path';
+import { configureAccess } from './trusted-local.js';
 
 export const PROXY_PREFIX = '/__hermes';
 export interface Config {
+  authMode?: 'dashboard' | 'trusted-local';
+  readonly sessionToken?: string;
   upstream: URL;
   publicOrigin: URL;
   host: string;
@@ -44,7 +47,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   if (env.WORKSPACE_ROOTS || env.TRUST_PROXY || env.GIT_ENABLED === 'true') {
     throw new Error('Workspace and client-supplied proxy trust are not enabled in Phase 0');
   }
-  return {
+  const config: Config = {
     upstream: origin(env.HERMES_DASHBOARD_URL, 'HERMES_DASHBOARD_URL'),
     publicOrigin: origin(env.PUBLIC_ORIGIN, 'PUBLIC_ORIGIN'),
     host: env.HOST ?? '0.0.0.0',
@@ -53,4 +56,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     requestTimeoutMs: 15_000,
     maxBodyBytes: 1_048_576,
   };
+  configureAccess(config, env);
+  return config;
 }
