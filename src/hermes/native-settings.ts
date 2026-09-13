@@ -29,20 +29,26 @@ export class NativeSettings {
     if (epoch !== this.epoch || this.target.read().runtimeId !== id)
       throw new ClientError('disconnected', 'The conversation or connection changed; no setting was replayed');
   }
-  private async transaction(action: (id: string, profile: string | undefined, epoch: number) => Promise<void>): Promise<void> {
+  private async transaction(action: (id: string, profile: string | undefined, epoch: number, send: (params: Record<string, unknown>) => Promise<unknown>) => Promise<void>): Promise<void> {
     const target = this.target.read(), id = target.runtimeId;
     if (!id || !target.idle || this.state.busy || this.state.outcome === 'unknown')
       throw new ClientError('protocol', 'Wait for an attached idle conversation and resolve any unconfirmed setting');
     const epoch = this.epoch;
+    let dispatched = false;
     this.publish({ busy: true, note: undefined, outcome: 'idle' });
     try {
       // Refresh validates the runtime still exists; never send a sessionless config setter.
       await this.target.refresh(); this.assertCurrent(epoch, id);
       if (!this.target.read().idle) throw new ClientError('protocol', 'The agent started working; settings were not changed');
-      await action(id, target.profile, epoch);
+      await action(id, target.profile, epoch, params => {
+        this.assertCurrent(epoch, id);
+        dispatched = true;
+        return this.rpc.call('config.set', params);
+      });
     } catch (error) {
       if (epoch === this.epoch) {
-        const uncertain = error instanceof ClientError && ['network', 'timeout', 'disconnected'].includes(error.kind);
+        const uncertain = (error instanceof ClientError && ['network', 'timeout', 'disconnected'].includes(error.kind)) ||
+          (dispatched && !(error instanceof ClientError && error.kind === 'rpc'));
         this.publish({ outcome: uncertain ? 'unknown' : 'rejected', confirmation: undefined,
           note: uncertain ? 'The setting was not confirmed. Read current settings before trying again; nothing will be replayed.' :
             error instanceof ClientError && error.rpcCode === -32601 ? 'This Hermes version does not support this control.' :
@@ -66,7 +72,7 @@ export class NativeSettings {
     await this.setModel(pending.choice, true, pending);
   }
   private async setModel(choice: ModelChoice, confirm: boolean, expected?: { model?: string; provider?: string }): Promise<void> {
-    await this.transaction(async (id, profile, epoch) => {
+    await this.transaction(async (id, profile, epoch, send) => {
       const inventory = modelCatalogue(await this.rpc.call('model.options', { session_id: id, ...(profile ? { profile } : {}) }));
       this.assertCurrent(epoch, id);
       if (!inventory.choices.some(row => row.model === choice.model && row.provider === choice.provider && row.authenticated !== false))
@@ -75,7 +81,7 @@ export class NativeSettings {
       const before = this.target.read().agent;
       if (expected && (before?.model !== expected.model || before?.provider !== expected.provider))
         throw new ClientError('protocol', 'The active model changed; choose the model again before confirming');
-      const raw = await this.rpc.call('config.set', modelSetParams(id, profile, choice, confirm));
+      const raw = await send(modelSetParams(id, profile, choice, confirm));
       const result = modelChangeResult(raw);
       this.assertCurrent(epoch, id);
       if (result.confirmation) {
@@ -94,7 +100,8 @@ export class NativeSettings {
   }
   async changeReasoning(effort: Effort): Promise<void> {
     effortValue(effort); this.cancelConfirmation();
-    await this.transaction(async (id, profile, epoch) => {
+    await this.transaction(async (id, profile, epoch, send) => {
+      const observed = { ...this.target.read().agent };
       const params = { session_id: id, ...(profile ? { profile } : {}) };
       const inventory = modelCatalogue(await this.rpc.call('model.options', params));
       this.assertCurrent(epoch, id);
@@ -104,7 +111,10 @@ export class NativeSettings {
       // Revalidate after the potentially slow provider probe, then use only explicit session scope.
       await this.target.refresh(); this.assertCurrent(epoch, id);
       if (!this.target.read().idle) throw new ClientError('protocol', 'The agent is working; reasoning was not changed');
-      const result = record(await this.rpc.call('config.set', reasoningSetParams(id, profile, effort)));
+      const latest = this.target.read().agent;
+      if (latest?.model !== observed.model || latest?.provider !== observed.provider)
+        throw new ClientError('protocol', 'The active model changed while checking capabilities; choose the effort again');
+      const result = record(await send(reasoningSetParams(id, profile, effort)));
       this.assertCurrent(epoch, id);
       if (result.key !== 'reasoning' || result.value !== effort)
         throw new ClientError('protocol', 'Hermes did not confirm the requested reasoning effort');

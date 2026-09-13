@@ -76,3 +76,31 @@ test('mandatory reasoning cannot be disabled; backend deferred model changes sta
   h.f.deferred = true; await h.settings.changeModel(choice);
   assert.equal(h.settings.state.outcome, 'deferred');
 });
+
+test('malformed mutation acknowledgements require readback rather than being called rejected', async () => {
+  const h = fixture();
+  const original = h.f.rpc.call;
+  h.f.rpc.call = async (method, params) => {
+    const result = await original(method, params);
+    return method === 'config.set' ? { malformed: true } : result;
+  };
+  await assert.rejects(h.settings.changeModel(choice));
+  assert.equal(h.settings.state.outcome, 'unknown');
+  await assert.rejects(h.settings.changeModel(choice));
+  assert.equal(h.calls.filter(call => call.method === 'config.set').length, 1);
+  await h.settings.recover(); assert.equal(h.settings.state.outcome, 'idle');
+});
+
+test('explicit RPC rejection remains rejected and never gets relabelled applied', async () => {
+  const h = fixture(); h.f.hook = async () => { throw new ClientError('rpc', 'Rejected', 4002); };
+  await assert.rejects(h.settings.changeModel(choice));
+  assert.equal(h.settings.state.outcome, 'rejected');
+  assert.equal(h.target.agent.model, 'model-a');
+});
+
+test('a model changed by another client during the capability check blocks reasoning dispatch', async () => {
+  const h = fixture();
+  h.f.refreshHook = () => { if (h.f.refreshes() === 2) h.target.agent.model = 'other-model'; };
+  await assert.rejects(h.settings.changeReasoning('high'));
+  assert.equal(h.calls.filter(call => call.method === 'config.set').length, 0);
+});

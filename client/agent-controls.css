@@ -1,12 +1,12 @@
 .agent-controls { display: flex; flex: 1 1 auto; align-items: center; flex-wrap: wrap; gap: 4px; min-width: 0; }
-.agent-chip { display: inline-flex; align-items: center; gap: 6px; min-height: 38px; padding: 7px 9px; border: 1px solid var(--border); border-radius: 9px; background: var(--surface); color: var(--text); font-size: 12px; max-width: 200px; }
+.agent-chip { display: inline-flex; align-items: center; gap: 6px; min-height: 44px; padding: 7px 9px; border: 1px solid var(--border); border-radius: 9px; background: var(--surface); color: var(--text); font-size: 12px; max-width: 200px; }
 .agent-chip > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
 .agent-chip svg { flex-shrink: 0; }
 .agent-chip:hover:not(:disabled) { background: var(--surface-hover); }
 .agent-chip:disabled { opacity: .5; cursor: not-allowed; }
 .settings-working { display: flex; align-items: center; gap: 5px; padding: 5px; color: var(--muted); font-size: 12px; }
 .settings-note { flex-basis: 100%; font-size: 12px; line-height: 1.5; color: var(--muted); padding: 4px 6px; overflow-wrap: anywhere; }
-.settings-note button { display: inline; color: var(--text); text-decoration: underline; padding: 4px; min-height: 32px; }
+.settings-note button { display: inline; color: var(--text); text-decoration: underline; padding: 4px; min-height: 44px; }
 .modal-agent { width: min(620px, calc(100vw - 32px)); }
 .agent-picker-body { padding: 8px 24px 24px; overflow-y: auto; min-height: 0; }
 .agent-picker-body > p { line-height: 1.6; }
