@@ -1,3 +1,4 @@
+import { profileIdentifier, type ModelChoice, type Effort } from '../src/hermes/model-catalog.js';
 import { DocumentRequests } from './document-requests.js';
 import { DashboardClient } from '../src/hermes/dashboard-client.js';
 import { GatewayClient } from '../src/hermes/gateway-client.js';
@@ -99,7 +100,7 @@ export class AppRuntime {
   newChat = () => {
     if (!this.ready || this.chat.busy) return;
     this.error = ''; history.pushState(null, '', location.pathname);
-    this.run(() => this.chat.create());
+    this.run(() => this.chat.create(this.chat.selected?.profile));
   };
   open = (ref: SessionRef) => {
     if (!this.readable || this.chat.busy) return;
@@ -119,6 +120,38 @@ export class AppRuntime {
     }
     await this.chat.send();
   });
+  private async settingsSession() {
+    if (!this.ready || this.chat.busy || this.chat.historical)
+      throw new ClientError('disconnected', 'Connect to an idle conversation to change settings');
+    if (!this.chat.native.state.runtimeId) {
+      if (this.chat.selected) throw new ClientError('disconnected', 'Wait for native reattachment');
+      const draft = this.chat.draft, account = this.accountGeneration;
+      const creation = this.chat.create(), native = this.chat.native;
+      await creation;
+      if (account !== this.accountGeneration || native !== this.chat.native || !this.ready)
+        throw new ClientError('disconnected', 'Conversation selection changed');
+      this.chat.setDraft(draft);
+      if (this.chat.error || !native.state.runtimeId) throw this.chat.error ?? new ClientError('protocol', 'Could not prepare a native conversation');
+    }
+    return this.chat.native;
+  }
+  async changeModel(choice: ModelChoice): Promise<void> {
+    const native = await this.settingsSession();
+    await native.settings.changeModel(choice);
+  }
+  async changeReasoning(effort: Effort): Promise<void> {
+    const native = await this.settingsSession();
+    await native.settings.changeReasoning(effort);
+  }
+  async newProfile(profile: string): Promise<void> {
+    profileIdentifier(profile);
+    if (!this.ready || this.chat.busy || this.chat.native.settings.state.busy ||
+      ['running', 'waiting'].includes(this.chat.native.state.phase))
+      throw new ClientError('protocol', 'Wait for the current turn before changing profile');
+    // A profile is a new conversation boundary. Keep the previous draft with its owner.
+    history.pushState(null, '', location.pathname);
+    await this.chat.create(profile);
+  }
   dispose() {
     this.requests.dispose();
     this.cleanup.forEach(fn => fn()); this.cleanup = [];

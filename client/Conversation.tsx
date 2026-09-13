@@ -1,5 +1,6 @@
+import { AgentControls } from './AgentControls.js';
 import { Suspense, lazy, memo, useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { ArrowDown, ArrowUp, ArrowUpRight, Check, Copy, Code2, Compass, Layers3, ListChecks, LoaderCircle, Sparkles, Square, Wrench } from 'lucide-react';
+import { ArrowDown, ArrowUp, ArrowUpRight, Check, Copy, Code2, Compass, ListChecks, LoaderCircle, Sparkles, Square, Wrench } from 'lucide-react';
 import type { AppRuntime } from './runtime.js';
 import type { NativeSession } from '../src/hermes/native-session.js';
 import { AgentView } from '../src/hermes/agent-view.js';
@@ -39,7 +40,7 @@ export function Conversation({ runtime: rt, revision }: { runtime: AppRuntime; r
   const following = useRef(true), [unread, setUnread] = useState(false), [draft, setDraft] = useState(chat.draft);
   const scope = `${draftKey(chat.selected)}:${historical ? saved.page?.offset ?? 0 : 'live'}`;
   const busy = ['running', 'waiting'].includes(state.phase), loading = chat.busy || state.phase === 'attaching';
-  const writable = rt.ready && !loading && !historical && (!chat.selected || state.phase === 'idle');
+  const writable = rt.ready && !chat.native.settings.state.busy && chat.native.settings.state.outcome !== 'unknown' && !chat.native.settings.state.confirmation && !loading && !historical && (!chat.selected || state.phase === 'idle');
   const pending = chat.native.activity.state.inputs.filter(input => ['pending', 'sending'].includes(input.status)).length;
   const error = chat.error?.message || state.error?.message || saved.error?.message;
   const empty = !messages.length && !streaming && !busy && !loading && !error;
@@ -88,7 +89,7 @@ export function Conversation({ runtime: rt, revision }: { runtime: AppRuntime; r
         <label className="sr-only" htmlFor="shell-prompt">Message Hermes</label>
         <textarea id="shell-prompt" ref={composer} rows={2} placeholder={historical ? 'Return to latest to continue this conversation' : !rt.ready ? 'Connect to Hermes to send a message' : 'Message Hermes…'} value={draft} maxLength={32768} disabled={!writable} onChange={event => { setDraft(event.target.value); rt.chat.setDraft(event.target.value); }}
           onKeyDown={event => { if (enterSends(event.nativeEvent, navigator.maxTouchPoints > 0 || matchMedia('(pointer:coarse)').matches)) { event.preventDefault(); send(); } }}/>
-        <div className="composer-toolbar"><span className="profile-label" title="Conversation owner profile"><Layers3 size={14}/>{chat.selected?.profile || 'default'}<span className="native-label">Native agent</span></span>
+        <div className="composer-toolbar"><AgentControls runtime={rt}/>
           <div className="composer-right">{draft.length > 30000 && <span className="small muted">{draft.length.toLocaleString()} / 32,768</span>}{busy ? <button type="button" className="send-button stop-button" aria-label="Stop response" title="Stop response" disabled={!rt.ready || !!state.submitting || !!state.interrupting} onClick={() => rt.run(() => chat.interrupt())}>{state.interrupting ? <LoaderCircle size={18} className="spin"/> : <Square size={15} fill="currentColor"/>}</button> : <button type="submit" className="send-button" aria-label="Send message" title="Send message" disabled={!writable || !draft.trim()}><ArrowUp size={20}/></button>}</div>
         </div>
       </form><div className="composer-caption"><span>Your conversations stay in Hermes.</span><span className="desktop-hint">Enter to send · Shift + Enter for a new line</span></div>

@@ -7,13 +7,13 @@ const REST = {
   sessionsList: '/api/sessions', sessionsSearch: '/api/sessions/search',
   profiles: '/api/profiles', models: '/api/model/options',
 } as const;
-export type Feature = keyof typeof REST | 'gateway' | 'heartbeat' | 'changeEvents' | 'workspace' | 'pwa';
-export interface Capability { state: Availability; evidence: 'unverified' | 'gateway' | 'schema' | 'webui'; implemented: boolean }
+export type Feature = keyof typeof REST | 'gateway' | 'heartbeat' | 'changeEvents' | 'workspace' | 'pwa' | 'reasoning';
+export interface Capability { state: Availability; evidence: 'unverified' | 'gateway' | 'schema' | 'webui' | 'rpc'; implemented: boolean }
 export type CapabilityMap = Record<Feature, Capability>;
 function initial(): CapabilityMap {
   return Object.fromEntries(
-    ['gateway', 'heartbeat', 'changeEvents', ...Object.keys(REST), 'workspace', 'pwa'].map((name) => [name, {
-      state: 'unknown', evidence: 'unverified', implemented: ['gateway', 'heartbeat', 'changeEvents', 'sessionsList', 'sessionsSearch'].includes(name),
+    ['gateway', 'heartbeat', 'changeEvents', ...Object.keys(REST), 'workspace', 'pwa', 'reasoning'].map((name) => [name, {
+      state: 'unknown', evidence: 'unverified', implemented: ['gateway', 'heartbeat', 'changeEvents', 'sessionsList', 'sessionsSearch', 'models', 'profiles', 'reasoning'].includes(name),
     }]),
   ) as CapabilityMap;
 }
@@ -45,6 +45,7 @@ export class CapabilitiesStore {
       const item = paths[path];
       const supported = typeof item === 'object' && item !== null && !Array.isArray(item) &&
         'get' in item && typeof item.get === 'object' && item.get !== null;
+      if (this.values[name as Feature].evidence === 'rpc') continue;
       this.set(name as keyof typeof REST, supported ? 'available' : 'unavailable', 'schema');
     }
     this.discovery = 'available'; this.publish();
@@ -55,7 +56,7 @@ export class CapabilitiesStore {
       error instanceof HttpError && error.status === 403 ? 'forbidden' :
       error instanceof ClientError && error.retryable ? 'unreachable' : 'unknown';
     // Missing introspection is not proof that individual routes are unavailable.
-    for (const name of Object.keys(REST)) this.set(name as keyof typeof REST, state, 'unverified');
+    for (const name of Object.keys(REST)) if (this.values[name as Feature].evidence !== 'rpc') this.set(name as keyof typeof REST, state, 'unverified');
     this.discovery = state; this.publish();
   }
   applyWebui(epoch: number, input: unknown): void {
@@ -67,8 +68,13 @@ export class CapabilitiesStore {
     this.set('pwa', features.pwa === true ? 'available' : 'unavailable', 'webui');
     this.publish();
   }
+  observeNative(name: 'models' | 'profiles' | 'reasoning', state: Availability): void {
+    this.set(name, state, 'rpc'); this.publish();
+  }
   gateway(phase: Phase, payload: unknown = {}): void {
     const ready = phase === 'ready';
+    if (!ready) for (const name of ['models', 'profiles', 'reasoning'] as const)
+      if (this.values[name].evidence === 'rpc') this.set(name, 'unknown', 'unverified');
     this.set('gateway', ready ? 'available' : phase === 'auth-required' ? 'auth-required' :
       phase === 'reconnecting' ? 'unreachable' : 'unknown', ready ? 'gateway' : 'unverified');
     const data = ready ? record(payload) : {};
