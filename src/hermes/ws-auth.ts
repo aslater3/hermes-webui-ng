@@ -7,8 +7,11 @@ export interface TicketSource {
 }
 /** No cache: one credential mint per admission, including every reconnect. */
 export class WsAuthClient {
-  constructor(private readonly source: TicketSource) {}
+  constructor(private readonly source: TicketSource, private readonly beforeMint?: (signal?: AbortSignal) => Promise<void>) {}
   async credential(signal?: AbortSignal): Promise<WsCredential> {
+    if (signal?.aborted) throw new ClientError('disconnected', 'Credential attempt superseded');
+    await this.beforeMint?.(signal);
+    if (signal?.aborted) throw new ClientError('disconnected', 'Credential attempt superseded');
     const data = await this.source.ticket(signal);
     if (signal?.aborted) throw new ClientError('disconnected', 'Credential attempt superseded');
     if (!/^[A-Za-z0-9_-]{16,512}$/.test(data.ticket) || !Number.isFinite(data.ttl_seconds) || data.ttl_seconds <= 0)

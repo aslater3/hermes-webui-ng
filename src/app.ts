@@ -14,8 +14,8 @@ function element<T extends HTMLElement>(id: string): T {
 }
 const diagnostics = new DiagnosticsRing();
 const dashboard = new DashboardClient(location.origin, fetch, 15_000, diagnostics);
-const gateway = new GatewayClient(new WsAuthClient(dashboard), { diagnostics });
-const foundation = new ConnectionStore(dashboard, gateway, diagnostics);
+const gateway = new GatewayClient(new WsAuthClient(dashboard, (signal) => foundation.verifyAdmission(signal)), { diagnostics });
+const foundation: ConnectionStore = new ConnectionStore(dashboard, gateway, diagnostics);
 let session = new NativeSession(gateway);
 let viewEpoch = 0;
 let providersSignature = '';

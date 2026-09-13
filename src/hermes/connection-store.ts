@@ -90,6 +90,20 @@ export class ConnectionStore {
     this.publish({ auth: 'signed-in', error: undefined });
     return changed;
   }
+  /** Called by WsAuthClient before EVERY admission, including transport-owned retries. */
+  async verifyAdmission(signal?: AbortSignal): Promise<void> {
+    const scope = this.scope;
+    const identity = await this.dashboard.me(signal);
+    if (!this.current(scope) || signal?.aborted)
+      throw new ClientError('disconnected', 'Admission verification superseded');
+    if (this.state.auth !== 'signed-in' || !this.identity)
+      throw new ClientError('auth-required', 'Sign in before opening the Gateway');
+    if (identity.user_id !== this.identity.user_id || identity.provider !== this.identity.provider) {
+      const error = new ClientError('auth-required', 'The signed-in account changed. Sign in again.');
+      this.requireAuth(error);
+      throw error;
+    }
+  }
   /** Explicit initial connection or user-requested retry; never invoked by a polling timer. */
   async start(): Promise<void> {
     if (this.state.busy) return;
