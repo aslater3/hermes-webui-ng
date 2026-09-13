@@ -58,6 +58,8 @@ export class ConnectionStore {
     this.capabilityAbort?.abort(); this.capabilities.reset(); return this.scope;
   }
   private clearAccount(): void {
+    // Subscribers must see admission disabled BEFORE any boundary/reset publishes.
+    this.state = { ...this.state, auth: 'checking' };
     this.identity = undefined;
     for (const listener of this.boundaries) listener();
     this.capabilities.reset();
@@ -214,7 +216,7 @@ export class ConnectionStore {
   }
   report() {
     // Deliberate projection: never serialise this.state, identity, providers, or raw exceptions.
-    return { schemaVersion: 1, webui: { version: '0.0.1', phase: 1 },
+    return { schemaVersion: 1, webui: { version: '0.0.1', phase: 2 },
       connection: { rest: this.state.rest, auth: this.state.auth, offline: this.state.offline,
         checkedAt: this.state.checkedAt, gateway: this.gateway.state.phase,
         generation: this.gateway.state.generation, attempt: this.gateway.state.attempt,
