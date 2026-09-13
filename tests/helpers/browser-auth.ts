@@ -1,18 +1,21 @@
 import { WebSocket } from 'ws';
+import { TestCookieJar } from './cookie-jar.js';
 
 /** Test-only browser cookie/origin adapter; never shipped in the production image. */
 export function browserAuth(origin: string) {
-  const cookies = new Map<string, string>();
+  const cookies = new TestCookieJar(origin);
   const fetcher: typeof fetch = async (input, init) => {
-    if (new URL(String(input)).origin !== origin) throw new Error('Cross-origin test request');
+    const url = String(input);
+    if (new URL(url).origin !== origin) throw new Error('Cross-origin test request');
     const headers = new Headers(init?.headers);
     headers.set('Origin', origin);
-    if (cookies.size) headers.set('Cookie', [...cookies.values()].join('; '));
-    const response = await fetch(input, { ...init, headers });
-    for (const header of response.headers.getSetCookie()) {
-      const pair = header.split(';')[0]!;
-      cookies.set(pair.split('=')[0]!, pair);
+    if (init?.credentials !== 'omit') {
+      const value = cookies.header(url);
+      if (value) headers.set('Cookie', value);
     }
+    const response = await fetch(input, { ...init, headers });
+    if (init?.credentials !== 'omit')
+      for (const header of response.headers.getSetCookie()) cookies.receive(header, url);
     return response;
   };
   return {

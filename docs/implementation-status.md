@@ -1,47 +1,32 @@
 # Implementation Status
 
-Updated: 13 September 2026. Every completed slice is committed and pushed to remote
-main, then the remote ref is verified before the next slice.
+Updated: 13 September 2026. Completed increments are committed and pushed to remote main; the remote ref is verified before starting the next increment.
 
-## Baseline and compatibility
+## Baseline
 
-M0 passed at `1209953` (documentation `98a51b0`). Runtime-tested Hermes ref:
-`b6b53c69a6ed49cb099cf1bfe76b5e6edd718e5a`. Permanent evidence is in
-`evidence/phase0-acceptance.json`. The real upstream is unmodified; only its model
-endpoint is a deterministic fixture. No Hermes home is mounted into the WebUI.
+M0 passed at `1209953` (documentation `98a51b0`). Runtime-tested Hermes ref: `b6b53c69a6ed49cb099cf1bfe76b5e6edd718e5a`. Evidence: `evidence/phase0-acceptance.json`. The real upstream is unmodified; only its model endpoint is a deterministic fixture. No Hermes home is mounted into the WebUI.
 
-M0 CI `34755471598`, `34755471596`, `34755471584`, `34755471629` all passed.
-Current upstream main was inspected at `e1d3c1afb74a778872bdc3a7bfb30c768263e523`;
-its relevant auth routes and WS-readiness source blobs match the M0 pin. That newer
-ref is not yet runtime-tested by this project.
+Upstream main was also inspected at `e1d3c1afb74a778872bdc3a7bfb30c768263e523`; relevant auth/readiness source blobs matched the M0 pin. That newer ref is not yet runtime-tested here.
 
-## Phase 1 — in progress
+## Phase 1 — implementation delivered, final acceptance pending
 
-- [x] Bounded metadata-only diagnostics ring (`995f51e`, `09d74c6`).
-- [x] Public allowlisted BFF capabilities/diagnostics, bounded and coalesced (`2637da7`).
-- [x] Separate one-use WS-auth client, bounded responses and verified logout
-  (`70dd3cf`, `2f6b655`, `d3b3615`).
-- [x] Generation-scoped schema/Gateway capability evidence (`f286b2b`).
-- [x] Coalesced lifecycle checks, terminal admission revocation and metadata telemetry (`27fd205`).
-- [x] Independent REST/auth/Gateway store with account-boundary clearing and expiry checks.
-- [ ] Responsive connection banner, capabilities and sanitised support export.
-- [ ] Browser auth-expiry/logout/offline coverage and expanded live acceptance.
+- [x] Metadata-only diagnostic ring and bounded public BFF capability/diagnostic endpoints.
+- [x] Separate one-use WS-auth client; bounded REST reads; verified logout.
+- [x] Generation-scoped schema/Gateway capability evidence, independent REST/auth/Gateway health.
+- [x] Expiry/account-boundary clearing; coalesced mobile resume; explicit-disconnect preservation.
+- [x] Responsive status banner, connection details, sanitised copy/download/clear diagnostics.
+- [x] Every-admission identity guard, including transport-owned automatic retries (`dbfbed3`).
+- [x] Desktop/iPhone-WebKit/Android/320px coverage authored for all new interactions.
+- [ ] Final combined browser and vanilla-Hermes acceptance verdict.
 
-Current local validation: build, lint, **44 unit tests and 7 synthetic wire tests pass**.
-New store tests cover auth expiry while WS is healthy, stale identity/schema reads,
-account switching, duplicate login, unconfirmed logout, REST/WS independence, and
-explicit disconnect versus offline/resume. M1 remains open until the UI and runtime
-acceptance gates pass. Synthetic tests are not evidence of vanilla-Hermes behaviour.
+## Evidence and issues
 
-## Architecture and remaining scope
+Local validation after cookie-adapter correction: build, lint, **49 unit tests and 7 wire contract tests pass**. The earlier UI checkpoint `ebd893c` passed all **40** browser tests; the admission-hardening increment adds **12** browser cases whose verdict remains to be checked.
 
-No production Hermes imports, direct Hermes state/config access, Relay, or local
-conversation database. Auth cookies stay scoped to the Hermes proxy. Diagnostics
-admit only fixed event/method/error-class labels and numeric metadata, never user
-identity, arbitrary errors, raw payloads, transcripts or credentials. See
-`phase1-foundation.md`, `architecture-decisions.md` and `phase0-running.md`.
+Live run `34757503627` passed all M0 gates and Phase 1 schema/Gateway discovery, one-use ticket replay rejection, support-report filtering and cookie-revocation detection. Its final immediate re-login failed because the test-only cookie adapter stored `Max-Age=0` deletions as empty cookies: Hermes' secure-name fallback then shadowed the newly set bare cookie. The adapter now honours deletion, expiry, path boundaries, credential omission and secure transport. Two regression tests reproduce the failure. This fix changes test infrastructure only; no production auth bypass or timing retry was introduced. Live acceptance remains pending a clean rerun.
 
-Final React shell, session sidebar/search, rich reasoning/tools, interactive prompts,
-profile/model controls, workspace and PWA are later phases. Physical iOS/Android,
-installed PWA, OAuth, internet-facing hardening, multi-arch publication and release
-security/accessibility/performance gates remain outstanding.
+## Boundaries
+
+No production Hermes imports, direct Hermes state/config access, Relay or local conversation database. Auth cookies retain upstream-owned scope. Public diagnostics expose static limits only; the per-tab report contains allowlisted metadata, not identities, raw errors, payloads, transcripts or credentials.
+
+Final React shell, session sidebar/search, rich reasoning/tools, interactive prompts, profile/model controls, workspace and PWA are later phases. Physical-device/installed-PWA/OAuth checks, public-internet hardening, multi-architecture publication and release security/accessibility/performance gates remain outstanding. Synthetic fixture and browser emulation evidence are explicitly separate from vanilla-Hermes and physical-device verification.
