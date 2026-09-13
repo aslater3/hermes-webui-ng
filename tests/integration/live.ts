@@ -6,7 +6,7 @@ import { WebSocket } from 'ws';
 import { DashboardClient } from '../../src/hermes/dashboard-client.js';
 import { GatewayClient } from '../../src/hermes/gateway-client.js';
 import { NativeSession } from '../../src/hermes/native-session.js';
-import { ClientError } from '../../src/hermes/protocol.js';
+import { ClientError, record } from '../../src/hermes/protocol.js';
 import { browserAuth } from '../helpers/browser-auth.js';
 import { EXPECTED_RESPONSE } from './provider.js';
 
@@ -22,6 +22,8 @@ const deadline = setTimeout(() => {
 let gateway: GatewayClient | undefined;
 let session: NativeSession | undefined;
 const sockets: WebSocket[] = [];
+const eventTypes: string[] = [];
+let turnFailed = false;
 const auth = browserAuth(origin);
 const dashboard = new DashboardClient(origin, auth.fetcher);
 const options = {
@@ -37,6 +39,8 @@ const options = {
 };
 async function until(check: () => boolean, label: string): Promise<void> {
   for (let attempt = 0; attempt < 900; attempt++) {
+    if (turnFailed)
+      throw new Error('Hermes reported a failed turn; inspect the isolated provider configuration');
     if (check()) return;
     if (session?.state.phase === 'error') throw session.state.error ?? new Error('Session error');
     await new Promise((resolve) => setTimeout(resolve, 100));
@@ -62,6 +66,11 @@ try {
   await dashboard.login(provider.name, username, password);
   passed('official-proxied-login');
   gateway = new GatewayClient(dashboard, options);
+  gateway.onEvent((event) => {
+    eventTypes.push(event.type);
+    if (eventTypes.length > 100) eventTypes.shift();
+    if (event.type === 'message.complete' && record(event.payload).status === 'error') turnFailed = true;
+  });
   await gateway.connect();
   passed('one-use-ticket-upgrade-gateway-ready');
   session = new NativeSession(gateway);
@@ -142,6 +151,24 @@ try {
   );
   process.exitCode = 1;
 } finally {
+  await mkdir('test-results/live', { recursive: true });
+  await writeFile(
+    'test-results/live/gates.json',
+    JSON.stringify(
+      {
+        upstream: PIN,
+        commit: process.env.GITHUB_SHA ?? 'local',
+        gates,
+        eventTypes,
+        turnFailed,
+        phase: session?.state.phase,
+        entries: session?.state.messages.length,
+        success: process.exitCode !== 1,
+      },
+      null,
+      2,
+    ),
+  );
   session?.dispose();
   gateway?.close();
   sockets.forEach((socket) => socket.terminate());

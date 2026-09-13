@@ -34,7 +34,8 @@ trap cleanup EXIT
 "$hermes" config set model.default phase0-fixture
 "$hermes" config set model.base_url http://127.0.0.1:9120/v1
 "$hermes" config set model.api_mode chat_completions
-"$hermes" config set model.api_key phase0-local-test-only
+export CUSTOM_API_KEY=phase0-local-test-only
+export CUSTOM_BASE_URL=http://127.0.0.1:9120/v1
 node scripts/test-provider.mjs > "$RUNNER_TEMP/provider-phase0.log" 2>&1 &
 provider_pid=$!
 "$hermes" serve --host 0.0.0.0 --port 9119 --no-open > "$RUNNER_TEMP/hermes-phase0.log" 2>&1 &
