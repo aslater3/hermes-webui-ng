@@ -9,7 +9,7 @@ export function foundationRoutes(config: Config) {
   async function probe() {
     const response = await fetch(new URL('/api/status', config.upstream), {
       // Deliberately no browser cookies, Authorization, or client forwarding headers.
-      headers: { host: config.publicOrigin.host, 'x-forwarded-prefix': '/__hermes' },
+      headers: { host: config.authMode === 'trusted-local' ? config.upstream.host : config.publicOrigin.host, 'x-forwarded-prefix': '/__hermes' },
       redirect: 'error', signal: AbortSignal.timeout(Math.min(3000, config.requestTimeoutMs)),
     });
     if (!response.ok) {
@@ -33,8 +33,7 @@ export function foundationRoutes(config: Config) {
     if (typeof value !== 'object' || value === null || !('auth_required' in value) ||
       typeof value.auth_required !== 'boolean')
       return { reachable: true, status: 'unsupported', authRequired: null };
-    // No config paths, process IDs, platform errors, auth provider labels or topology.
-    return { reachable: true, status: value.auth_required ? 'healthy' : 'requires-configuration',
+    return { reachable: true, status: value.auth_required || config.authMode === 'trusted-local' ? 'healthy' : 'requires-configuration',
       authRequired: value.auth_required };
   }
   function capabilities() {

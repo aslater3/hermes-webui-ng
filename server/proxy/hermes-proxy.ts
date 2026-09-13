@@ -2,6 +2,7 @@ import http, { type IncomingMessage, type ServerResponse } from 'node:http';
 import https from 'node:https';
 import { Transform, type Duplex } from 'node:stream';
 import type { Config } from '../config.js';
+import { localHandshake } from '../trusted-local.js';
 import { endToEnd, requestHeaders, rewriteLocation } from './headers.js';
 
 export type Log = (event: { event: string; requestId: string; status: number; durationMs: number }) => void;
@@ -48,7 +49,6 @@ export function proxyHttp(
     upstream.destroy();
     json(res, status, { error: { code, requestId } });
   };
-  // Bound connection and full REST transaction time; WS uses a separate lifetime.
   const timer = setTimeout(() => fail(504, 'UPSTREAM_TIMEOUT'), config.requestTimeoutMs);
   res.once('close', () => {
     clearTimeout(timer);
@@ -70,9 +70,11 @@ export function proxyHttp(
       return;
     }
     try {
+      if (config.authMode === 'trusted-local' && (response.headers.location || !response.headers['content-type']?.includes('application/json'))) throw new Error('Unsupported local response');
       const headers = endToEnd(response.headers);
+      if (config.authMode === 'trusted-local') delete headers['set-cookie'];
       if (response.headers.location) headers.location = rewriteLocation(response.headers.location, config);
-      // In particular Set-Cookie is passed verbatim: Hermes scopes names and Path itself.
+      // Gated auth retains Hermes-owned cookie names and scope verbatim.
       headers['cache-control'] = 'no-store';
       headers['x-content-type-options'] = 'nosniff';
       headers['referrer-policy'] = 'no-referrer';
@@ -152,12 +154,7 @@ export function proxyUpgrade(
     clearTimeout(timer);
     response.resume();
     refuseUpgrade(client, response.statusCode ?? 502);
-    log({
-      event: 'hermes.upgrade',
-      requestId,
-      status: response.statusCode ?? 502,
-      durationMs: Date.now() - start,
-    });
+    log({ event: 'hermes.upgrade', requestId, status: response.statusCode ?? 502, durationMs: Date.now() - start });
   });
   upstream.once('upgrade', (response, socket, initial) => {
     clearTimeout(timer);
@@ -165,12 +162,13 @@ export function proxyUpgrade(
       socket.destroy();
       return;
     }
+    const headers = endToEnd(response.headers);
+    if (!localHandshake(headers, config)) { socket.destroy(); refuseUpgrade(client, 502); upstream.destroy(); return; }
     admitted = true;
     peer = socket;
     sockets.add(socket);
     socket.setTimeout(0);
     socket.setNoDelay(true);
-    const headers = endToEnd(response.headers);
     headers.connection = 'Upgrade';
     headers.upgrade = 'websocket';
     const lines = Object.entries(headers).flatMap(([key, value]) =>

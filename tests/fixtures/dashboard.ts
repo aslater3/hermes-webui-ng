@@ -5,7 +5,7 @@ import { WebSocketServer, type WebSocket } from 'ws';
 import { AgentScenarios } from './agent-scenarios.js';
 import { WS_PROTOCOL } from '../../src/hermes/dashboard-client.js';
 
-export async function startFixture(port = 0) {
+export async function startFixture(port = 0, options: { sessionToken?: string } = {}) {
   const cookie = `fixture_auth=${randomBytes(24).toString('hex')}`;
   const tickets = new Set<string>();
   const interactions = new AgentScenarios();
@@ -13,10 +13,11 @@ export async function startFixture(port = 0) {
   const sessions = new Map<string, { key: string; messages: {role:string; text:string}[]; running: boolean; profile: string; updated: number; turn: number; inflight: string }>();
   const metrics = { tickets: 0, creates: 0, submits: 0, upgrades: 0 };
   const timers = new Set<ReturnType<typeof setTimeout>>();
-  const ws = new WebSocketServer({ noServer: true, handleProtocols: () => WS_PROTOCOL });
+  const ws = new WebSocketServer({ noServer: true, handleProtocols: () => options.sessionToken ? false : WS_PROTOCOL });
   const server = createServer((req, res) => {
     const send = (status: number, data: unknown) => { res.writeHead(status, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(data)); };
-    if (req.url === '/api/status') { send(200, { auth_required: true }); return; }
+    if (req.url === '/api/status') { send(200, { auth_required: !options.sessionToken }); return; }
+    if (options.sessionToken && (req.url?.startsWith('/auth/') || req.url?.startsWith('/api/auth/'))) { send(404, {}); return; }
     if (req.url === '/api/auth/providers') { send(200, { providers: [{ name: 'basic', display_name: 'Fixture password', supports_password: true }] }); return; }
     if (req.url === '/auth/password-login' && req.method === 'POST') {
       let body = '';
@@ -32,9 +33,9 @@ export async function startFixture(port = 0) {
         } catch { send(400, {}); }
       }); return;
     }
-    const presented = req.headers.cookie?.split('; ').find((value) => validCookies.has(value));
+    const presented = options.sessionToken ? req.headers['x-hermes-session-token'] === options.sessionToken : req.headers.cookie?.split('; ').find((value) => validCookies.has(value));
     if (req.url === '/auth/logout' && req.method === 'POST') {
-      if (presented) validCookies.delete(presented);
+      if (typeof presented === 'string') validCookies.delete(presented);
       res.writeHead(302, { Location: '/__hermes/login', 'Set-Cookie': 'fixture_auth=; Max-Age=0; Path=/__hermes/; HttpOnly; SameSite=Lax' });
       res.end(); return;
     }
@@ -82,7 +83,10 @@ export async function startFixture(port = 0) {
   server.on('upgrade', (req, socket, head) => {
     const protocols = (req.headers['sec-websocket-protocol'] ?? '').split(',').map((part) => part.trim());
     const ticket = protocols.find((part) => part.startsWith('hermes-gateway-ticket.'))?.slice(22);
-    if (req.url !== '/api/ws' || !ticket || !tickets.delete(ticket) || !protocols.includes(WS_PROTOCOL)) {
+    const localUrl = new URL(req.url ?? '', 'http://local');
+    const admitted = options.sessionToken ? localUrl.pathname === '/api/ws' && localUrl.searchParams.get('token') === options.sessionToken && !req.headers['sec-websocket-protocol']
+      : req.url === '/api/ws' && !!ticket && tickets.delete(ticket) && protocols.includes(WS_PROTOCOL);
+    if (!admitted) {
       socket.end('HTTP/1.1 401 Unauthorized\r\nConnection: close\r\nContent-Length: 0\r\n\r\n'); return;
     }
     metrics.upgrades++; ws.handleUpgrade(req, socket, head, (client) => ws.emit('connection', client));
@@ -129,7 +133,6 @@ export async function startFixture(port = 0) {
         if (slow) delta('Controlled turn is running…');
         if (streaming) for (let i=0; i<30; i++) later(() => delta(`Streaming line ${i} ${'text '.repeat(20)}\n`), i*100);
         later(() => {
-          // Match vanilla Hermes: completion precedes the settled session.info.
           const text = streaming ? session.inflight + 'SYNTHETIC_RESPONSE' : 'SYNTHETIC_RESPONSE';
           session.messages.push({ role: 'assistant', text }); session.updated = Date.now()/1000;
           if (client.readyState === 1) {
