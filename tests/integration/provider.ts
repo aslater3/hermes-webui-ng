@@ -3,15 +3,17 @@ import { createServer } from 'node:http';
 import { randomUUID } from 'node:crypto';
 
 export const EXPECTED_RESPONSE = 'HERMES_WEBUI_NG_PHASE0_OK';
-export async function startProvider(port = 0) {
+export async function startProvider(port = 0, holdMs = 5000) {
   let completions = 0;
+  let activeHolds = 0;
+  const timers = new Set<ReturnType<typeof setTimeout>>();
   const server = createServer((req, res) => {
     const json = (status: number, body: unknown) => {
       res.writeHead(status, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
       res.end(JSON.stringify(body));
     };
     if (req.method === 'GET' && req.url === '/health') {
-      json(200, { completions });
+      json(200, { completions, activeHolds });
       return;
     }
     if (req.method === 'GET' && req.url === '/v1/models') {
@@ -42,6 +44,11 @@ export async function startProvider(port = 0) {
           return;
         }
         completions++;
+        const latest = [...body.messages].reverse().find((message: unknown) =>
+          typeof message === 'object' && message !== null && 'role' in message && message.role === 'user');
+        const hold = latest && typeof latest.content === 'string' && latest.content.includes('PHASE2_HOLD_');
+        const respond = () => {
+        if (res.destroyed) return;
         const common = {
           id: `chatcmpl-${randomUUID()}`,
           created: Math.floor(Date.now() / 1000),
@@ -79,6 +86,15 @@ export async function startProvider(port = 0) {
             usage,
           });
         }
+        };
+        if (hold) {
+          activeHolds++;
+          let settled = false;
+          const release = () => { if (!settled) { settled = true; activeHolds--; } };
+          const timer = setTimeout(() => { timers.delete(timer); release(); respond(); }, holdMs);
+          timers.add(timer);
+          res.once('close', () => { clearTimeout(timer); timers.delete(timer); release(); });
+        } else respond();
       } catch {
         if (!res.headersSent) json(400, {});
         else res.destroy();
@@ -92,6 +108,7 @@ export async function startProvider(port = 0) {
     origin: `http://127.0.0.1:${address.port}`,
     count: () => completions,
     close: async () => {
+      timers.forEach(clearTimeout);
       server.closeAllConnections();
       await new Promise<void>((resolve) => server.close(() => resolve()));
     },
