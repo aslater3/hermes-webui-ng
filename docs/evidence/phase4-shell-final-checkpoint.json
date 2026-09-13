@@ -1,0 +1,72 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-09-13",
+  "scope": "Phase 4A modern shell and explicit trusted-local deployment; not full M3 or PWA sign-off",
+  "applicationCommit": "2866d9eee50b1f201fb1755a5ba68ac433408fcb",
+  "testedPullRequestMergeCommit": "d727938cbfa849a5cd76baa00a3a62624d2f9814",
+  "mergeComparison": "GitHub compare returned no changed files against the application commit",
+  "hermesRef": "b6b53c69a6ed49cb099cf1bfe76b5e6edd718e5a",
+  "localVerification": {
+    "node": "22.16.0",
+    "source": "Exact archived CI source, SHA-256 verified; dependency lock matched recovered tooling",
+    "build": "passed",
+    "serverAndWebTypecheck": "passed",
+    "lint": "passed",
+    "unitTests": { "passed": 105, "failed": 0, "skipped": 0 },
+    "socketContracts": { "passed": 16, "failed": 0, "skipped": 0 },
+    "browserAndDocker": "Executed in GitHub Actions, not the local recovery container"
+  },
+  "ci": {
+    "checkpoint": { "runId": 34778166226, "conclusion": "success" },
+    "browsers": { "runId": 34778166242, "conclusion": "success" },
+    "image": { "runId": 34778166231, "conclusion": "success" },
+    "vanillaHermes": { "runId": 34778166230, "conclusion": "success" }
+  },
+  "browserResults": {
+    "passed": 204,
+    "failed": 0,
+    "skipped": 0,
+    "flaky": 0,
+    "casesPerProject": 51,
+    "projects": ["desktop-chromium", "iphone-webkit", "android-chromium", "narrow-320"],
+    "fixture": "Synthetic Dashboard; modern gated /, modern trusted-local / and explicit legacy diagnostic regression routes",
+    "visualReview": ["desktop dark conversation", "desktop light conversation", "iPhone dark conversation with horizontally scrollable table"],
+    "notCertified": ["physical phones", "actual virtual keyboards", "installed PWA", "full WCAG compliance"]
+  },
+  "artifacts": {
+    "source": { "id": 10323772960, "sha256": "0fbc50b7bc3e4953aca7768ef395704ddfe5d368b76bda4531cd73e7ceb73c44" },
+    "browser": { "id": 10323678440, "sha256": "87a3c13f9d00b773750db52ce2f43d810c37f75ba54daa6df2700357622a1ff2" },
+    "live": { "id": 10323428818, "sha256": "9e473a10a18a8b7f459c7394b9ce26cddc5d33a3008b27418f9417dbf7a5c8b2" },
+    "digestsVerified": true
+  },
+  "liveAcceptance": {
+    "hermes": "Unmodified official serve, configured by official CLI in isolated test homes",
+    "webui": "Actual non-root read-only production Docker image",
+    "model": "Deterministic loopback provider; Hermes itself is not mocked",
+    "gated": { "m0": "passed", "phase1": "passed", "phase2": "passed", "initialPhase3Clarification": "passed" },
+    "local": {
+      "success": true,
+      "browserAuthentication": false,
+      "gates": [
+        "upstream-rest-still-requires-operator-token",
+        "explicit-local-state-and-browser-compatible-upgrade",
+        "native-prompt-completes-through-local-container",
+        "network-reconnect-without-replay",
+        "fresh-client-authoritative-rest-and-native-history",
+        "disconnect-is-not-fabricated-logout",
+        "redacted-report-and-preserved-browser-origin-guards"
+      ]
+    }
+  },
+  "additionalFinalHardening": [
+    "beforeunload/pagehide abort document-owned REST requests and refuse queued requests during teardown",
+    "pageshow restores a fresh request scope without replaying prompts or inventing authentication",
+    "selected-row metadata contrast corrected",
+    "Markdown tables scroll within their own region rather than compressing words on phones"
+  ],
+  "remaining": [
+    "M3 real approval, sudo and secret execution acceptance; historical/off-selection activity",
+    "PWA, physical mobile keyboard and comprehensive accessibility/performance verification",
+    "model/profile mutation controls, workspace/Git, attachments/voice, OAuth and release hardening"
+  ]
+}
