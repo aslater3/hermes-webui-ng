@@ -134,3 +134,47 @@ test('reconnect resumes the durable key and never submits or creates again', asy
   assert.equal(rpc.calls.filter((call) => call.method === 'session.create').length, 1);
   session.dispose();
 });
+
+test('settled session.info clears running after message.complete before idle cleanup', async () => {
+  const rpc = new Rpc();
+  const session = new NativeSession(rpc);
+  await session.create();
+  await session.submit('test prompt');
+  rpc.messages.push({ role: 'assistant', text: 'completed before final cleanup' });
+  rpc.emit('message.complete');
+  await session.refresh();
+  assert.equal(session.state.phase, 'running', 'completion alone is not proof the session is idle');
+  rpc.running = false;
+  rpc.emit('session.info');
+  await tick();
+  assert.equal(session.state.phase, 'idle');
+  assert.equal(session.state.messages.at(-1)?.text, 'completed before final cleanup');
+  assert.equal(rpc.calls.filter((call) => call.method === 'prompt.submit').length, 1);
+  session.dispose();
+});
+
+test('settled session.info invalidates a snapshot already fetching while ignoring other sessions', async () => {
+  const rpc = new Rpc();
+  const session = new NativeSession(rpc);
+  await session.create();
+  await session.submit('test prompt');
+  let finish!: (value: unknown) => void;
+  rpc.historyHook = () =>
+    new Promise((resolve) => {
+      finish = resolve;
+    });
+  const pending = session.refresh();
+  await tick();
+  const before = rpc.calls.length;
+  rpc.emit('session.info', 'unselected-live-session');
+  assert.equal(rpc.calls.length, before);
+  rpc.historyHook = undefined;
+  rpc.running = false;
+  rpc.messages.push({ role: 'assistant', text: 'settled while fetching' });
+  rpc.emit('session.info');
+  finish({ messages: [{ role: 'user', text: 'old snapshot' }] });
+  await pending;
+  assert.equal(session.state.phase, 'idle');
+  assert.equal(session.state.messages.at(-1)?.text, 'settled while fetching');
+  session.dispose();
+});

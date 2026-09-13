@@ -145,12 +145,18 @@ export async function startFixture(port = 0) {
         event('message.start', params.session_id);
         const timer = setTimeout(() => {
           timers.delete(timer);
-          session.running = false;
+          // Match vanilla Hermes: completion is emitted BEFORE running is cleared.
           session.messages.push({ role: 'assistant', text: 'SYNTHETIC_RESPONSE' });
           if (client.readyState === 1) {
             event('message.delta', params.session_id, { text: 'SYNTHETIC_RESPONSE' });
             event('message.complete', params.session_id, { text: 'SYNTHETIC_RESPONSE' });
           }
+          const settled = setTimeout(() => {
+            timers.delete(settled);
+            session.running = false;
+            if (client.readyState === 1) event('session.info', params.session_id, { running: false });
+          }, 20);
+          timers.add(settled);
         }, 40);
         timers.add(timer);
         return;

@@ -177,7 +177,9 @@ export class NativeSession {
       ++this.revision;
       this.publish({ phase: 'running', streaming: '' });
     } else if (
-      ['message.complete', 'error', 'session.interrupted'].includes(event.type) ||
+      // Completion precedes upstream cleanup; settled session.info must invalidate the
+      // current snapshot too. Do not guess idle from message.complete alone.
+      ['message.complete', 'session.info', 'error', 'session.interrupted'].includes(event.type) ||
       event.type.endsWith('.request')
     ) {
       ++this.revision;
