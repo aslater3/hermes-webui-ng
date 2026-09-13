@@ -1,14 +1,16 @@
 # Hermes WebUI NG
 
-> Phase 0 protocol diagnostic implemented and verified. The full product described below is still in development.
+> Phase 1 connection/auth/capability foundation implemented and verified. The full product described below remains in development.
 
 ## Current implementation
 
-**M0 passed on 13 September 2026** against vanilla `NousResearch/hermes-agent@b6b53c69a6ed49cb099cf1bfe76b5e6edd718e5a`. The Docker image authenticates through the Dashboard proxy, mints supported one-use WebSocket credentials, receives `gateway.ready`, creates native sessions, submits a controlled prompt, and recovers history after reconnect without a local chat database.
+**M0 and Phase 1 passed on 13 September 2026** against vanilla `NousResearch/hermes-agent@b6b53c69a6ed49cb099cf1bfe76b5e6edd718e5a`. The Docker image authenticates through the Dashboard proxy, mints supported one-use WebSocket credentials, receives `gateway.ready`, creates native sessions, submits a controlled prompt and recovers history after reconnect without a local chat database.
 
-The current interface is deliberately a responsive diagnostic page, not the final React application. It provides password sign-in, native session create/resume, plain streaming output, interrupt, connection status and reconnect. Rich tools/interactive prompts, sidebar/search, profile/model controls, workspace and PWA are later phases.
+The current responsive diagnostic provides password sign-in and verified sign-out, independent REST/auth/Gateway status, account/expiry-safe reconnect, conservative capability discovery and a sanitised support report with copy/download/clear controls. The native create/resume/prompt/interrupt diagnostic remains available. Backend endpoint advertisement is not presented as implemented UI.
 
-At implementation checkpoint `1209953`, CI passed 24 unit tests, 5 synthetic wire tests, 16 browser/viewport tests, production Docker smoke and the pinned vanilla-Hermes acceptance gate. The real-Hermes test replaces only the model endpoint with a deterministic fixture. Physical mobile and installed-PWA verification remain outstanding. Detailed evidence and outstanding gates are in `docs/implementation-status.md`.
+At code/test checkpoint **`645af2c`**, all four CI jobs passed: **49 unit tests, 7 synthetic wire contracts, 56 browser/viewport checks, production Docker smoke and pinned vanilla-Hermes M0/Phase 1 acceptance**. Browser coverage includes desktop Chromium, iPhone WebKit emulation, Android Chromium emulation and 320px layouts. The live test uses unmodified Hermes and replaces only the model endpoint with a deterministic fixture. Permanent evidence and CI references are in `docs/evidence/phase1-acceptance.json` and `docs/implementation-status.md`.
+
+This is not the final React application or a public-internet production release. Phase 2 session navigation/chat refinement is next; rich tools and interactive prompts, the modern shell, profile/model controls, workspace and PWA remain in their planned later phases. Physical mobile/virtual-keyboard and installed-PWA verification remain outstanding.
 
 ### Run the diagnostic
 
@@ -20,7 +22,21 @@ cp .env.example .env
 docker compose up --build -d
 ```
 
-The Compose example publishes only on host loopback. Credentials belong in Hermes, not WebUI configuration. Read `docs/phase0-running.md` for host-network/private-proxy topology, authentication requirements and diagnostic limitations before deploying. This is not an internet-facing production-readiness claim.
+The Compose example publishes only on host loopback. Credentials belong in Hermes, not WebUI configuration. `docs/phase0-running.md` provides the existing private-proxy/host-network topology guidance; `docs/phase1-foundation.md` supersedes its original authentication and feature-scope limitations. `Disconnect transport` is not logout. `Sign out` clears the local view and reports success only after Hermes rejects the old identity.
+
+### Local checks
+
+```sh
+npm ci
+npm run build
+npm run lint
+npm test
+npm run test:contract
+npx playwright install --with-deps chromium webkit
+npm run test:e2e:critical
+```
+
+Every completed implementation increment is pushed remotely before the next increment. CI also retains exact source checkpoints and test evidence. The local Docker alias still uses `phase0` for harness compatibility; it is not a published release tag.
 
 ## Mission
 
@@ -33,9 +49,9 @@ Browser
   |
   v
 Hermes WebUI NG container :8787
-  |-- SPA (React/TypeScript)
+  |-- SPA (React/TypeScript — final shell planned)
   |-- WebUI BFF + reverse proxy
-  |-- optional mounted-workspace file/Git API
+  |-- optional mounted-workspace file/Git API (later phase)
   |
   +----> vanilla Hermes Dashboard :9119
            |-- /api/ws       native TUI Gateway JSON-RPC/WebSocket
@@ -46,7 +62,7 @@ Hermes WebUI NG container :8787
 ## Non-negotiable architecture
 
 1. **Hermes owns agent behaviour and durable agent state.** The WebUI is a client, not another Hermes runtime.
-2. **Use Hermes' native TUI Gateway JSON-RPC WebSocket for live agent interaction.** Upstream explicitly identifies the TUI Gateway as the integration for custom hosts needing sessions, approvals, slash commands and streaming.
+2. **Use Hermes' native TUI Gateway JSON-RPC WebSocket for live agent interaction.** Upstream identifies the TUI Gateway as the integration for custom hosts needing sessions, approvals, slash commands and streaming.
 3. **Use Dashboard REST for management and read-heavy surfaces.** Do not read `state.db`, `config.yaml`, profile directories or other Hermes internals directly.
 4. **Never import `AIAgent` or `SessionDB`.** Never execute the Hermes agent loop in the WebUI process.
 5. **Never create a second conversation/session database.** Browser UI preferences are fine; duplicate Hermes state is not.
@@ -76,6 +92,8 @@ Hermes WebUI NG container :8787
 | `docs/13-acceptance-criteria.md` | Release-level definition of done |
 | `docs/14-architecture-decisions.md` | Initial ADR set and unresolved decisions |
 | `docs/15-repo-layout-standards.md` | Proposed repo tree, coding standards and CI rules |
+| `docs/phase1-foundation.md` | Delivered foundation behaviour and verification boundaries |
+| `docs/implementation-status.md` | Completed gates, exact compatibility and remaining work |
 
 ## Required upstream references
 

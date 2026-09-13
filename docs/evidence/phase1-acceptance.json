@@ -1,0 +1,67 @@
+{
+  "verified_on": "2026-09-13",
+  "implementation_commit": "645af2cc979021d3b91b37312a9c3f80f0d993f8",
+  "upstream_ref": "b6b53c69a6ed49cb099cf1bfe76b5e6edd718e5a",
+  "ci": {
+    "checkpoint": { "run": 34758251762, "result": "success", "unit_tests": 49, "wire_tests": 7 },
+    "image": { "run": 34758251769, "result": "success" },
+    "browsers": {
+      "run": 34758251787,
+      "result": "success",
+      "artifact_id": 10317768342,
+      "artifact_sha256": "b24bf9a50f9326a5587a4816b625425d9fac21f791c4e6facfe9a9ddc9c853ff",
+      "stats": { "startTime": "2026-09-13T12:52:40.638Z", "duration": 35570.548, "expected": 56, "skipped": 0, "unexpected": 0, "flaky": 0 },
+      "projects": {
+        "desktop-chromium": { "passed": 14, "failed": 0, "skipped": 0 },
+        "iphone-webkit": { "passed": 14, "failed": 0, "skipped": 0 },
+        "android-chromium": { "passed": 14, "failed": 0, "skipped": 0 },
+        "narrow-320": { "passed": 14, "failed": 0, "skipped": 0 }
+      },
+      "screenshots": "Four connection-foundation.png files in the browser artifact"
+    },
+    "vanilla_hermes": {
+      "run": 34758251768,
+      "result": "success",
+      "artifact_id": 10317977938,
+      "artifact_sha256": "f7d351ebcd9dbb63954da77defba08c7da94a2245f8a8431c138e2de322c071b"
+    }
+  },
+  "phase0_acceptance": {
+    "upstream": "b6b53c69a6ed49cb099cf1bfe76b5e6edd718e5a",
+    "commit": "645af2cc979021d3b91b37312a9c3f80f0d993f8",
+    "gates": [
+      "authenticated-dashboard-proxy",
+      "official-proxied-login",
+      "one-use-ticket-upgrade-gateway-ready",
+      "native-session-create",
+      "real-agent-controlled-model-response",
+      "socket-loss-rehydrate-without-replay",
+      "fresh-client-native-history-no-local-persistence",
+      "controlled-provider-received-real-agent-request"
+    ],
+    "modelRequests": 2,
+    "hermes": "unmodified official serve (Dashboard API + native Gateway)",
+    "model": "deterministic loopback fixture",
+    "webui": "production Docker image"
+  },
+  "phase1_acceptance": {
+    "upstream": "b6b53c69a6ed49cb099cf1bfe76b5e6edd718e5a",
+    "commit": "645af2cc979021d3b91b37312a9c3f80f0d993f8",
+    "phase": 1,
+    "success": true,
+    "gates": [
+      "healthy-rest-without-gateway-admission",
+      "authenticated-schema-and-gateway-capabilities",
+      "vanilla-one-use-ticket-replay-rejected",
+      "allowlisted-support-report",
+      "revoked-cookie-closes-existing-admission",
+      "verified-logout-and-fresh-sign-in"
+    ]
+  },
+  "verification_boundaries": [
+    "Unmodified pinned Hermes via official serve and supported HTTP/WebSocket APIs; real production WebUI container.",
+    "Only the model provider is a deterministic loopback fixture in the live test.",
+    "Browser tests use a clearly labelled synthetic Dashboard and browser/device emulation, not physical devices.",
+    "Physical-device virtual keyboards, installed PWA, OAuth and internet-facing release hardening are not verified."
+  ]
+}
