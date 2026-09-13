@@ -111,3 +111,9 @@ A PR should:
 ## 10. When uncertain
 
 Prefer less functionality over architectural contamination. A clearly disabled feature with “Not supported by this Hermes version” is better than duplicating Hermes state or bypassing its security model.
+
+## 11. Remote checkpoints — mandatory
+
+A completed implementation or recovery slice must be **committed and pushed to the remote branch before beginning the next slice**. A local commit, an unreferenced Git object or a promised end-of-session push is not a checkpoint. Verify the remote branch ref points to the published commit. Never accumulate a monolithic final push and never force-push to hide intermediate recovery history.
+
+Keep each slice coherent and tested. Record failed or pending gates honestly; do not label synthetic fixtures as vanilla-Hermes evidence. Preserve the exact upstream ref, CI run references and current remaining work in `docs/implementation-status.md`. The every-push source archive is a supplemental backup, not a replacement for the remote commit.
