@@ -12,6 +12,7 @@ export class HttpError extends ClientError {
   }
 }
 const ROUTES = {
+  access: '/api/webui/access',
   status: '/__hermes/api/status', providers: '/__hermes/api/auth/providers',
   identity: '/__hermes/api/auth/me', ticket: '/__hermes/api/auth/ws-ticket',
   login: '/__hermes/auth/password-login', logout: '/__hermes/auth/logout',
@@ -47,6 +48,7 @@ export async function boundedJson(response: Response, maxBytes = 4_194_304): Pro
 /** Hermes alone owns auth cookies; neither credentials nor raw responses are persisted. */
 export class DashboardClient {
   readonly origin: string;
+  admissionMode: 'dashboard' | 'trusted-local' = 'dashboard';
   constructor(origin: string, private readonly fetcher: typeof fetch = fetch,
     private readonly timeoutMs = 15_000, private readonly diagnostics?: DiagnosticsRing) {
     const url = new URL(origin);
@@ -62,7 +64,7 @@ export class DashboardClient {
     this.diagnostics?.add({ event: 'rest.request', route });
     try {
       const response = await this.fetcher.call(globalThis, this.origin + ROUTES[route] + suffix, {
-        method, credentials: route === 'capabilities' ? 'omit' : 'include', cache: 'no-store', redirect,
+        method, credentials: ['capabilities', 'access'].includes(route) ? 'omit' : 'include', cache: 'no-store', redirect,
         headers: body === undefined ? undefined : { 'Content-Type': 'application/json' },
         body: body === undefined ? undefined : JSON.stringify(body),
         signal: signal ? AbortSignal.any([signal, deadline]) : deadline,
@@ -89,13 +91,28 @@ export class DashboardClient {
   }
   async status(signal?: AbortSignal): Promise<Record<string, unknown>> {
     const data = await this.request('status', 'GET', undefined, signal);
-    if (data.auth_required !== true)
-      throw new ClientError('protocol', 'An authenticated Hermes Dashboard is required');
-    // Status includes local paths and platform errors upstream: discard them here.
-    return { auth_required: true, version: typeof data.version === 'string' &&
+    if (typeof data.auth_required !== 'boolean') throw new ClientError('protocol', 'Malformed Hermes authentication status');
+    if (!data.auth_required) {
+      await this.requireLocalBridge(signal);
+      this.admissionMode = 'trusted-local';
+    } else this.admissionMode = 'dashboard';
+    return { auth_required: data.auth_required, version: typeof data.version === 'string' &&
       /^\d+\.\d+\.\d+(?:[-+][A-Za-z0-9.]+)?$/.test(data.version) ? data.version : null };
   }
+  private async requireLocalBridge(signal?: AbortSignal): Promise<void> {
+    const access = await this.request('access', 'GET', undefined, signal);
+    if (access.mode !== 'trusted-local' || access.authenticated !== false || access.ready !== true)
+      throw new ClientError('protocol', 'An authenticated Dashboard or explicitly configured trusted-local bridge is required');
+  }
+  async verifyLocalAccess(signal?: AbortSignal): Promise<void> {
+    if (this.admissionMode !== 'trusted-local') throw new ClientError('protocol', 'Local access has not been configured');
+    await this.requireLocalBridge(signal);
+  }
+  private dashboardOnly(): void {
+    if (this.admissionMode === 'trusted-local') throw new ClientError('protocol', 'Trusted-local access has no browser login identity or ticket');
+  }
   async providers(signal?: AbortSignal): Promise<Provider[]> {
+    if (this.admissionMode === 'trusted-local') return [];
     const data = await this.request('providers', 'GET', undefined, signal);
     if (!Array.isArray(data.providers) || data.providers.length > 64)
       throw new ClientError('protocol', 'Invalid auth provider list');
@@ -106,10 +123,12 @@ export class DashboardClient {
     });
   }
   async me(signal?: AbortSignal): Promise<Identity> {
+    this.dashboardOnly();
     const data = await this.request('identity', 'GET', undefined, signal);
     return { user_id: textField(data, 'user_id'), provider: textField(data, 'provider') };
   }
   async login(provider: string, username: string, password: string, signal?: AbortSignal): Promise<Identity> {
+    this.dashboardOnly();
     const data = await this.request('login', 'POST', { provider, username, password }, signal);
     if (data.ok !== true) throw new ClientError('auth-required', 'Sign-in was not accepted');
     const identity = await this.me(signal);
@@ -117,7 +136,7 @@ export class DashboardClient {
     return identity;
   }
   async logout(signal?: AbortSignal): Promise<void> {
-    // Browser manual redirects are opaqueredirect (status 0); never follow into upstream HTML/SSO.
+    this.dashboardOnly();
     const response = await this.response('logout', 'POST', undefined, signal, 'manual');
     await response.body?.cancel();
     if (response.type !== 'opaqueredirect' && response.status !== 302 && !response.ok)
@@ -131,12 +150,12 @@ export class DashboardClient {
     throw new ClientError('protocol', 'Hermes sign-out could not be verified');
   }
   async ticket(signal?: AbortSignal): Promise<{ ticket: string; ttl_seconds: number }> {
+    this.dashboardOnly();
     const data = await this.request('ticket', 'POST', undefined, signal);
     if (typeof data.ttl_seconds !== 'number') throw new ClientError('protocol', 'Invalid ticket lifetime');
     this.diagnostics?.add({ event: 'auth.ticket' });
     return { ticket: textField(data, 'ticket'), ttl_seconds: data.ttl_seconds };
   }
-  /** Compatibility facade for the Phase 0 runner; new callers use WsAuthClient. */
   credential(signal?: AbortSignal) { return new WsAuthClient(this).credential(signal); }
   schema(signal?: AbortSignal) { return this.request('schema', 'GET', undefined, signal); }
   capabilities(signal?: AbortSignal) { return this.request('capabilities', 'GET', undefined, signal); }
@@ -156,9 +175,8 @@ export class DashboardClient {
   async sessionMessages(ref: SessionRef, offset = 0, signal?: AbortSignal) {
     sessionQuery({ offset });
     const query = new URLSearchParams({ limit: String(HISTORY_LIMIT), offset: String(offset), order: 'latest' });
-    if (profileName(ref.profile)) query.set('profile', ref.profile!);
+    if (profileName(ref.profile)) query.set('profile', profileName(ref.profile)!);
     const suffix = `/${encodeURIComponent(sessionId(ref.id))}/messages?${query}`;
     return historyPage(await this.request('sessionHistory', 'GET', undefined, signal, suffix), ref, offset);
   }
-
 }

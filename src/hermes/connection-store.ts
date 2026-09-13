@@ -4,11 +4,11 @@ import { ClientError } from './protocol.js';
 import { CapabilitiesStore } from './capabilities.js';
 import { DiagnosticsRing } from './diagnostics.js';
 
-type Dashboard = Pick<DashboardClient, 'status' | 'providers' | 'me' | 'login' | 'logout' | 'schema' | 'capabilities'>;
+type Dashboard = Pick<DashboardClient, 'status' | 'providers' | 'me' | 'login' | 'logout' | 'schema' | 'capabilities'> & Partial<Pick<DashboardClient, 'admissionMode' | 'verifyLocalAccess'>>;
 type Gateway = Pick<GatewayClient, 'state' | 'onState' | 'close' | 'connect' | 'suspend' | 'ensureLive' | 'advertised' | 'telemetry'>;
 export interface FoundationState {
   rest: 'checking' | 'healthy' | 'unreachable' | 'error';
-  auth: 'checking' | 'signed-in' | 'auth-required' | 'signed-out' | 'unconfirmed' | 'error';
+  auth: 'checking' | 'local-access' | 'signed-in' | 'auth-required' | 'signed-out' | 'unconfirmed' | 'error';
   busy: boolean;
   offline: boolean;
   checkedAt?: number;
@@ -18,10 +18,10 @@ function safe(error: unknown): ClientError {
   return error instanceof ClientError ? error : new ClientError('protocol', 'Connection check failed');
 }
 
-/** Coordinates authority checks, not conversations. All account data is disposable memory. */
 export class ConnectionStore {
   state: FoundationState = { rest: 'checking', auth: 'checking', busy: false, offline: false };
   providers: Provider[] = [];
+  get hasAccess(): boolean { return this.state.auth === 'signed-in' || this.state.auth === 'local-access'; }
   readonly capabilities = new CapabilitiesStore();
   private identity?: Identity;
   private scope = 0;
@@ -43,7 +43,6 @@ export class ConnectionStore {
   subscribe(listener: () => void): () => void {
     this.listeners.add(listener); listener(); return () => { this.listeners.delete(listener); };
   }
-  /** Clear transcript/composer/navigation BEFORE the next identity can attach a native session. */
   onIdentityBoundary(listener: () => void): () => void {
     this.boundaries.add(listener); return () => { this.boundaries.delete(listener); };
   }
@@ -58,7 +57,6 @@ export class ConnectionStore {
     this.capabilityAbort?.abort(); this.capabilities.reset(); return this.scope;
   }
   private clearAccount(): void {
-    // Subscribers must see admission disabled BEFORE any boundary/reset publishes.
     this.state = { ...this.state, auth: 'checking' };
     this.identity = undefined;
     for (const listener of this.boundaries) listener();
@@ -84,7 +82,7 @@ export class ConnectionStore {
     if (state.phase === 'ready') void this.refreshCapabilities();
   }
   private accept(identity: Identity): boolean {
-    const changed = !!this.identity && (identity.user_id !== this.identity.user_id || identity.provider !== this.identity.provider);
+    const changed = this.state.auth === 'local-access' || (!!this.identity && (identity.user_id !== this.identity.user_id || identity.provider !== this.identity.provider));
     if (changed) {
       this.clearAccount(); this.gateway.close(); this.diagnostics.add({ event: 'auth.changed' });
     }
@@ -92,9 +90,14 @@ export class ConnectionStore {
     this.publish({ auth: 'signed-in', error: undefined });
     return changed;
   }
-  /** Called by WsAuthClient before EVERY admission, including transport-owned retries. */
   async verifyAdmission(signal?: AbortSignal): Promise<void> {
     const scope = this.scope;
+    if (this.dashboard.admissionMode === 'trusted-local') {
+      if (this.state.auth !== 'local-access' || !this.dashboard.verifyLocalAccess) throw new ClientError('protocol', 'Local admission is not ready');
+      await this.dashboard.verifyLocalAccess(signal);
+      if (!this.current(scope) || signal?.aborted || this.state.auth !== 'local-access') throw new ClientError('disconnected', 'Local admission superseded');
+      return;
+    }
     const identity = await this.dashboard.me(signal);
     if (!this.current(scope) || signal?.aborted)
       throw new ClientError('disconnected', 'Admission verification superseded');
@@ -106,7 +109,6 @@ export class ConnectionStore {
       throw error;
     }
   }
-  /** Explicit initial connection or user-requested retry; never invoked by a polling timer. */
   async start(): Promise<void> {
     if (this.state.busy) return;
     this.desired = true; this.supersede(); this.gateway.close(); await this.refresh(true);
@@ -119,9 +121,18 @@ export class ConnectionStore {
       let restComplete = false;
       this.publish({ rest: 'checking' });
       try {
-        await this.dashboard.status(signal);
+        const status = await this.dashboard.status(signal);
         if (!this.current(scope)) return;
         this.publish({ rest: 'healthy', checkedAt: Date.now() });
+        if (status.auth_required === false) {
+          if (this.dashboard.admissionMode !== 'trusted-local') throw new ClientError('protocol', 'Explicit local access is required');
+          if (this.identity) { this.clearAccount(); this.gateway.close(); }
+          this.providers = [];
+          this.publish({ auth: 'local-access', error: undefined }); restComplete = true;
+          if (connect && this.desired && !this.state.offline) await this.gateway.connect();
+          else await this.refreshCapabilities();
+          return;
+        }
         if (!this.providers.length || connect) {
           const providers = await this.dashboard.providers(signal);
           if (!this.current(scope)) return;
@@ -136,15 +147,19 @@ export class ConnectionStore {
       } catch (error) {
         if (!this.current(scope)) return;
         const failure = safe(error);
-        if (failure.kind === 'auth-required') this.requireAuth(failure);
+        if (this.state.auth === 'local-access' && !restComplete) {
+          this.desired = false; this.supersede(); this.clearAccount(); this.gateway.close();
+          this.publish({ rest: failure.retryable ? 'unreachable' : 'error', auth: 'error', error: failure });
+        } else if (failure.kind === 'auth-required') this.requireAuth(failure);
         else this.publish({ rest: restComplete ? this.state.rest : failure.retryable ? 'unreachable' : 'error',
-          auth: this.identity ? 'signed-in' : 'error', error: failure });
+          auth: this.state.auth === 'local-access' ? 'local-access' : this.identity ? 'signed-in' : 'error', error: failure });
       }
     })();
     const settled = task.finally(() => { if (this.probe === settled) this.probe = undefined; });
     this.probe = settled; return settled;
   }
   async login(provider: string, username: string, password: string): Promise<void> {
+    if (this.dashboard.admissionMode === 'trusted-local') throw new ClientError('protocol', 'Local access has no browser login');
     if (this.state.busy) throw new ClientError('protocol', 'An authentication operation is already in progress');
     const scope = this.supersede(); this.clearAccount(); this.gateway.close();
     this.publish({ busy: true, auth: 'checking', error: undefined });
@@ -163,6 +178,7 @@ export class ConnectionStore {
     } finally { this.publish({ busy: false }); }
   }
   async logout(): Promise<void> {
+    if (this.dashboard.admissionMode === 'trusted-local') throw new ClientError('protocol', 'There is no browser login to sign out of; disconnect or close this tab');
     if (this.state.busy) throw new ClientError('protocol', 'An authentication operation is already in progress');
     this.desired = false;
     const scope = this.supersede(); this.clearAccount(); this.gateway.close();
@@ -181,22 +197,22 @@ export class ConnectionStore {
   }
   async resume(): Promise<void> {
     this.diagnostics.add({ event: 'visibility.resume' });
-    if (this.state.busy || this.state.offline || this.state.auth !== 'signed-in') return;
+    if (this.state.busy || this.state.offline || !this.hasAccess) return;
     await this.refresh();
-    if (this.desired && this.state.auth === 'signed-in') await this.gateway.ensureLive();
+    if (this.desired && this.hasAccess) await this.gateway.ensureLive();
   }
   async setOffline(offline: boolean): Promise<void> {
     const wasOffline = this.state.offline;
     this.publish({ offline });
     if (offline) { if (!this.state.busy) this.supersede(); this.gateway.close(); return; }
-    if (wasOffline && this.desired && this.state.auth === 'signed-in') await this.refresh(true);
+    if (wasOffline && this.desired && this.hasAccess) await this.refresh(true);
     else await this.resume();
   }
   poll(intervalMs = 30_000): void {
     clearInterval(this.polling);
     if (intervalMs <= 0) return;
     this.polling = setInterval(() => {
-      if (this.state.auth === 'signed-in' && this.gateway.state.phase === 'ready') void this.refresh();
+      if (this.hasAccess && this.gateway.state.phase === 'ready') void this.refresh();
     }, intervalMs);
   }
   async refreshCapabilities(): Promise<void> {
@@ -208,14 +224,13 @@ export class ConnectionStore {
     this.diagnostics.add({ event: 'capabilities.probe', generation });
     await Promise.all([
       this.dashboard.capabilities(signal).then((data) => { if (valid()) this.capabilities.applyWebui(token, data); }).catch(() => {}),
-      this.state.auth === 'signed-in' ? this.dashboard.schema(signal).then((data) => {
+      this.hasAccess ? this.dashboard.schema(signal).then((data) => {
         if (valid()) this.capabilities.applySchema(token, data);
       }).catch((error: unknown) => { if (valid()) this.capabilities.schemaFailed(token, error); }) : Promise.resolve(),
     ]);
     if (valid()) this.diagnostics.add({ event: 'capabilities.updated', generation });
   }
   report() {
-    // Deliberate projection: never serialise this.state, identity, providers, or raw exceptions.
     return { schemaVersion: 1, webui: { version: '0.0.1', phase: 2 },
       connection: { rest: this.state.rest, auth: this.state.auth, offline: this.state.offline,
         checkedAt: this.state.checkedAt, gateway: this.gateway.state.phase,
