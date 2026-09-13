@@ -4,16 +4,16 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <meta name="color-scheme" content="dark light" />
-  <title>Hermes WebUI NG · Connection foundation</title>
+  <title>Hermes WebUI NG · Native conversations</title>
   <link rel="stylesheet" href="/styles.css" />
   <script type="module" src="/app.js"></script>
 </head>
 <body>
 <main>
   <header>
-    <p class="eyebrow">HERMES WEBUI NG <span>PHASE 1</span></p>
-    <h1>Native connection diagnostic</h1>
-    <p>Validate the Dashboard connection before enabling the full client.</p>
+    <p class="eyebrow">HERMES WEBUI NG <span>PHASE 2</span></p>
+    <h1>Hermes conversations</h1>
+    <p>Your history in Hermes. Your conversation, here.</p>
   </header>
   <section class="panel" aria-labelledby="connection-title">
     <h2 id="connection-title">Connection</h2>
@@ -64,27 +64,51 @@
     <label>Sanitised report<textarea id="diagnostic-report" rows="6" readonly autocomplete="off" spellcheck="false"></textarea></label>
     <p class="hint">Only status labels, timings, numeric error codes and capability flags. No conversation text, account identity, credentials or raw backend logs. Nothing is uploaded automatically.</p>
   </details>
-  <section class="panel" aria-labelledby="session-title">
-    <h2 id="session-title">Native session</h2>
+  <div class="chat-layout">
+    <div id="sidebar-slot">
+      <aside id="conversation-sidebar" class="panel" aria-labelledby="conversations-title">
+        <div class="sidebar-heading"><h2 id="conversations-title">Conversations</h2><button id="close-sessions" type="button">Close conversations</button></div>
+        <form id="search-form"><label>Search conversations<input id="session-search" type="search" maxlength="512" autocomplete="off" /></label>
+          <div class="actions"><button id="search-button" type="submit">Search</button><button id="clear-search" type="button" class="secondary">Clear search</button></div>
+        </form>
+        <p id="list-status" class="hint" role="status">Sign in to browse Hermes sessions.</p>
+        <button id="refresh-sessions" type="button" class="secondary">Refresh sessions</button>
+        <ul id="session-list" aria-label="Saved conversations"></ul>
+        <div class="actions"><button id="previous-sessions" type="button" disabled>Previous sessions</button><button id="next-sessions" type="button" disabled>Next sessions</button></div>
+        <p class="hint">Loaded from Hermes. The default profile is browsed; each conversation retains its owning profile.</p>
+      </aside>
+    </div>
+    <section class="panel chat-panel" aria-labelledby="chat-title">
+    <div class="chat-heading"><button id="browse-sessions" type="button">Conversations</button><button id="create" type="button" disabled>New session</button></div>
+    <h2 id="chat-title" tabindex="-1">Start a conversation</h2>
+    <p id="chat-context" class="hint">Choose a saved conversation or create a native session.</p>
+    <details id="manual-resume"><summary>Open a session by key</summary>
     <form id="resume-form">
       <label>Durable Hermes session key<input id="session-key" spellcheck="false" autocomplete="off" /></label>
-      <button id="resume" type="submit" disabled>Resume</button><button id="create" type="button" disabled>New session</button>
+      <button id="resume" type="submit" disabled>Resume</button>
     </form>
-    <p class="hint">The session key in the address fragment is navigation only. Transcripts are always fetched from Hermes, never browser storage.</p>
+    <p class="hint">The address fragment holds only the Hermes session key and profile. No transcript is saved in browser storage.</p></details>
+    <p id="chat-error" role="alert" hidden></p>
+    <p id="delivery-unknown" role="status" hidden>Prompt delivery was not confirmed. Inspect recovered history before sending again. Nothing has been replayed.</p>
     <p id="attention" role="status" hidden>Hermes needs interactive input. Approval, clarify, sudo and secret controls are not implemented in this diagnostic. Use a supported Hermes client.</p>
+    <div class="actions history-actions"><button id="older-history" type="button" disabled>Older messages</button><button id="newer-history" type="button" disabled>Newer messages</button><button id="return-live" type="button" hidden>Return to latest</button></div>
+    <p id="history-status" class="hint"></p>
     <div id="transcript" class="transcript" aria-label="Conversation" tabindex="0"></div>
-    <button id="latest" class="secondary" type="button">Jump to latest</button>
+    <div class="scroll-actions"><button id="latest" class="secondary" type="button">Jump to latest</button><span id="new-activity" role="status" class="hint"></span></div>
     <form id="prompt-form">
-      <label>Prompt<textarea id="prompt" rows="3" maxlength="32768" placeholder="Send a controlled test prompt…" disabled></textarea></label>
+      <label>Prompt<textarea id="prompt" rows="3" maxlength="32768" placeholder="Message Hermes…" disabled></textarea></label>
       <div class="actions">
         <button id="send" type="submit" disabled>Send prompt</button>
         <button id="interrupt" type="button" disabled>Interrupt</button>
         <button id="refresh" type="button" disabled>Refresh from Hermes</button>
       </div>
+      <p class="hint"><span id="draft-count">0 / 32,768</span> · Desktop Enter sends; Shift+Enter adds a line. On touch keyboards use Send.</p>
     </form>
-    <p class="hint">An unacknowledged prompt is never replayed automatically. Inspect recovered history before resending. This diagnostic shows at most the latest 500 entries with bounded text.</p>
+    <p class="hint">An unacknowledged prompt is never replayed automatically. Inspect recovered history before resending. This view shows 100 entries at a time with bounded text. Drafts survive session switches in this tab only, not reloads.</p>
   </section>
-  <footer>Connection foundation · No Relay · No local conversation database · Workspace, rich tools and PWA deferred</footer>
+  </div>
+  <dialog id="sessions-dialog" aria-labelledby="conversations-title"></dialog>
+  <footer>Native chat alpha · No Relay · No local conversation database · Workspace, rich tools and PWA deferred</footer>
 </main>
 </body>
 </html>

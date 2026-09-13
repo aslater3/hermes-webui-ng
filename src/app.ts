@@ -1,6 +1,7 @@
 import { DashboardClient } from './hermes/dashboard-client.js';
 import { GatewayClient } from './hermes/gateway-client.js';
-import { NativeSession } from './hermes/native-session.js';
+import { ChatController } from './hermes/chat-controller.js';
+import { ChatView } from './hermes/chat-view.js';
 import { ClientError } from './hermes/protocol.js';
 import { WsAuthClient } from './hermes/ws-auth.js';
 import { DiagnosticsRing } from './hermes/diagnostics.js';
@@ -16,17 +17,13 @@ const diagnostics = new DiagnosticsRing();
 const dashboard = new DashboardClient(location.origin, fetch, 15_000, diagnostics);
 const gateway = new GatewayClient(new WsAuthClient(dashboard, (signal) => foundation.verifyAdmission(signal)), { diagnostics });
 const foundation: ConnectionStore = new ConnectionStore(dashboard, gateway, diagnostics);
-let session = new NativeSession(gateway);
+const chat = new ChatController(dashboard, gateway, (error) => gateway.suspend(error));
+const chatView = new ChatView(chat, foundation, gateway);
 let viewEpoch = 0;
 let providersSignature = '';
-let previousMessages: unknown;
-let previousStreaming: string | undefined;
 let actionError: unknown;
 let scheduled = false;
-const transcript = element('transcript');
-const prompt = element<HTMLTextAreaElement>('prompt');
 const loginForm = element<HTMLFormElement>('login-form');
-const key = element<HTMLInputElement>('session-key');
 function showError(error: unknown): void {
   const alert = element('error');
   alert.textContent = error instanceof ClientError ? error.message : 'Operation failed; check the connection and retry explicitly.';
@@ -43,16 +40,13 @@ function render(): void {
   scheduled = true;
   requestAnimationFrame(() => {
     scheduled = false;
-    const state = session.state;
     const connection = foundation.state;
-    const ready = gateway.state.phase === 'ready' && connection.auth === 'signed-in' && !connection.offline;
     element('rest-state').textContent = connection.rest;
     element('auth-state').textContent = connection.auth;
     const banner = element('connection-banner');
     banner.textContent = connectionSummary(connection, gateway.state);
     banner.dataset.state = connection.offline ? 'offline' : gateway.state.phase;
     element('gateway-state').textContent = gateway.state.phase;
-    element('session-state').textContent = state.phase;
     loginForm.hidden = connection.auth === 'signed-in';
     const providers = foundation.providers.filter((provider) => provider.supports_password);
     const signature = JSON.stringify(providers);
@@ -73,53 +67,22 @@ function render(): void {
     for (const [feature, capability] of Object.entries(foundation.capabilities.snapshot())) {
       element(`cap-${feature}`).textContent = `${capability.state} · ${capability.evidence}${capability.implemented ? '' : ' · UI not implemented'}`;
     }
-    element<HTMLButtonElement>('create').disabled = !ready || state.phase === 'attaching';
-    element<HTMLButtonElement>('resume').disabled = !ready || state.phase === 'attaching';
-    element<HTMLButtonElement>('send').disabled = !ready || state.phase !== 'idle';
-    prompt.disabled = !ready || state.phase !== 'idle';
-    element<HTMLButtonElement>('interrupt').disabled = !ready || !['running', 'waiting'].includes(state.phase);
-    element<HTMLButtonElement>('refresh').disabled = !ready || !state.runtimeId;
-    element('attention').hidden = state.phase !== 'waiting';
-    if (state.storedId) {
-      if (document.activeElement !== key) key.value = state.storedId;
-      const fragment = `session=${encodeURIComponent(state.storedId)}`;
-      if (location.hash.slice(1) !== fragment) history.replaceState(null, '', `#${fragment}`);
-    }
     element('error').hidden = true;
     if (actionError) showError(actionError);
     else if (foundation.state.error) showError(foundation.state.error);
-    else if (state.error) showError(state.error);
     else if (gateway.state.error && ['auth-required', 'error'].includes(gateway.state.phase)) showError(gateway.state.error);
-    if (previousMessages === state.messages && previousStreaming === state.streaming) return;
-    previousMessages = state.messages; previousStreaming = state.streaming;
-    const follow = transcript.scrollHeight - transcript.scrollTop - transcript.clientHeight < 80;
-    const nodes = state.messages.map((message) => {
-      const node = document.createElement('div'); node.className = 'message';
-      const role = document.createElement('strong'); role.textContent = message.role;
-      node.append(role, document.createTextNode(message.text)); return node;
-    });
-    if (state.streaming) { const node = document.createElement('div'); node.className = 'message'; node.textContent = state.streaming; nodes.push(node); }
-    if (!nodes.length) { const node = document.createElement('p'); node.textContent = 'Create or resume a native Hermes session.'; nodes.push(node); }
-    transcript.replaceChildren(...nodes);
-    if (follow) transcript.scrollTop = transcript.scrollHeight;
+    chatView.render();
   });
 }
-session.subscribe(render);
-foundation.subscribe(render);
+chat.subscribe(render);
+foundation.subscribe(() => { chatView.activate(); render(); });
 foundation.onIdentityBoundary(() => {
-  viewEpoch++; session.dispose(); transcript.replaceChildren(); prompt.value = ''; key.value = '';
+  viewEpoch++; chat.clear(); chatView.clear();
   element<HTMLInputElement>('password').value = ''; element<HTMLInputElement>('username').value = '';
   history.replaceState(null, '', location.pathname); actionError = undefined;
   element<HTMLTextAreaElement>('diagnostic-report').value = '';
-  session = new NativeSession(gateway); session.subscribe(render);
 });
-gateway.onState((state) => {
-  if (state.phase === 'ready' && foundation.state.auth === 'signed-in' && !session.state.storedId) {
-    const storedId = new URLSearchParams(location.hash.slice(1)).get('session');
-    if (storedId) run(() => session.resume(storedId));
-  }
-  render();
-});
+gateway.onState(render);
 loginForm.addEventListener('submit', (event) => {
   event.preventDefault();
   const provider = element<HTMLSelectElement>('provider').value;
@@ -127,17 +90,8 @@ loginForm.addEventListener('submit', (event) => {
   const password = element<HTMLInputElement>('password'); const credential = password.value; password.value = '';
   run(() => foundation.login(provider, username, credential));
 });
-element('create').addEventListener('click', () => run(() => session.create()));
-element('resume-form').addEventListener('submit', (event) => { event.preventDefault(); run(() => session.resume(key.value)); });
-element('prompt-form').addEventListener('submit', (event) => {
-  event.preventDefault(); const text = prompt.value;
-  run(async () => { await session.submit(text); if (prompt.value === text) prompt.value = ''; });
-});
-element('interrupt').addEventListener('click', () => run(() => session.interrupt()));
-element('refresh').addEventListener('click', () => run(() => session.refresh()));
 element('reconnect').addEventListener('click', () => run(() => foundation.start()));
 element('disconnect').addEventListener('click', () => foundation.disconnect());
-element('latest').addEventListener('click', () => { transcript.scrollTop = transcript.scrollHeight; });
 element('signout').addEventListener('click', () => run(() => foundation.logout()));
 element('refresh-capabilities').addEventListener('click', () => run(() => foundation.refreshCapabilities()));
 function report(): string {
