@@ -1,3 +1,11 @@
+.hermes-mark {
+  display: inline-block;
+  flex-shrink: 0;
+  background: currentColor;
+  -webkit-mask: url('./hermes-mark.svg') center / contain no-repeat;
+  mask: url('./hermes-mark.svg') center / contain no-repeat;
+}
+
 .assistant-mark > .lucide-sparkles,
 .welcome-mark > .lucide-sparkles {
   display: none;
