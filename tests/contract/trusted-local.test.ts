@@ -44,3 +44,34 @@ test('local wire: a wrong operator token fails readiness and admission', async t
   assert.equal((await fetch(h.origin + '/readyz')).status, 503);
   assert.equal((await fetch(h.origin + '/__hermes/api/sessions?limit=1')).status, 401);
 });
+
+test('local wire: native conversations, reconnect and invalidated access use no fake account', async t => {
+  const { DashboardClient } = await import('../../src/hermes/dashboard-client.js');
+  const { WsAuthClient } = await import('../../src/hermes/ws-auth.js');
+  const { GatewayClient } = await import('../../src/hermes/gateway-client.js');
+  const { ConnectionStore } = await import('../../src/hermes/connection-store.js');
+  const { NativeSession } = await import('../../src/hermes/native-session.js');
+  const h = await setup(t);
+  let failed = false;
+  const dashboard = new DashboardClient(h.origin, async (input, init) => {
+    if (failed && String(input).endsWith('/api/webui/access')) return Response.json({}, { status: 503 });
+    return fetch(input, init);
+  });
+  const gateway = new GatewayClient(new WsAuthClient(dashboard, (signal): Promise<void> => store.verifyAdmission(signal)), {
+    heartbeatMs: 0, socketFactory: (url, protocols) => new WebSocket(url, protocols, { origin: h.origin }) as unknown as globalThis.WebSocket,
+  });
+  const store = new ConnectionStore(dashboard, gateway); const native = new NativeSession(gateway);
+  t.after(() => { native.dispose(); store.dispose(); });
+  await store.start(); assert.equal(store.state.auth, 'local-access'); assert.equal(store.hasAccess, true); assert.equal(gateway.state.phase, 'ready');
+  await native.create(); const key = native.state.storedId; await native.submit('Controlled local prompt');
+  for (let i = 0; i < 100 && native.state.phase !== 'idle'; i++) await new Promise(resolve => setTimeout(resolve, 10));
+  assert.equal(native.state.messages.at(-1)?.text, 'SYNTHETIC_RESPONSE');
+  store.disconnect(); await store.resume(); assert.equal(gateway.state.phase, 'disconnected');
+  await store.start();
+  for (let i = 0; i < 100 && native.state.phase !== 'idle'; i++) await new Promise(resolve => setTimeout(resolve, 10));
+  assert.equal(native.state.storedId, key); assert.equal(h.upstream.metrics.submits, 1); assert.equal(h.upstream.metrics.tickets, 0);
+  await assert.rejects(store.logout()); assert.equal(store.state.auth, 'local-access');
+  const report = JSON.stringify(store.report()); assert.ok(!report.includes(TOKEN)); assert.ok(!report.includes('user_id')); assert.ok(!report.includes('Controlled local prompt'));
+  let cleared = false; store.onIdentityBoundary(() => { cleared = true; }); failed = true; await store.resume();
+  assert.equal(cleared, true); assert.equal(store.hasAccess, false); assert.equal(gateway.state.phase, 'disconnected');
+});
