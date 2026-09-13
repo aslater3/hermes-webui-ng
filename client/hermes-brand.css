@@ -1,32 +1,13 @@
 .hermes-mark {
-  display: inline-block;
-  flex-shrink: 0;
-  background: currentColor;
-  -webkit-mask: url('./hermes-mark.svg') center / contain no-repeat;
-  mask: url('./hermes-mark.svg') center / contain no-repeat;
-}
-
-.assistant-mark > .lucide-sparkles,
-.welcome-mark > .lucide-sparkles {
-  display: none;
-}
-
-.assistant-mark::before,
-.welcome-mark::before {
-  content: "";
   display: block;
   flex-shrink: 0;
-  background: currentColor;
-  -webkit-mask: url('./hermes-mark.svg') center / contain no-repeat;
-  mask: url('./hermes-mark.svg') center / contain no-repeat;
+  object-fit: contain;
+  pointer-events: none;
+  user-select: none;
 }
 
-.assistant-mark::before {
-  width: 15px;
-  height: 15px;
-}
-
-.welcome-mark::before {
-  width: 30px;
-  height: 30px;
+/* The source SVG is black. Keep it legible against each resolved application theme. */
+:root[data-theme="dark"] .hermes-mark-plain,
+:root[data-theme="light"] .hermes-mark-on-accent {
+  filter: invert(1);
 }
