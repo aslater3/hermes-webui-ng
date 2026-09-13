@@ -1,99 +1,90 @@
 <!doctype html>
 <html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-    <meta name="color-scheme" content="dark light" />
-    <title>Hermes WebUI NG · Protocol diagnostic</title>
-    <link rel="stylesheet" href="/styles.css" />
-    <script type="module" src="/app.js"></script>
-  </head>
-  <body>
-    <main>
-      <header>
-        <p class="eyebrow">HERMES WEBUI NG <span>PHASE 0</span></p>
-        <h1>Native connection diagnostic</h1>
-        <p>Validate the Dashboard connection before enabling the full client.</p>
-      </header>
-      <section class="panel" aria-labelledby="connection-title">
-        <h2 id="connection-title">Connection</h2>
-        <dl class="statuses">
-          <div>
-            <dt>Dashboard REST</dt>
-            <dd id="rest-state">Checking</dd>
-          </div>
-          <div>
-            <dt>Native Gateway</dt>
-            <dd id="gateway-state" role="status">disconnected</dd>
-          </div>
-          <div>
-            <dt>Native session</dt>
-            <dd id="session-state">empty</dd>
-          </div>
-        </dl>
-        <p id="error" role="alert" hidden></p>
-        <form id="login-form">
-          <label
-            >Sign-in provider<select id="provider" required>
-              <option value="">Loading providers</option>
-            </select></label
-          >
-          <label>Username<input id="username" autocomplete="username" required /></label>
-          <label
-            >Password<input id="password" type="password" autocomplete="current-password" required
-          /></label>
-          <button id="login" type="submit" disabled>Sign in</button>
-        </form>
-        <div class="actions">
-          <button id="reconnect" type="button">Reconnect</button>
-          <button id="disconnect" type="button">Disconnect transport</button>
-        </div>
-        <p class="hint">Disconnect stops this browser connection; it does not sign out of Hermes.</p>
-      </section>
-      <section class="panel" aria-labelledby="session-title">
-        <h2 id="session-title">Native session</h2>
-        <form id="resume-form">
-          <label
-            >Durable Hermes session key<input id="session-key" spellcheck="false" autocomplete="off"
-          /></label>
-          <button id="resume" type="submit" disabled>Resume</button
-          ><button id="create" type="button" disabled>New session</button>
-        </form>
-        <p class="hint">
-          The session key in the address fragment is navigation only. Transcripts are always fetched from
-          Hermes, never browser storage.
-        </p>
-        <p id="attention" role="status" hidden>
-          Hermes needs interactive input. Approval, clarify, sudo and secret controls are not implemented in
-          this diagnostic. Use a supported Hermes client.
-        </p>
-        <div id="transcript" class="transcript" aria-label="Conversation" tabindex="0"></div>
-        <button id="latest" class="secondary" type="button">Jump to latest</button>
-        <form id="prompt-form">
-          <label
-            >Prompt<textarea
-              id="prompt"
-              rows="3"
-              maxlength="32768"
-              placeholder="Send a controlled test prompt…"
-              disabled
-            ></textarea>
-          </label>
-          <div class="actions">
-            <button id="send" type="submit" disabled>Send prompt</button>
-            <button id="interrupt" type="button" disabled>Interrupt</button>
-            <button id="refresh" type="button" disabled>Refresh from Hermes</button>
-          </div>
-        </form>
-        <p class="hint">
-          An unacknowledged prompt is never replayed automatically. Inspect recovered history before
-          resending. This diagnostic shows at most the latest 500 entries with bounded text.
-        </p>
-      </section>
-      <footer>
-        Protocol spike only · No Relay · No local conversation database · Workspace, rich tools and PWA
-        deferred
-      </footer>
-    </main>
-  </body>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="color-scheme" content="dark light" />
+  <title>Hermes WebUI NG · Connection foundation</title>
+  <link rel="stylesheet" href="/styles.css" />
+  <script type="module" src="/app.js"></script>
+</head>
+<body>
+<main>
+  <header>
+    <p class="eyebrow">HERMES WEBUI NG <span>PHASE 1</span></p>
+    <h1>Native connection diagnostic</h1>
+    <p>Validate the Dashboard connection before enabling the full client.</p>
+  </header>
+  <section class="panel" aria-labelledby="connection-title">
+    <h2 id="connection-title">Connection</h2>
+    <p id="connection-banner" class="connection-banner" role="status" aria-live="polite">Checking the Hermes Dashboard connection…</p>
+    <dl class="statuses">
+      <div><dt>Authentication</dt><dd id="auth-state">checking</dd></div>
+      <div><dt>Dashboard REST</dt><dd id="rest-state">Checking</dd></div>
+      <div><dt>Native Gateway</dt><dd id="gateway-state" role="status">disconnected</dd></div>
+      <div><dt>Native session</dt><dd id="session-state">empty</dd></div>
+    </dl>
+    <p id="error" role="alert" hidden></p>
+    <form id="login-form">
+      <label>Sign-in provider<select id="provider" required><option value="">Loading providers</option></select></label>
+      <label>Username<input id="username" autocomplete="username" required /></label>
+      <label>Password<input id="password" type="password" autocomplete="current-password" required /></label>
+      <button id="login" type="submit" disabled>Sign in</button>
+    </form>
+    <p id="provider-note" class="hint" hidden>No password sign-in provider is advertised. OAuth login is not implemented in this build.</p>
+    <div class="actions">
+      <button id="reconnect" type="button">Reconnect</button>
+      <button id="disconnect" type="button">Disconnect transport</button>
+      <button id="signout" type="button" hidden>Sign out</button>
+    </div>
+    <p class="hint">Disconnect stops this browser connection; it does not sign out of Hermes.</p>
+  </section>
+  <details class="panel" id="diagnostics-panel">
+    <summary>Connection details and diagnostics</summary>
+    <p class="hint">Endpoint availability is evidence from Hermes, not a guarantee of permission or an implemented UI. Missing discovery remains unknown.</p>
+    <dl class="capabilities">
+      <div><dt>Native Gateway</dt><dd id="cap-gateway">unknown</dd></div>
+      <div><dt>Gateway heartbeat</dt><dd id="cap-heartbeat">unknown</dd></div>
+      <div><dt>Change notifications</dt><dd id="cap-changeEvents">unknown</dd></div>
+      <div><dt>Session list endpoint</dt><dd id="cap-sessionsList">unknown</dd></div>
+      <div><dt>Session search endpoint</dt><dd id="cap-sessionsSearch">unknown</dd></div>
+      <div><dt>Profiles endpoint</dt><dd id="cap-profiles">unknown</dd></div>
+      <div><dt>Model options endpoint</dt><dd id="cap-models">unknown</dd></div>
+      <div><dt>Mounted workspace</dt><dd id="cap-workspace">unknown</dd></div>
+      <div><dt>PWA installation</dt><dd id="cap-pwa">unknown</dd></div>
+    </dl>
+    <p class="hint">Last heartbeat latency: <span id="latency">Not measured</span>. Metadata events in this tab: <span id="diagnostic-count">0</span> / 500.</p>
+    <div class="actions">
+      <button id="refresh-capabilities" type="button">Refresh capabilities</button>
+      <button id="copy-diagnostics" type="button">Copy diagnostics</button>
+      <button id="download-diagnostics" type="button">Download diagnostics</button>
+      <button id="clear-diagnostics" type="button">Clear diagnostics</button>
+    </div>
+    <p id="export-status" role="status" class="hint"></p>
+    <label>Sanitised report<textarea id="diagnostic-report" rows="6" readonly autocomplete="off" spellcheck="false"></textarea></label>
+    <p class="hint">Only status labels, timings, numeric error codes and capability flags. No conversation text, account identity, credentials or raw backend logs. Nothing is uploaded automatically.</p>
+  </details>
+  <section class="panel" aria-labelledby="session-title">
+    <h2 id="session-title">Native session</h2>
+    <form id="resume-form">
+      <label>Durable Hermes session key<input id="session-key" spellcheck="false" autocomplete="off" /></label>
+      <button id="resume" type="submit" disabled>Resume</button><button id="create" type="button" disabled>New session</button>
+    </form>
+    <p class="hint">The session key in the address fragment is navigation only. Transcripts are always fetched from Hermes, never browser storage.</p>
+    <p id="attention" role="status" hidden>Hermes needs interactive input. Approval, clarify, sudo and secret controls are not implemented in this diagnostic. Use a supported Hermes client.</p>
+    <div id="transcript" class="transcript" aria-label="Conversation" tabindex="0"></div>
+    <button id="latest" class="secondary" type="button">Jump to latest</button>
+    <form id="prompt-form">
+      <label>Prompt<textarea id="prompt" rows="3" maxlength="32768" placeholder="Send a controlled test prompt…" disabled></textarea></label>
+      <div class="actions">
+        <button id="send" type="submit" disabled>Send prompt</button>
+        <button id="interrupt" type="button" disabled>Interrupt</button>
+        <button id="refresh" type="button" disabled>Refresh from Hermes</button>
+      </div>
+    </form>
+    <p class="hint">An unacknowledged prompt is never replayed automatically. Inspect recovered history before resending. This diagnostic shows at most the latest 500 entries with bounded text.</p>
+  </section>
+  <footer>Connection foundation · No Relay · No local conversation database · Workspace, rich tools and PWA deferred</footer>
+</main>
+</body>
 </html>

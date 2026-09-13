@@ -1,226 +1,64 @@
 :root {
-  font-family:
-    system-ui,
-    -apple-system,
-    BlinkMacSystemFont,
-    'Segoe UI',
-    sans-serif;
-  color: #dbe6ef;
-  background: #111821;
-  color-scheme: dark;
-  --viewport-height: 100dvh;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  color: #dbe6ef; background: #111821; color-scheme: dark; --viewport-height: 100dvh;
 }
-* {
-  box-sizing: border-box;
-}
-body {
-  margin: 0;
-}
-main {
-  max-width: 1040px;
-  margin: auto;
-  min-height: 100dvh;
-  padding: max(24px, env(safe-area-inset-top)) max(24px, env(safe-area-inset-right))
-    max(24px, env(safe-area-inset-bottom)) max(24px, env(safe-area-inset-left));
-}
-header {
-  margin-bottom: 28px;
-}
-h1 {
-  font-size: clamp(1.65rem, 4vw, 2.5rem);
-  letter-spacing: -0.035em;
-  margin: 12px 0;
-}
-h2 {
-  font-size: 1.05rem;
-  margin: 0 0 18px;
-}
-p,
-footer {
-  line-height: 1.55;
-}
-.eyebrow {
-  letter-spacing: 0.15em;
-  font-size: 0.75rem;
-  color: #9aaec0;
-}
-.eyebrow span {
-  margin-left: 10px;
-  color: #93dccb;
-}
-.panel {
-  background: #192330;
-  border: 1px solid #304154;
-  border-radius: 14px;
-  padding: 24px;
-  margin-bottom: 20px;
-  min-width: 0;
-}
-.statuses {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 16px;
-}
-dt {
-  font-size: 0.8rem;
-  color: #a5b6c7;
-}
-dd {
-  margin: 6px 0 0;
-  overflow-wrap: anywhere;
-  font-weight: 600;
-}
-form {
-  display: flex;
-  align-items: end;
-  flex-wrap: wrap;
-  gap: 12px;
-  margin: 20px 0 12px;
-}
-label {
-  display: flex;
-  flex: 1 1 160px;
-  flex-direction: column;
-  gap: 8px;
-  font-size: 0.9rem;
-  min-width: 0;
-}
-input,
-select,
-textarea,
-button {
-  font: inherit;
-  font-size: 16px;
-  min-height: 48px;
-  border: 1px solid #566b80;
-  border-radius: 7px;
-}
-input,
-select,
-textarea {
-  width: 100%;
-  background: #111c27;
-  color: inherit;
-  padding: 12px;
-}
-textarea {
-  resize: vertical;
-  max-height: 40dvh;
-}
-button {
-  padding: 10px 16px;
-  cursor: pointer;
-  background: #91d7c8;
-  color: #102520;
-  font-weight: 600;
-}
-button.secondary,
-#disconnect,
-#interrupt,
-#refresh {
-  color: #dbe6ef;
-  background: #253747;
-}
-button:disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
-}
-:focus-visible {
-  outline: 3px solid #b0e7ff;
-  outline-offset: 3px;
-}
-.actions {
-  display: flex;
-  gap: 10px;
-  flex-wrap: wrap;
-}
-.hint,
-footer {
-  color: #a5b6c7;
-  font-size: 0.8rem;
-}
-#error,
-#attention {
-  padding: 14px;
-  border-left: 3px solid #e6b578;
-  background: #302a24;
-  overflow-wrap: anywhere;
-}
-.transcript {
-  height: min(45dvh, 480px);
-  height: min(calc(var(--viewport-height) * 0.45), 480px);
-  overflow: auto;
-  overscroll-behavior: contain;
-  border: 1px solid #304154;
-  border-radius: 8px;
-  padding: 16px;
-  background: #111c27;
-}
-.message {
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-  margin: 0 0 24px;
-  line-height: 1.55;
-}
-.message strong {
-  display: block;
-  text-transform: uppercase;
-  font-size: 0.75rem;
-  letter-spacing: 0.08em;
-  color: #91d7c8;
-  margin-bottom: 6px;
-}
-#prompt-form {
-  display: block;
-}
-#prompt-form .actions {
-  margin-top: 12px;
-}
-#latest {
-  margin-top: 8px;
-}
-[hidden] {
-  display: none !important;
-}
+* { box-sizing: border-box; }
+body { margin: 0; }
+main { max-width: 1040px; margin: auto; min-height: 100dvh;
+  padding: max(24px, env(safe-area-inset-top)) max(24px, env(safe-area-inset-right)) max(24px, env(safe-area-inset-bottom)) max(24px, env(safe-area-inset-left)); }
+header { margin-bottom: 28px; }
+h1 { font-size: clamp(1.65rem, 4vw, 2.5rem); letter-spacing: -0.035em; margin: 12px 0; }
+h2 { font-size: 1.05rem; margin: 0 0 18px; }
+p, footer { line-height: 1.55; }
+.eyebrow { letter-spacing: 0.15em; font-size: 0.75rem; color: #9aaec0; }
+.eyebrow span { margin-left: 10px; color: #93dccb; }
+.panel { background: #192330; border: 1px solid #304154; border-radius: 14px; padding: 24px; margin-bottom: 20px; min-width: 0; }
+.statuses { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+dt { font-size: 0.8rem; color: #a5b6c7; }
+dd { margin: 6px 0 0; overflow-wrap: anywhere; font-weight: 600; }
+form { display: flex; align-items: end; flex-wrap: wrap; gap: 12px; margin: 20px 0 12px; }
+label { display: flex; flex: 1 1 160px; flex-direction: column; gap: 8px; font-size: 0.9rem; min-width: 0; }
+input, select, textarea, button { font: inherit; font-size: 16px; min-height: 48px; border: 1px solid #566b80; border-radius: 7px; }
+input, select, textarea { width: 100%; background: #111c27; color: inherit; padding: 12px; }
+textarea { resize: vertical; max-height: 40dvh; }
+button { padding: 10px 16px; cursor: pointer; background: #91d7c8; color: #102520; font-weight: 600; }
+button.secondary, #disconnect, #interrupt, #refresh { color: #dbe6ef; background: #253747; }
+button:disabled { opacity: 0.45; cursor: not-allowed; }
+:focus-visible { outline: 3px solid #b0e7ff; outline-offset: 3px; }
+.actions { display: flex; gap: 10px; flex-wrap: wrap; }
+.hint, footer { color: #a5b6c7; font-size: 0.8rem; }
+#error, #attention { padding: 14px; border-left: 3px solid #e6b578; background: #302a24; overflow-wrap: anywhere; }
+.transcript { height: min(45dvh, 480px); height: min(calc(var(--viewport-height) * 0.45), 480px);
+  overflow: auto; overscroll-behavior: contain; border: 1px solid #304154; border-radius: 8px; padding: 16px; background: #111c27; }
+.message { white-space: pre-wrap; overflow-wrap: anywhere; margin: 0 0 24px; line-height: 1.55; }
+.message strong { display: block; text-transform: uppercase; font-size: 0.75rem; letter-spacing: 0.08em; color: #91d7c8; margin-bottom: 6px; }
+#prompt-form { display: block; }
+#prompt-form .actions { margin-top: 12px; }
+#latest { margin-top: 8px; }
+[hidden] { display: none !important; }
 @media (max-width: 600px) {
-  main {
-    padding-right: max(12px, env(safe-area-inset-right));
-    padding-left: max(12px, env(safe-area-inset-left));
-  }
-  .panel {
-    padding: 16px;
-    border-radius: 10px;
-  }
-  .statuses {
-    grid-template-columns: 1fr;
-    gap: 12px;
-  }
-  .statuses > div {
-    display: flex;
-    justify-content: space-between;
-    gap: 12px;
-  }
-  dd {
-    margin: 0;
-    text-align: right;
-  }
-  form {
-    flex-direction: column;
-    align-items: stretch;
-  }
-  label {
-    flex: auto;
-    width: 100%;
-  }
-  .actions > button {
-    flex: 1 1 auto;
-  }
-  .transcript {
-    min-height: 120px;
-  }
+  main { padding-right: max(12px, env(safe-area-inset-right)); padding-left: max(12px, env(safe-area-inset-left)); }
+  .panel { padding: 16px; border-radius: 10px; }
+  .statuses { grid-template-columns: 1fr; gap: 12px; }
+  .statuses > div { display: flex; justify-content: space-between; gap: 12px; }
+  dd { margin: 0; text-align: right; }
+  form { flex-direction: column; align-items: stretch; }
+  label { flex: auto; width: 100%; }
+  .actions > button { flex: 1 1 auto; }
+  .transcript { min-height: 120px; }
 }
-@media (prefers-reduced-motion: reduce) {
-  * {
-    scroll-behavior: auto;
-  }
+@media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto; } }
+.connection-banner { margin: 0 0 20px; padding: 14px 16px; background: #253747; border-left: 4px solid #90acc4; border-radius: 4px; overflow-wrap: anywhere; }
+.connection-banner[data-state='ready'] { border-left-color: #91d7c8; }
+.connection-banner[data-state='error'], .connection-banner[data-state='auth-required'], .connection-banner[data-state='offline'] { border-left-color: #e6b578; }
+summary { min-height: 48px; padding: 12px 0; cursor: pointer; font-weight: 600; }
+.capabilities { display: grid; gap: 12px; }
+.capabilities > div { display: grid; grid-template-columns: minmax(120px, 1fr) minmax(0, 2fr); gap: 12px; }
+.capabilities dd { margin: 0; font-size: .85rem; font-weight: 400; }
+#diagnostic-report { font-family: ui-monospace, monospace; font-size: 16px; }
+@media (min-width: 601px) { .statuses { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+@media (max-width: 600px) {
+  .capabilities > div { grid-template-columns: 1fr; gap: 4px; }
+  .capabilities dd { text-align: left; }
+  summary { font-size: 1rem; }
 }
