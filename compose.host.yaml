@@ -1,15 +1,15 @@
+# Standalone alternative: docker compose -f compose.host.yaml up --build -d
 services:
   webui:
     build: .
-    init: true
     image: hermes-webui-ng:phase0
+    init: true
+    network_mode: host
     environment:
-      HERMES_DASHBOARD_URL: ${HERMES_DASHBOARD_URL:?Set an authenticated Dashboard origin}
+      HERMES_DASHBOARD_URL: ${HERMES_DASHBOARD_URL:-http://127.0.0.1:9119}
       PUBLIC_ORIGIN: ${PUBLIC_ORIGIN:?Set the exact browser-facing origin}
-    extra_hosts:
-      - host.docker.internal:host-gateway
-    ports:
-      - '127.0.0.1:${WEBUI_PORT:-8787}:8787'
+      HOST: ${WEBUI_HOST:-127.0.0.1}
+      PORT: ${WEBUI_PORT:-8788}
     read_only: true
     tmpfs:
       - /tmp:rw,noexec,nosuid,size=16m
