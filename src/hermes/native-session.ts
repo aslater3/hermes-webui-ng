@@ -5,6 +5,7 @@ type Transport = Pick<GatewayClient, 'call' | 'onEvent' | 'onState' | 'state'>;
 export interface Message {
   role: string;
   text: string;
+  truncated?: boolean;
 }
 export interface SessionState {
   phase: 'empty' | 'attaching' | 'idle' | 'running' | 'waiting' | 'unknown' | 'error';
@@ -14,6 +15,9 @@ export interface SessionState {
   messages: Message[];
   streaming: string;
   deliveryUnknown: boolean;
+  submitting?: boolean;
+  interrupting?: boolean;
+  totalMessages?: number;
   error?: ClientError;
 }
 
@@ -27,6 +31,8 @@ export class NativeSession {
   private flight?: { epoch: number; promise: Promise<void> };
   private listeners = new Set<(state: SessionState) => void>();
   private unsubscribe: (() => void)[];
+  private submission?: { epoch: number };
+  private interruption?: { epoch: number; promise: Promise<void> };
 
   constructor(private readonly gateway: Transport) {
     this.unsubscribe = [
@@ -54,9 +60,11 @@ export class NativeSession {
     if (connection.phase !== 'ready') {
       ++this.epoch;
       this.flight = undefined;
-      if (this.state.storedId) this.publish({ phase: 'unknown', runtimeId: undefined });
+      if (this.state.storedId) this.publish({ phase: 'unknown', runtimeId: undefined,
+        deliveryUnknown: this.state.deliveryUnknown || !!this.submission, submitting: false, interrupting: false });
+      this.submission = undefined; this.interruption = undefined;
     } else if (this.state.storedId) {
-      void this.resume(this.state.storedId, this.state.profile).catch(() => {});
+      void this.attach('session.resume', this.state.storedId, this.state.profile, true).catch(() => {});
     }
   }
   async create(profile?: string): Promise<void> {
@@ -66,9 +74,10 @@ export class NativeSession {
     if (!storedId.trim()) throw new ClientError('protocol', 'A durable Hermes session key is required');
     await this.attach('session.resume', storedId, profile);
   }
-  private async attach(method: string, storedId?: string, profile?: string): Promise<void> {
+  private async attach(method: string, storedId?: string, profile?: string, reconnect = false): Promise<void> {
     const epoch = ++this.epoch;
     this.flight = undefined;
+    this.submission = undefined; this.interruption = undefined;
     this.publish({
       phase: 'attaching',
       storedId,
@@ -77,7 +86,8 @@ export class NativeSession {
       messages: [],
       streaming: '',
       error: undefined,
-      deliveryUnknown: false,
+      deliveryUnknown: reconnect && this.state.deliveryUnknown,
+      submitting: false, interrupting: false, totalMessages: 0,
     });
     try {
       this.valid(epoch);
@@ -94,7 +104,8 @@ export class NativeSession {
       const key = result.stored_session_id ?? result.session_key ?? result.resumed ?? storedId;
       if (typeof key !== 'string' || !key)
         throw new ClientError('protocol', 'Hermes omitted the durable session key');
-      this.publish({ runtimeId, storedId: key });
+      const info = typeof result.info === 'object' && result.info !== null ? record(result.info) : {};
+      this.publish({ runtimeId, storedId: key, profile: typeof info.profile_name === 'string' ? info.profile_name : profile });
       await this.refresh();
     } catch (error) {
       this.failure(epoch, error);
@@ -139,11 +150,12 @@ export class NativeSession {
       const live = record(rawLive);
       if (!Array.isArray(history.messages) || typeof live.running !== 'boolean')
         throw new ClientError('protocol', 'Unsupported native session snapshot');
-      const messages = history.messages.slice(-500).map((item: unknown): Message => {
+      const messages = history.messages.slice(-100).map((item: unknown): Message => {
         const message = record(item);
         return {
-          role: textField(message, 'role'),
+          role: textField(message, 'role').slice(0, 32),
           text: typeof message.text === 'string' ? message.text.slice(0, 131072) : '[Non-text entry]',
+          ...(typeof message.text === 'string' && message.text.length > 131072 ? { truncated: true } : {}),
         };
       });
       const inflight =
@@ -157,9 +169,10 @@ export class NativeSession {
         : '';
       this.publish({
         messages,
+        totalMessages: history.messages.length,
         streaming,
         error: undefined,
-        phase: live.status === 'waiting' ? 'waiting' : live.running ? 'running' : 'idle',
+        phase: live.status === 'waiting' ? 'waiting' : live.running || this.submission ? 'running' : 'idle',
       });
       return;
     }
@@ -187,28 +200,43 @@ export class NativeSession {
     }
   }
   async submit(text: string): Promise<void> {
-    if (this.state.phase !== 'idle' || !this.state.runtimeId || !text.trim())
+    if (this.state.phase !== 'idle' || this.submission || !this.state.runtimeId || !text.trim() || text.length > 32768)
       throw new ClientError('protocol', 'Wait for an idle native session before submitting');
     const epoch = this.epoch;
-    this.publish({ phase: 'running', streaming: '', error: undefined, deliveryUnknown: false });
+    const submission = { epoch }; this.submission = submission; ++this.revision;
+    this.publish({ phase: 'running', streaming: '', error: undefined, deliveryUnknown: false, submitting: true });
     try {
       await this.gateway.call('prompt.submit', { session_id: this.state.runtimeId, text });
       this.valid(epoch);
+      if (this.submission === submission) this.submission = undefined;
+      this.publish({ submitting: false });
       await this.refresh();
     } catch (error) {
       if (epoch === this.epoch) {
-        this.publish({ deliveryUnknown: !(error instanceof ClientError && error.kind === 'rpc') });
+        this.submission = undefined;
+        this.publish({ submitting: false, deliveryUnknown: !(error instanceof ClientError && error.kind === 'rpc') });
         this.failure(epoch, error);
       }
       throw error; // Never retry a prompt: an absent acknowledgement does not mean non-delivery.
     }
   }
-  async interrupt(): Promise<void> {
+  interrupt(): Promise<void> {
     const epoch = this.epoch;
-    if (!this.state.runtimeId) throw new ClientError('disconnected', 'No attached native session');
-    await this.gateway.call('session.interrupt', { session_id: this.state.runtimeId });
-    this.valid(epoch);
-    await this.refresh();
+    if (this.interruption?.epoch === epoch) return this.interruption.promise;
+    if (!this.state.runtimeId || !['running', 'waiting'].includes(this.state.phase) || this.state.submitting)
+      return Promise.reject(new ClientError('protocol', 'No running native turn can be interrupted yet'));
+    const runtimeId = this.state.runtimeId;
+    this.publish({ interrupting: true });
+    const promise = (async () => {
+      this.valid(epoch);
+      await this.gateway.call('session.interrupt', { session_id: runtimeId });
+      this.valid(epoch);
+      await this.refresh(); // The acknowledgement alone is NOT evidence of an idle agent.
+    })().finally(() => {
+      if (this.interruption?.epoch === epoch) this.interruption = undefined;
+      if (this.epoch === epoch) this.publish({ interrupting: false });
+    });
+    this.interruption = { epoch, promise }; return promise;
   }
   dispose(): void {
     this.disposed = true;

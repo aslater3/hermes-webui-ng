@@ -12,3 +12,9 @@ Current upstream additionally inspected at `b05a47b9d2df4d62124a80f70d657c6b8e1b
 - Diagnostic events retain only route labels/status/timings, never session IDs, profiles, search queries or text.
 
 Sources: upstream `web/src/lib/api.ts`, `hermes_cli/web_routers/sessions.py`, `tui_gateway/methods_session.py`.
+
+## Current recovery and implementation evidence
+
+REST boundary clients and the generation-scoped session browser are pushed (`b2f6e0e`, `c6bde3c0`). A late search/history response cannot cross selection or account boundaries. Same-query listing failures preserve visible rows with an explicit error; different queries clear immediately.
+
+Native send/interrupt admission is now guarded. An idle snapshot cannot reopen the composer while submission is unacknowledged; repeated interrupt requests coalesce. Reconnect retains an uncertain-delivery warning rather than replaying the prompt. The native view keeps the latest 100 entries, each capped at 128 KiB with explicit truncation metadata. Local compilation/lint and 64 unit tests pass; Phase 2 browser/live exit gates remain pending.
