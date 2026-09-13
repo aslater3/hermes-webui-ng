@@ -1,4 +1,5 @@
 import { createServer } from 'node:http';
+import { foundationRoutes } from './routes/foundation.js';
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
@@ -10,6 +11,7 @@ import { json, proxyHttp, proxyUpgrade, refuseUpgrade, type Log } from './proxy/
 
 export function createApp(config: Config, log: Log = (event) => console.log(JSON.stringify(event))) {
   const sockets = new Set<Duplex>();
+  const foundation = foundationRoutes(config);
   const server = createServer(
     { maxHeaderSize: 16384, requestTimeout: 20_000, headersTimeout: 15_000 },
     (req, res) => {
@@ -56,7 +58,8 @@ export function createApp(config: Config, log: Log = (event) => console.log(JSON
           );
         return;
       }
-      // Phase 0 has no file, Git, configuration-write or diagnostics-content API.
+      if (foundation(req, res)) return;
+      // File, Git and configuration-write APIs remain unavailable.
       if (raw.startsWith('/api/')) {
         json(res, 404, { error: { code: 'CAPABILITY_UNAVAILABLE', requestId } });
         return;
