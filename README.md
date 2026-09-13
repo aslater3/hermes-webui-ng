@@ -1,6 +1,26 @@
-# Hermes WebUI NG — Build Handover Pack
+# Hermes WebUI NG
 
-> Working title only. Rename before public release if desired.
+> Phase 0 protocol diagnostic implemented and verified. The full product described below is still in development.
+
+## Current implementation
+
+**M0 passed on 13 September 2026** against vanilla `NousResearch/hermes-agent@b6b53c69a6ed49cb099cf1bfe76b5e6edd718e5a`. The Docker image authenticates through the Dashboard proxy, mints supported one-use WebSocket credentials, receives `gateway.ready`, creates native sessions, submits a controlled prompt, and recovers history after reconnect without a local chat database.
+
+The current interface is deliberately a responsive diagnostic page, not the final React application. It provides password sign-in, native session create/resume, plain streaming output, interrupt, connection status and reconnect. Rich tools/interactive prompts, sidebar/search, profile/model controls, workspace and PWA are later phases.
+
+At implementation checkpoint `1209953`, CI passed 24 unit tests, 5 synthetic wire tests, 16 browser/viewport tests, production Docker smoke and the pinned vanilla-Hermes acceptance gate. The real-Hermes test replaces only the model endpoint with a deterministic fixture. Physical mobile and installed-PWA verification remain outstanding. Detailed evidence and outstanding gates are in `docs/implementation-status.md`.
+
+### Run the diagnostic
+
+Configure an authenticated Hermes Dashboard reachable from the container, then:
+
+```sh
+cp .env.example .env
+# Set HERMES_DASHBOARD_URL and the exact browser-facing PUBLIC_ORIGIN in .env.
+docker compose up --build -d
+```
+
+The Compose example publishes only on host loopback. Credentials belong in Hermes, not WebUI configuration. Read `docs/phase0-running.md` for host-network/private-proxy topology, authentication requirements and diagnostic limitations before deploying. This is not an internet-facing production-readiness claim.
 
 ## Mission
 

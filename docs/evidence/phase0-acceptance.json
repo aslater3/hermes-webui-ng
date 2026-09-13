@@ -1,0 +1,28 @@
+{
+  "source": {
+    "repository": "aslater3/hermes-webui-ng",
+    "workflow_run": 34755408531,
+    "artifact_id": 10317111719,
+    "artifact_sha256": "24a7d1b67bb707c92343a41cd975f9cac6545dca069737864838df38e548e517",
+    "file": "acceptance.json",
+    "verified_on": "2026-09-13"
+  },
+  "acceptance": {
+    "upstream": "b6b53c69a6ed49cb099cf1bfe76b5e6edd718e5a",
+    "commit": "ee27957e3a1bc16c6404a27fbb6d8c524a85031b",
+    "gates": [
+      "authenticated-dashboard-proxy",
+      "official-proxied-login",
+      "one-use-ticket-upgrade-gateway-ready",
+      "native-session-create",
+      "real-agent-controlled-model-response",
+      "socket-loss-rehydrate-without-replay",
+      "fresh-client-native-history-no-local-persistence",
+      "controlled-provider-received-real-agent-request"
+    ],
+    "modelRequests": 2,
+    "hermes": "unmodified official serve (Dashboard API + native Gateway)",
+    "model": "deterministic loopback fixture",
+    "webui": "production Docker image"
+  }
+}
