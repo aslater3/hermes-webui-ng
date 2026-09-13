@@ -57,5 +57,6 @@ for attempt in $(seq 1 30); do
 done
 curl --fail --silent http://127.0.0.1:8787/readyz
 npm run test:live
+node build/tests/integration/phase1.js
 # Tests may create upstream state; they must never alter tracked upstream source.
 test -z "$(git -C upstream diff --name-only HEAD)"
