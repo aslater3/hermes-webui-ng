@@ -1,3 +1,4 @@
+import { DocumentRequests } from './document-requests.js';
 import { DashboardClient } from '../src/hermes/dashboard-client.js';
 import { GatewayClient } from '../src/hermes/gateway-client.js';
 import { WsAuthClient } from '../src/hermes/ws-auth.js';
@@ -10,6 +11,7 @@ import type { SessionRef } from '../src/hermes/session-rest.js';
 /** One disposable client lifetime; React never builds RPC envelopes or owns durable sessions. */
 export class AppRuntime {
   readonly diagnostics = new DiagnosticsRing();
+  private readonly requests = new DocumentRequests(window);
   readonly dashboard: DashboardClient;
   readonly gateway: GatewayClient;
   readonly connection: ConnectionStore;
@@ -23,7 +25,7 @@ export class AppRuntime {
   private listeners = new Set<() => void>();
   private cleanup: (() => void)[] = [];
   constructor(origin: string) {
-    this.dashboard = new DashboardClient(origin, fetch, 15_000, this.diagnostics);
+    this.dashboard = new DashboardClient(origin, this.requests.fetch, 15_000, this.diagnostics);
     this.gateway = new GatewayClient(new WsAuthClient(this.dashboard, signal => this.connection.verifyAdmission(signal)), { diagnostics: this.diagnostics });
     this.connection = new ConnectionStore(this.dashboard, this.gateway, this.diagnostics);
     this.chat = new ChatController(this.dashboard, this.gateway, error => this.gateway.suspend(error));
@@ -84,7 +86,11 @@ export class AppRuntime {
       target.addEventListener(event, callback); this.cleanup.push(() => target.removeEventListener(event, callback));
     };
     listen(window, 'popstate', this.navigate); listen(window, 'hashchange', this.navigate);
-    listen(document, 'visibilitychange', resume); listen(window, 'pageshow', resume);
+    listen(document, 'visibilitychange', resume);
+    listen(window, 'pageshow', () => {
+      resume();
+      if (this.readable) this.run(() => this.chat.browser.refresh());
+    });
     listen(window, 'online', () => this.run(() => this.connection.setOffline(false)));
     listen(window, 'offline', () => this.run(() => this.connection.setOffline(true)));
     this.connection.poll();
@@ -114,6 +120,7 @@ export class AppRuntime {
     await this.chat.send();
   });
   dispose() {
+    this.requests.dispose();
     this.cleanup.forEach(fn => fn()); this.cleanup = [];
     cancelAnimationFrame(this.frame); this.chat.dispose(); this.connection.dispose(); this.listeners.clear();
   }
