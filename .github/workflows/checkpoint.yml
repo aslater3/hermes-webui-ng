@@ -33,6 +33,20 @@ jobs:
       - run: npm ci
       - name: Compile application and legacy regression sources
         run: npm run build
+      - name: Retain reproducible tooling for an explicitly requested recovery
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          mkdir -p /tmp/tooling
+          cp package-lock.json /tmp/tooling/
+          git rev-parse HEAD > /tmp/tooling/COMMIT
+          tar -czf /tmp/tooling/node_modules.tar.gz node_modules
+          tar -czf /tmp/tooling/build.tar.gz build dist
+      - uses: actions/upload-artifact@v4
+        if: github.event_name == 'workflow_dispatch'
+        with:
+          name: recovery-tooling
+          path: /tmp/tooling/
+          retention-days: 7
       - name: Lint recovered sources
         run: npm run lint
       - name: Unit tests
