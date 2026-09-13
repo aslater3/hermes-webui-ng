@@ -1,0 +1,59 @@
+{
+  "milestone": "Phase 4B composer controls and typed history rendering",
+  "dateUtc": "2026-09-13",
+  "applicationCommit": "addf8708bd3d850c9489af0e57cddc570fc388b3",
+  "upstreamRef": "b6b53c69a6ed49cb099cf1bfe76b5e6edd718e5a",
+  "local": {
+    "node": "22.16.0", "build": "pass", "typecheck": "pass", "lint": "pass",
+    "unitPassed": 134, "wirePassed": 18, "sourceMatchesRemoteArchive": true
+  },
+  "ci": {
+    "checkpoint": { "runId": 34788588530, "jobId": 103808504754, "conclusion": "success" },
+    "browsers": {
+      "runId": 34788588532, "jobId": 103808504559, "conclusion": "success",
+      "passed": 240, "failed": 0, "skipped": 0, "flaky": 0,
+      "projects": ["desktop-chromium", "iphone-webkit", "android-chromium", "narrow-320"],
+      "screenshots": 56
+    },
+    "image": { "runId": 34788588531, "jobId": 103808504601, "conclusion": "success" },
+    "vanillaHermes": {
+      "runId": 34788588524, "jobId": 103808504582, "conclusion": "success",
+      "modes": ["dashboard", "trusted-local"]
+    }
+  },
+  "artifacts": [
+    { "name": "source-checkpoint", "id": 10327665013, "sha256": "d8ecb32f55d46a8cdef1b4ce8d01d24d2c8d90c6280aa696becb89be91c04a26" },
+    { "name": "diagnostic-browser-results", "id": 10327149016, "sha256": "e67dc87f4ce5520e3daa2ca31bd152520f06f7f60f7bfeff5db035dc40f30588" },
+    { "name": "vanilla-hermes-acceptance", "id": 10327218694, "sha256": "5712687c6aab81944a75d12fec879812fdae1e7a119a09771f2002c365ebe86b" }
+  ],
+  "nativeSettingsGates": {
+    "gated": [
+      "native-profiles-and-configured-model-inventory",
+      "confirmed-session-model-and-reasoning-effort",
+      "profile-defaults-and-second-session-unchanged",
+      "real-agent-request-uses-selected-model",
+      "reconnect-restores-settings-without-replay",
+      "fresh-client-native-recovery-and-redacted-report"
+    ],
+    "local": [
+      "native-profiles-and-configured-model-inventory",
+      "confirmed-session-model-and-reasoning-effort",
+      "profile-defaults-and-second-session-unchanged",
+      "real-agent-request-uses-selected-model",
+      "reconnect-restores-settings-without-replay",
+      "fresh-client-native-recovery-and-redacted-report"
+    ]
+  },
+  "inspection": {
+    "screenshots": ["desktop model picker", "iPhone reasoning picker", "iPhone structured history"],
+    "artifactDigestsVerified": true
+  },
+  "limits": [
+    "Only the model endpoint is a deterministic fixture; Hermes and production WebUI container are real and unmodified.",
+    "Browser scenarios use synthetic protocol fixtures; mobile projects are emulation, not physical-device/PWA certification.",
+    "Native reasoning setter can fall back to profile default if another client removes the runtime between preflight and dispatch; documented in UI and ADR-019, not atomically fixed.",
+    "Provider reasoning capability does not guarantee support for every Hermes effort word.",
+    "Operator diagnostic contains no transcript payload; known structured-history defects are repaired, but every literal SVG string in the unseen transcript is not independently reproduced.",
+    "Full M3 approval/sudo/secret execution acceptance, broader history/off-selection activity, PWA/workspace and release hardening remain open."
+  ]
+}
