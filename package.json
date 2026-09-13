@@ -1,12 +1,12 @@
 {
   "name": "hermes-webui-ng",
   "version": "0.0.1",
-  "description": "Hermes-native standalone WebUI — Phase 0 protocol spike",
+  "description": "Hermes-native standalone WebUI — modern application shell",
   "scripts": {
     "build": "node scripts/build.mjs",
     "start": "node build/server/index.js",
-    "typecheck": "tsc --noEmit",
-    "lint": "eslint server src tests",
+    "typecheck": "tsc --noEmit && tsc -p tsconfig.web.json",
+    "lint": "eslint server src tests client",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "test": "node --test build/tests/unit/*.test.js",
@@ -32,9 +32,7 @@
   },
   "private": true,
   "type": "module",
-  "engines": {
-    "node": ">=22 <23"
-  },
+  "engines": { "node": ">=22 <23" },
   "dependencies": {
     "lucide-react": "0.577.0",
     "react": "19.3.0",

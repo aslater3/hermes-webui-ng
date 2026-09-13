@@ -1,55 +1,28 @@
 # Implementation Status
 
-Updated: 13 September 2026. **Phase 3's verified initial implementation is merged into `main` through PR #1, at the repository owner's request. M3 remains OPEN.** Merge commit: `6659055bcfba6ad143037fd0e1824d8fd180ddb5`. The owner has not yet performed local Phase 2 testing and requested the combined current implementation for deployment. This replaces the earlier plan to hold main at Phase 2; it is not M3 sign-off or a production release. Completed increments are committed and pushed before the next increment, and remote refs are verified.
+Updated: 13 September 2026. **Phase 4A modern shell is in progress on `phase4-modern-shell`, prioritised by the owner after reviewing the diagnostic UI.** M0/M1/M2 remain the signed-off protocol/chat foundation; M3 acceptance remains open. Main is the initial Phase 3 checkpoint `ae1373a` until shell acceptance.
 
-## Deployment and compatibility
+## Modern shell increments
 
-Deploy `main` to test Phase 2 plus the initial Phase 3 interactions. Phase 2 remains available historically at `daf0bbfcf704ea588003f4816e49110ef431f061`, rather than being held on main. Phase 2 tested application checkpoint `da2838db6f02b6296f21555a8adfa20ce2d4b7b1`: 73 unit tests, 9 wire contracts, 96 browser tests, Docker smoke and real-Hermes M0/M1/M2 acceptance passed. Those reports remain under `docs/evidence/`.
+- Scope/reprioritisation `57db9ea`; exact React/Vite/Markdown dependencies `7219552`.
+- React lifecycle bridge and safe renderer primitives `20ba2e8`.
+- Native session navigation, sign-in and settings panels `572d5bf`.
+- Bounded rich conversation, integrated Send/Stop composer and stable native input-card adapter `5095b8d`.
+- Full-height chat workspace, light/dark/system tokens, desktop collapse and mobile drawers/sheets, command palette `11f0b1c`.
+- Build now serves React at `/`; legacy troubleshooting UI is explicit `/diagnostic`. Hashed bundle routes are strictly allowlisted and retain the existing CSP/origin policy. One non-root runtime image; no Hermes code or new agent runtime.
 
-Runtime baseline remains `NousResearch/hermes-agent@b6b53c69a6ed49cb099cf1bfe76b5e6edd718e5a`. Relevant Phase 3 sources were additionally inspected at `422bc9bde9d212ab3741fbc45a871a3938436d59`; that newer runtime is not certified. The live harness uses unmodified official Hermes, its official CLI setup and the actual non-root/read-only WebUI Docker image. Only model decisions are controlled test responses.
+## Verification in progress
 
-## Phase 3 implemented so far
+Local build, web and server TypeScript, lint, **92 unit and 12 socket-level tests pass**. Initial bundle is approximately 101 KiB gzip plus 7 KiB CSS; Markdown/highlighting is a separate lazy chunk. Local browser navigation is blocked by execution-environment policy; browser execution and screenshots are performed by repository CI.
 
-- [x] Seven separate remote development commits merged without squashing through PR #1.
-- [x] Validated bounded tool start/progress/complete projection, failure/duration fields and reasoning/thinking display.
-- [x] Approval once/deny controls; no persistent policy grants and no authorisation when command details are incomplete.
-- [x] Single/batch clarification, multi-select choices, per-question confirmations and supported cancel-all semantics.
-- [x] Masked sudo/secret fields; explicit send/skip and disclosure of Hermes-side secret storage.
-- [x] Native response admission scoped to the request and session generation; expiry/unsupported/unknown outcomes and no automatic response replay.
-- [x] Supported pending approval/clarify recovery. Unrecoverable credential prompts disable after disconnect rather than becoming actionable from old events.
-- [x] Stable desktop/mobile cards; focused question drafts survive streaming/refresh, credential values clear on submit/background/disconnect/selection/account change.
-- [x] Selected conversation running/input indicators and visible fallback when Hermes waits without a recoverable card.
-- [x] Socket-level synthetic coverage of all four request types, partial batch acknowledgement, denial, expiry and no credential leakage into transcript/proxy logs.
-- [x] Real-Hermes clarification tool lifecycle, pending batch recovery after reconnect, per-question acknowledgement and resumed/subsequent agent turns.
+Existing 120 diagnostic browser scenarios remain a labelled legacy regression suite at a test-only origin. Dedicated modern-shell cases exercise the actual new landing page; they must pass before claiming the React UI is verified. Neither viewport emulation nor axe checks replace physical-phone keyboard/PWA or comprehensive accessibility sign-off.
 
-## Verified checkpoints
+## Compatibility and invariants
 
-Initial application checkpoint: **`cda56a8240be57f530d729dcec783771f35337d4`**. PR CI checked merge ref `d4c87108283bc64374dda166b540c8c9e413c48b`; comparison with the branch head returned no changed files. All four jobs passed.
+Runtime-tested baseline remains `NousResearch/hermes-agent@b6b53c69a6ed49cb099cf1bfe76b5e6edd718e5a`. The proxy, clients, Gateway, auth/identity guards and native session stores are reused. No production Hermes imports, direct config/state access, Relay, local transcript database or fabricated feature controls. Browser persistence is only an explicitly chosen appearance preference. Existing drafts remain bounded tab-memory state. Pending credential inputs retain lifecycle clearing and no-replay admission.
 
-| Gate | Evidence | CI run |
-|---|---|---|
-| Build/typecheck/lint; 92 unit and 12 synthetic wire tests | Local checks passed; checkpoint CI passed | `34764903077` |
-| Browser suite | 120 passed; 0 skipped, failed or flaky | `34764903089` |
-| Non-root read-only production-image smoke | Passed | `34764903079` |
-| Pinned vanilla-Hermes M0/M1/M2 plus initial Phase 3 tool gate | Passed | `34764903078` |
+## Open gates
 
-Before merging, all four PR workflows were also verified successful at the final branch head **`cbefddd789fa75205d4f93406819de575083c568`**: checkpoint `34765208970`, browsers `34765208981`, image `34765209000`, and vanilla-Hermes `34765208976`. The merge has exactly the same tree as that head (`ad0fedf4c07a005ca5114bd0abeeff616312740c`); no conflict-resolution changes were introduced. The deployment-note follow-up changes documentation only. Post-merge CI is separate from this pre-merge evidence and must not be assumed complete from it.
+Shell browser, screenshot, accessibility, image and vanilla-Hermes regression sign-off are pending. M3 still lacks full real approval/sudo/secret acceptance, historical activity and off-selection attention handling. Full PWA/physical mobile, model/profile pickers, workspace/Git, attachments/voice, OAuth, multi-architecture publishing, SBOM/scanning and broader release gates are not delivered by this shell change. Prior evidence remains under `docs/evidence/`; scope and sequencing are in `phase4-modern-shell.md`.
 
-Browser coverage is 30 cases in each of desktop Chromium, iPhone WebKit emulation, Android Chromium emulation and a 320px viewport. Phase 3 cases exercise all input types, approval reload/denial, masked-value clearing, credential recovery gaps, expiry, partial-question draft retention, reduced-height controls and account/selection clearing. Browser fixtures are explicitly synthetic. Physical phone keyboards and installed-PWA behaviour are NOT certified by these tests.
-
-The initial real Phase 3 test uses Hermes' actual `clarify` tool and callback. It verifies a two-question batch, its authoritative reconnect snapshot, a partial answer, final resolution and a subsequent normal turn. It does not claim native approval/sudo/secret execution acceptance. Permanent initial evidence: `docs/evidence/phase3-initial-checkpoint.json`.
-
-## Remote increments
-
-Scope/branch contract `c6ce7ae`; activity/input parser `32dd0fd`; native admission/recovery `da244e9`; socket scenarios/contracts `6f17503`; responsive cards and browser tests `b7cdaf2`; real clarification gate `cda56a8`; initial evidence/status checkpoint `cbefddd`. Each was pushed independently and all are preserved by merge `6659055`. No release has been published.
-
-## Remaining before Phase 3 sign-off
-
-- Real-Hermes approval, sudo and secret acceptance (currently covered by contract/browser fixtures and source inspection).
-- Broader tool-heavy workflows, historical tool/reasoning presentation and off-selection session attention/reconciliation. Current activity covers only the current/most-recent observed turn and selected conversation.
-- Additional adversarial receipt/payload and multi-request recovery hardening; a green initial suite is not full protocol/security certification.
-- Final Phase 3 acceptance report and review before declaring M3 complete. PR #1's requested merge does not close these gates.
-
-The inspected upstream does not expose pending sudo/secret snapshots. Disconnect therefore disables observed credential cards and offers refresh/original-client/interrupt guidance; no history replay is used to invent live prompts. Tool/reasoning displays are bounded (40 tools, 16 input cards, 32 KiB text areas); large/deep data is visibly constrained. Conventional structured secret keys are redacted, but arbitrary unstructured tool output is not a universal secret scrubber and is never included in diagnostics.
-
-No production Hermes imports, direct Hermes state/config operations, Relay or local transcript database have been introduced. Input responses are not composer drafts or browser persistence. Full React/PWA shell and physical mobile verification, workspace/Git, profile/model pickers, attachments/voice, OAuth and release hardening remain their planned later phases. See `phase3-interactions.md` and `12-phased-delivery-plan.md`.
+Each completed increment is committed and pushed before the next increment; remote refs are verified. A green legacy fixture suite is not proof of the new UI or of vanilla-Hermes compatibility.

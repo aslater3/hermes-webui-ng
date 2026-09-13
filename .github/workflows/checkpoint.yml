@@ -31,8 +31,8 @@ jobs:
           node-version: '22'
           cache: npm
       - run: npm ci
-      - name: Compile recovered sources
-        run: npx tsc
+      - name: Compile application and legacy regression sources
+        run: npm run build
       - name: Lint recovered sources
         run: npm run lint
       - name: Unit tests
