@@ -1,0 +1,49 @@
+name: Pinned vanilla-Hermes gate
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  HERMES_TEST_REF: b6b53c69a6ed49cb099cf1bfe76b5e6edd718e5a
+
+jobs:
+  real-hermes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: NousResearch/hermes-agent
+          ref: ${{ env.HERMES_TEST_REF }}
+          path: upstream
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+      - name: Install pinned upstream with its frozen dependency lock
+        run: uv sync --project upstream --frozen --no-dev --extra web --python 3.11
+      - run: npm ci
+      - run: npm run build
+      - name: Build actual WebUI runtime image
+        run: docker build -t hermes-webui-ng:phase0 .
+      - name: Gated vanilla Dashboard and native Gateway acceptance
+        run: bash scripts/live-gate.sh
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: vanilla-hermes-acceptance
+          path: test-results/live/
+          if-no-files-found: ignore
+          retention-days: 14
