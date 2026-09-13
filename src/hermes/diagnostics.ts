@@ -14,7 +14,7 @@ const METHODS = [
   'gateway.ping', 'session.create', 'session.resume', 'session.activate',
   'session.history', 'session.interrupt', 'prompt.submit',
 ];
-const ROUTES = ['status', 'providers', 'identity', 'ticket', 'login', 'logout', 'schema', 'capabilities'];
+const ROUTES = ['status', 'providers', 'identity', 'ticket', 'login', 'logout', 'schema', 'capabilities', 'sessions', 'sessionSearch', 'sessionHistory'];
 export interface DiagnosticEntry {
   at: number;
   event: (typeof EVENTS)[number];

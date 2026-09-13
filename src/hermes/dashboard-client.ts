@@ -1,5 +1,6 @@
 import { ClientError, record, textField } from './protocol.js';
 import { WsAuthClient } from './ws-auth.js';
+import { sessionQuery, sessionPage, searchPage, historyPage, sessionId, profileName, HISTORY_LIMIT, type SessionQuery, type SessionRef } from './session-rest.js';
 import type { DiagnosticsRing } from './diagnostics.js';
 export { WS_PROTOCOL, type WsCredential } from './ws-auth.js';
 export interface Identity { user_id: string; provider: string }
@@ -15,6 +16,7 @@ const ROUTES = {
   identity: '/__hermes/api/auth/me', ticket: '/__hermes/api/auth/ws-ticket',
   login: '/__hermes/auth/password-login', logout: '/__hermes/auth/logout',
   schema: '/__hermes/openapi.json', capabilities: '/api/webui/capabilities',
+  sessions: '/__hermes/api/sessions', sessionSearch: '/__hermes/api/sessions/search', sessionHistory: '/__hermes/api/sessions',
 } as const;
 type Route = keyof typeof ROUTES;
 
@@ -54,12 +56,12 @@ export class DashboardClient {
     this.origin = url.origin;
   }
   private async response(route: Route, method = 'GET', body?: unknown, signal?: AbortSignal,
-    redirect: RequestRedirect = 'error'): Promise<Response> {
+    redirect: RequestRedirect = 'error', suffix = ''): Promise<Response> {
     const deadline = AbortSignal.timeout(this.timeoutMs);
     const started = Date.now();
     this.diagnostics?.add({ event: 'rest.request', route });
     try {
-      const response = await this.fetcher.call(globalThis, this.origin + ROUTES[route], {
+      const response = await this.fetcher.call(globalThis, this.origin + ROUTES[route] + suffix, {
         method, credentials: route === 'capabilities' ? 'omit' : 'include', cache: 'no-store', redirect,
         headers: body === undefined ? undefined : { 'Content-Type': 'application/json' },
         body: body === undefined ? undefined : JSON.stringify(body),
@@ -75,8 +77,8 @@ export class DashboardClient {
       throw new ClientError(kind, kind === 'disconnected' ? 'Request superseded' : 'Hermes Dashboard request failed');
     }
   }
-  private async request(route: Route, method = 'GET', body?: unknown, signal?: AbortSignal) {
-    const response = await this.response(route, method, body, signal);
+  private async request(route: Route, method = 'GET', body?: unknown, signal?: AbortSignal, suffix = '') {
+    const response = await this.response(route, method, body, signal, 'error', suffix);
     if (!response.ok) {
       const detail = await boundedJson(response, 8192).catch(() => ({}));
       throw new HttpError(response.status, 'error' in detail && detail.error === 'session_expired');
@@ -138,4 +140,25 @@ export class DashboardClient {
   credential(signal?: AbortSignal) { return new WsAuthClient(this).credential(signal); }
   schema(signal?: AbortSignal) { return this.request('schema', 'GET', undefined, signal); }
   capabilities(signal?: AbortSignal) { return this.request('capabilities', 'GET', undefined, signal); }
+  async sessions(options: SessionQuery = {}, signal?: AbortSignal) {
+    const query = sessionQuery(options);
+    const page = sessionPage(await this.request('sessions', 'GET', undefined, signal, `?${query}`), options.profile);
+    if (page.offset !== (options.offset ?? 0) || page.limit !== (options.limit ?? 20))
+      throw new ClientError('protocol', 'Unexpected Hermes session pagination');
+    return page;
+  }
+  async searchSessions(text: string, profile?: string, signal?: AbortSignal) {
+    if (!text.trim() || text.length > 512) throw new ClientError('protocol', 'Search must contain 1–512 characters');
+    const query = new URLSearchParams({ q: text.trim(), limit: '50' });
+    if (profileName(profile)) query.set('profile', profile!);
+    return searchPage(await this.request('sessionSearch', 'GET', undefined, signal, `?${query}`), profile);
+  }
+  async sessionMessages(ref: SessionRef, offset = 0, signal?: AbortSignal) {
+    sessionQuery({ offset });
+    const query = new URLSearchParams({ limit: String(HISTORY_LIMIT), offset: String(offset), order: 'latest' });
+    if (profileName(ref.profile)) query.set('profile', ref.profile!);
+    const suffix = `/${encodeURIComponent(sessionId(ref.id))}/messages?${query}`;
+    return historyPage(await this.request('sessionHistory', 'GET', undefined, signal, suffix), ref, offset);
+  }
+
 }
