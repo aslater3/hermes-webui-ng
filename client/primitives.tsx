@@ -1,10 +1,11 @@
 import { useEffect, useId, useRef, useState, type ButtonHTMLAttributes, type ReactNode } from 'react';
-import { X, Sparkles } from 'lucide-react';
+import { X } from 'lucide-react';
+import { HermesMark } from './HermesMark.js';
 export function IconButton({ label, children, ...props }: ButtonHTMLAttributes<HTMLButtonElement> & { label: string }) {
   return <button type="button" className="icon-button" aria-label={label} title={label} {...props}>{children}</button>;
 }
 export function Brand({ compact = false }: { compact?: boolean }) {
-  return <div className="brand"><span className="brand-mark" aria-hidden="true"><Sparkles size={19} strokeWidth={1.7}/></span>{!compact && <><span>Hermes</span><span className="brand-ng">NG</span></>}</div>;
+  return <div className="brand"><span className="brand-mark" aria-hidden="true"><HermesMark size={19}/></span>{!compact && <><span>HermesUI</span><span className="brand-ng">NG</span></>}</div>;
 }
 export function useMedia(query: string) {
   const [matches, setMatches] = useState(() => matchMedia(query).matches);
