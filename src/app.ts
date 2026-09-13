@@ -139,7 +139,11 @@ element('latest').addEventListener('click', () => {
   transcript.scrollTop = transcript.scrollHeight;
 });
 function resumeVisible(): void {
-  if (document.visibilityState === 'visible') run(() => gateway.ensureLive());
+  if (
+    document.visibilityState === 'visible' &&
+    !['disconnected', 'auth-required', 'error'].includes(gateway.state.phase)
+  )
+    run(() => gateway.ensureLive());
 }
 document.addEventListener('visibilitychange', resumeVisible);
 window.addEventListener('pageshow', resumeVisible);
