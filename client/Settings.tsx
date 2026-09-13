@@ -21,5 +21,5 @@ export function Settings({ runtime: rt, onClose, theme, setTheme }: { runtime: A
       <p className="small muted">{rt.diagnostics.snapshot().length} / 500 metadata entries in this tab.</p><button className="text-button" onClick={() => { rt.diagnostics.clear(); setReport(''); setNote('Diagnostic history cleared.'); rt.notify(); }}>Clear diagnostics</button>
       {report && <label className="field">Sanitised support report<textarea readOnly rows={7} value={report}/></label>}<p className="small" role="status">{note}</p></>}
       {rt.error && <Notice error>{rt.error}</Notice>}
-    </div><footer className="settings-footer">Hermes WebUI NG · Native Gateway client</footer></Modal>;
+    </div><footer className="settings-footer">HermesUI NG · Native Gateway client</footer></Modal>;
 }

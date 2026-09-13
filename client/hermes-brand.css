@@ -1,0 +1,13 @@
+.hermes-mark {
+  display: block;
+  flex-shrink: 0;
+  object-fit: contain;
+  pointer-events: none;
+  user-select: none;
+}
+
+/* The source SVG is black. Keep it legible against each resolved application theme. */
+:root[data-theme="dark"] .hermes-mark-plain,
+:root[data-theme="light"] .hermes-mark-on-accent {
+  filter: invert(1);
+}
