@@ -1,0 +1,10 @@
+node_modules
+build
+dist
+package-lock.json
+README.md
+AGENTS.md
+BUILD-BRIEF.md
+docs
+playwright-report
+test-results
