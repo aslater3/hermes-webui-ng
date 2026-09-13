@@ -110,3 +110,23 @@ h1 { font-size: clamp(1.6rem,3vw,2.2rem); }
   .sidebar-heading { align-items: start; }
   .sidebar-heading h2 { margin: 12px 0; }
 }
+
+/* Agent controls share the same desktop/touch DOM; never hover-only or overlaid on the composer. */
+.agent-activity { min-width: 0; padding: 16px 0; border-top: 1px solid #304154; }
+.agent-activity h3 { font-size: 1.1rem; }
+.agent-card { border: 1px solid #566b80; border-radius: 10px; padding: 16px; margin: 12px 0; min-width: 0; }
+.agent-card h4 { margin: 0 0 8px; }
+.agent-input-status { font-weight: 600; }
+.agent-warning, .agent-input-error { border-left: 3px solid #e6b578; background: #302a24; padding: 12px; }
+.agent-activity p, .agent-activity legend, .agent-activity summary { overflow-wrap: anywhere; }
+.agent-activity pre { white-space: pre-wrap; overflow-wrap: anywhere; overflow: auto; max-height: 320px; max-width: 100%; background: #111c27; padding: 12px; font-size: .875rem; }
+.agent-activity summary { cursor: pointer; min-height: 48px; padding: 12px 4px; }
+.agent-input-controls { display: flex; flex-wrap: wrap; gap: 12px; }
+.agent-input-controls label { flex: 1 1 100%; }
+.agent-input-controls fieldset { min-width: 0; width: 100%; border: 1px solid #566b80; border-radius: 8px; padding: 12px; }
+.agent-input-controls fieldset > button { margin-top: 12px; }
+.agent-input-controls label.agent-choice { display: flex; flex-direction: row; align-items: center; min-height: 48px; gap: 12px; }
+.agent-choice input { width: 24px; height: 24px; min-height: 24px; flex: 0 0 24px; }
+.agent-tool { min-width: 0; border-bottom: 1px solid #304154; }
+.agent-card[data-status="expired"], .agent-card[data-status="answered"] { border-color: #304154; }
+@media (max-width: 600px) { .agent-card { padding: 12px; } .agent-input-controls > button { flex: 1 1 auto; } }
