@@ -32,6 +32,9 @@ export class AgentView {
   private readonly inputs = new Map<string, InputCard>();
   private readonly toolCards = new Map<string, ToolCard>();
   private unlisten?: () => void;
+  private visibility = () => { if (document.visibilityState !== 'visible') this.clearCredentials(); };
+  private pagehide = () => this.clearCredentials();
+  dispose(): void { this.clear(); document.removeEventListener('visibilitychange', this.visibility); window.removeEventListener('pagehide', this.pagehide); }
   constructor(private readonly root: HTMLElement) {
     const heading = node('h3', 'Agent activity and input'); heading.id = 'agent-title';
     this.root.setAttribute('aria-labelledby', heading.id);
@@ -39,9 +42,8 @@ export class AgentView {
     this.reasoning.append(node('summary', 'Reasoning supplied by Hermes'), this.reasoningText);
     this.requests.setAttribute('aria-label', 'Agent requests');
     this.root.append(heading, this.summary, this.warning, this.requests, this.thinking, this.reasoning, this.tools);
-    // A backgrounded tab must not keep an entered credential waiting in a hidden form.
-    document.addEventListener('visibilitychange', () => { if (document.visibilityState !== 'visible') this.clearCredentials(); });
-    window.addEventListener('pagehide', () => this.clearCredentials());
+    document.addEventListener('visibilitychange', this.visibility);
+    window.addEventListener('pagehide', this.pagehide);
   }
   private clearCredentials(): void { for (const input of this.root.querySelectorAll<HTMLInputElement>('input[type="password"]')) input.value = ''; }
   clear(): void {
@@ -106,7 +108,6 @@ export class AgentView {
     if(input.prompt) root.append(node('p',input.prompt));
     const respond = (value: string, questionId?: string) => {
       error.hidden=true;
-      // NativeSession refuses old-session handlers and in-flight duplicates. Never add replies to chat drafts.
       void owner.respond(input.key,value,questionId).catch(() => {
         if(this.owner!==owner || !root.isConnected)return;
         error.textContent='Hermes did not confirm this response. Check its status or refresh; the response has not been resent.'; error.hidden=false;
@@ -145,7 +146,6 @@ export class AgentView {
     return ()=>{
       const chosen=fields.filter(f=>f.checked).map(f=>f.value),value=custom.value.trim();
       if(!value&&!chosen.length){custom.focus();return undefined;}
-      // Values are consumed now and never stored on the view model.
       custom.value='';fields.forEach(f=>{f.checked=false;});
       return value||(q.multiple?JSON.stringify(chosen):chosen[0]);
     };

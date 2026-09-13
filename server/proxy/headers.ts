@@ -1,6 +1,7 @@
 import type { IncomingHttpHeaders, IncomingMessage, OutgoingHttpHeaders } from 'node:http';
 import type { Config } from '../config.js';
 import { PROXY_PREFIX } from '../config.js';
+import { localRequestHeaders } from '../trusted-local.js';
 
 const HOP = new Set([
   'connection',
@@ -50,6 +51,7 @@ export function requestHeaders(
     headers.connection = 'Upgrade';
     headers.upgrade = 'websocket';
   }
+  localRequestHeaders(headers, config, upgrade);
   return headers;
 }
 

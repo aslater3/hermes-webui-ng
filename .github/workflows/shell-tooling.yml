@@ -1,0 +1,42 @@
+name: Shell tooling bootstrap
+on:
+  push:
+    paths:
+      - '.github/workflows/shell-tooling.yml'
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  tooling:
+    if: github.ref == 'refs/heads/phase4-modern-shell'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref_name }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Resolve maintained major lines to exact locked packages
+        run: |
+          npm install --ignore-scripts --save-exact react@19 react-dom@19 react-markdown@10 remark-gfm@4 rehype-sanitize@6 rehype-highlight@7 lucide-react@0
+          npm install --ignore-scripts --save-dev --save-exact vite@7 @types/react@19 @types/react-dom@19 @axe-core/playwright@4
+          npm run typecheck
+          npm run build
+      - name: Publish dependency checkpoint
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add package.json package-lock.json
+          if ! git diff --cached --quiet; then
+            git commit -m 'build(shell): pin React, Vite, accessible icons and safe Markdown dependencies'
+            git push origin HEAD:phase4-modern-shell
+          fi
+          git rev-parse HEAD > COMMIT
+          tar -czf /tmp/shell-tooling.tar.gz node_modules package.json package-lock.json COMMIT
+      - uses: actions/upload-artifact@v4
+        with:
+          name: shell-tooling
+          path: /tmp/shell-tooling.tar.gz
+          retention-days: 7

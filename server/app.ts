@@ -6,6 +6,7 @@ import { randomUUID } from 'node:crypto';
 import type { Duplex } from 'node:stream';
 import type { Config } from './config.js';
 import { PROXY_PREFIX } from './config.js';
+import { localPathAllowed, localUpgradePath, localAccess } from './trusted-local.js';
 import { allowedRequest, upstreamPath } from './proxy/headers.js';
 import { json, proxyHttp, proxyUpgrade, refuseUpgrade, type Log } from './proxy/hermes-proxy.js';
 
@@ -25,16 +26,28 @@ export function createApp(config: Config, log: Log = (event) => console.log(JSON
         json(res, 403, { error: { code: 'ORIGIN_REJECTED', requestId } });
         return;
       }
+      if (raw === '/api/webui/access' && req.method === 'GET') {
+        void localAccess(config).then(data => json(res, 200, data)).catch(() => json(res, 503, { error: { code: 'LOCAL_ACCESS_UNAVAILABLE' } }));
+        return;
+      }
       if (raw.startsWith(`${PROXY_PREFIX}/`)) {
         const path = upstreamPath(raw);
         if (!path) {
           json(res, 400, { error: { code: 'INVALID_PROXY_PATH', requestId } });
           return;
         }
+        if (config.authMode === 'trusted-local' && !localPathAllowed(path, req.method ?? '')) {
+          json(res, 403, { error: { code: 'LOCAL_ROUTE_UNAVAILABLE' } }); return;
+        }
         proxyHttp(req, res, path, config, requestId, log);
         return;
       }
       if (raw === '/readyz' && req.method === 'GET') {
+        if (config.authMode === 'trusted-local') {
+          void localAccess(config).then(() => json(res, 200, { webui: 'ready', hermes: { reachable: true, authenticatedMode: false }, gateway: 'browser-not-probed' }))
+            .catch(() => json(res, 503, { webui: 'ready', hermes: { reachable: false, authenticatedMode: false }, gateway: 'browser-not-probed' }));
+          return;
+        }
         void fetch(new URL('/api/status', config.upstream), {
           headers: { host: config.publicOrigin.host },
           signal: AbortSignal.timeout(3000),
@@ -59,7 +72,6 @@ export function createApp(config: Config, log: Log = (event) => console.log(JSON
         return;
       }
       if (foundation(req, res)) return;
-      // File, Git and configuration-write APIs remain unavailable.
       if (raw.startsWith('/api/')) {
         json(res, 404, { error: { code: 'CAPABILITY_UNAVAILABLE', requestId } });
         return;
@@ -69,31 +81,19 @@ export function createApp(config: Config, log: Log = (event) => console.log(JSON
         return;
       }
       const path = raw.split('?')[0] ?? '';
-      const asset =
-        path === '/'
-          ? 'index.html'
-          : /^\/(?:app\.js|styles\.css|hermes\/[a-z-]+\.js)$/.test(path)
-            ? path.slice(1)
-            : undefined;
-      if (!asset) {
-        json(res, 404, { error: { code: 'NOT_FOUND' } });
-        return;
-      }
+      const asset = path === '/' ? 'index.html' : path === '/diagnostic' ? 'diagnostic.html'
+        : /^\/(?:app\.js|styles\.css|hermes\/[a-z-]+\.js|assets\/[A-Za-z0-9_-]+\.(?:js|css))$/.test(path) ? path.slice(1) : undefined;
+      if (!asset) { json(res, 404, { error: { code: 'NOT_FOUND' } }); return; }
       void readFile(join(config.staticDir, asset))
         .then((content) => {
-          const mime = asset.endsWith('.html')
-            ? 'text/html'
-            : asset.endsWith('.css')
-              ? 'text/css'
-              : 'text/javascript';
+          const mime = asset.endsWith('.html') ? 'text/html' : asset.endsWith('.css') ? 'text/css' : 'text/javascript';
           res.writeHead(200, {
             'Content-Type': `${mime}; charset=utf-8`,
-            'Cache-Control': 'no-store',
+            'Cache-Control': asset.startsWith('assets/') ? 'public, max-age=31536000, immutable' : 'no-store',
             'X-Content-Type-Options': 'nosniff',
             'Referrer-Policy': 'no-referrer',
             'Permissions-Policy': 'camera=(), microphone=(), geolocation=()',
-            'Content-Security-Policy':
-              "default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self' data:; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'",
+            'Content-Security-Policy': "default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self' data:; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'",
           });
           res.end(req.method === 'HEAD' ? undefined : content);
         })
@@ -102,17 +102,12 @@ export function createApp(config: Config, log: Log = (event) => console.log(JSON
   );
   server.on('upgrade', (req, socket, head) => {
     const path = upstreamPath(req.url ?? '');
-    if (
-      req.method !== 'GET' ||
-      !allowedRequest(req, config, true) ||
-      !path ||
-      path.split('?')[0] !== '/api/ws' ||
-      req.headers.upgrade?.toLowerCase() !== 'websocket'
-    ) {
-      refuseUpgrade(socket, 403);
-      return;
+    if (req.method !== 'GET' || !allowedRequest(req, config, true) || !path || path.split('?')[0] !== '/api/ws' || req.headers.upgrade?.toLowerCase() !== 'websocket') {
+      refuseUpgrade(socket, 403); return;
     }
-    proxyUpgrade(req, socket, head, path, config, randomUUID(), log, sockets);
+    const admittedPath = localUpgradePath(req, path, config);
+    if (!admittedPath) { refuseUpgrade(socket, 403); return; }
+    proxyUpgrade(req, socket, head, admittedPath, config, randomUUID(), log, sockets);
   });
   return {
     server,

@@ -1,0 +1,22 @@
+/* A theme changes foreground and background together. Interpolating individual
+   controls between palettes creates low-contrast frames (320px axe regression).
+   Keep drawer/overlay transforms; do not animate theme-dependent colours. */
+button:not(:disabled), summary { transition: none; }
+
+/* VisualViewport resize callbacks can arrive after the CSS viewport shrinks.
+   Never let the last JavaScript measurement push the composer offscreen. */
+.workspace, .signin-layout { height: min(var(--app-height), 100dvh); }
+@media (max-width: 850px) {
+  .modal { max-height: min(calc(var(--app-height) - 20px), calc(100dvh - 20px)); }
+  .modal-commands { max-height: min(calc(var(--app-height) - 40px), calc(100dvh - 40px)); }
+  .modal-sessions { height: min(var(--app-height), 100dvh); max-height: min(var(--app-height), 100dvh); }
+}
+
+/* The selected row has a tinted background: its faint metadata token was 4.34:1
+   in light mode. Use the muted text token on both desktop and drawer rows. */
+.session-row.selected .row-meta { color: var(--muted); }
+
+/* Wide Markdown belongs in its keyboard-accessible scroll region, not in
+   compressed letter-by-letter columns or a page-wide horizontal overflow. */
+.table-scroll table { min-width: 34rem; overflow-wrap: normal; word-break: normal; }
+.table-scroll th { white-space: nowrap; }

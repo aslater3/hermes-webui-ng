@@ -21,7 +21,7 @@ jobs:
       - name: Read-only non-root smoke with unavailable upstream
         run: |
           set -euo pipefail
-          docker run -d --name webui --read-only --tmpfs /tmp:rw,noexec,nosuid,size=16m \
+          docker run -d --init --name webui --read-only --tmpfs /tmp:rw,noexec,nosuid,size=16m \
             --cap-drop ALL --security-opt no-new-privileges:true \
             -p 127.0.0.1:8787:8787 \
             -e HERMES_DASHBOARD_URL=http://127.0.0.1:1 \
@@ -31,10 +31,10 @@ jobs:
             sleep 1
           done
           curl --fail --silent http://127.0.0.1:8787/healthz
-          curl --fail --silent http://127.0.0.1:8787/ | grep 'Hermes conversations'
+          curl --fail --silent http://127.0.0.1:8787/ | grep 'Your agent workspace'
           test "$(curl --silent -o /dev/null -w '%{http_code}' http://127.0.0.1:8787/readyz)" = 503
           test "$(docker exec webui id -u)" = 10001
-          docker exec webui sh -c 'test ! -d node_modules && test ! -d build/tests && ! command -v python3'
+          docker exec webui sh -c 'test ! -d node_modules && test ! -d build/tests && ! command -v python3 && ! command -v git'
           docker stop --time 10 webui
           test "$(docker inspect -f '{{.State.ExitCode}}' webui)" = 0
       - name: Container diagnostics and cleanup

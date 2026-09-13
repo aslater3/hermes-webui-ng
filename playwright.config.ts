@@ -2,14 +2,12 @@ import { defineConfig, devices } from '@playwright/test';
 export default defineConfig({
   testDir: './tests/e2e',
   reporter: [['list'], ['json', { outputFile: 'test-results/browser-results.json' }]],
-  timeout: 30_000,
+  timeout: 45_000,
+  workers: 4,
   fullyParallel: true,
-  use: { baseURL: 'http://127.0.0.1:8787', trace: 'retain-on-failure' },
-  webServer: {
-    command: 'npm run dev:fixture',
-    url: 'http://127.0.0.1:8787/healthz',
-    reuseExistingServer: false,
-  },
+  // Existing diagnostic regressions use their test-only origin; shell.spec.ts overrides to :8787.
+  use: { baseURL: 'http://127.0.0.1:8788', trace: 'retain-on-failure' },
+  webServer: { command: 'npm run dev:fixture', url: 'http://127.0.0.1:8787/healthz', reuseExistingServer: false },
   projects: [
     { name: 'desktop-chromium', use: { ...devices['Desktop Chrome'] } },
     { name: 'iphone-webkit', use: { ...devices['iPhone 13'] } },

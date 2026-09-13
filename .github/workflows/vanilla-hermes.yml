@@ -40,6 +40,8 @@ jobs:
         run: docker build -t hermes-webui-ng:phase0 .
       - name: Gated vanilla Dashboard and native Gateway acceptance
         run: bash scripts/live-gate.sh
+      - name: Explicit loopback-token deployment acceptance
+        run: bash scripts/local-live-gate.sh
       - uses: actions/upload-artifact@v4
         if: always()
         with:
