@@ -12,8 +12,8 @@ export function SignIn({ runtime: rt, onSettings }: { runtime: AppRuntime; onSet
   return <div className="signin-layout"><div className="signin-top"><Brand/><button className="text-button" onClick={onSettings}><Settings2 size={16}/>Connection settings</button></div><main className="signin-main"><div className="signin-card"><span className="eyebrow">YOUR AGENT. YOUR WORKSPACE.</span><h1>A little less friction.<br/>A lot more possibility.</h1><p className="signin-intro">Connect to Hermes and pick up where you left off.</p>
     <form onSubmit={event => { event.preventDefault(); const value = password.current?.value ?? '', name = username.current?.value ?? ''; if (password.current) password.current.value = ''; rt.run(() => rt.connection.login(provider, name, value)); }}>
       {providers.length > 1 && <label className="field">Sign-in provider<select value={provider} onChange={event => setSelected(event.target.value)}>{providers.map(item => <option key={item.name} value={item.name}>{item.display_name}</option>)}</select></label>}
-      <label className="field">Username<input ref={username} autoComplete="username" placeholder="Your Hermes username" required disabled={state.busy}/></label>
-      <label className="field">Password<input ref={password} type="password" autoComplete="current-password" placeholder="Enter your password" required disabled={state.busy}/></label>
+      <label className="field">Username<input ref={username} autoComplete="username" placeholder="Your Hermes username" required disabled={state.busy || state.auth === 'checking'}/></label>
+      <label className="field">Password<input ref={password} type="password" autoComplete="current-password" placeholder="Enter your password" required disabled={state.busy || state.auth === 'checking'}/></label>
       {error && <Notice error>{error}</Notice>}
       <button className="primary signin-submit" disabled={state.busy || state.offline || !provider || state.auth === 'checking'}>{state.busy ? 'Connecting…' : 'Sign in'}<ArrowRight size={18}/></button>
       {state.rest === 'checking' && <p role="status" className="muted small">Checking your Hermes connection…</p>}
