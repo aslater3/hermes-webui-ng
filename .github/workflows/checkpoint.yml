@@ -1,0 +1,39 @@
+name: Recovery checkpoint
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  checkpoint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Archive exact committed sources
+        run: |
+          mkdir -p /tmp/checkpoint
+          git rev-parse HEAD > /tmp/checkpoint/COMMIT
+          git archive --format=tar.gz HEAD > /tmp/checkpoint/source.tar.gz
+      - uses: actions/upload-artifact@v4
+        with:
+          name: source-checkpoint
+          path: /tmp/checkpoint/
+          retention-days: 7
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - name: Compile recovered sources
+        run: npx tsc
+      - name: Lint recovered sources
+        run: npx eslint server tests
+      - name: Unit tests
+        run: npm test
