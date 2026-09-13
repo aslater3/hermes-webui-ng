@@ -1,0 +1,108 @@
+{
+  "verified_on": "2026-09-13",
+  "implementation_commit": "da2838db6f02b6296f21555a8adfa20ce2d4b7b1",
+  "upstream_ref": "b6b53c69a6ed49cb099cf1bfe76b5e6edd718e5a",
+  "ci": {
+    "checkpoint": {
+      "run": 34761566071,
+      "result": "success",
+      "unit_tests": 73,
+      "wire_tests": 9,
+      "source_artifact_id": 10318694686,
+      "source_artifact_sha256": "28fe81dcd3c2553da173a3a6fbd43fecf7524d6f221daa3bdf172e88c4127924"
+    },
+    "image": { "run": 34761566028, "result": "success" },
+    "browsers": {
+      "run": 34761566063,
+      "result": "success",
+      "artifact_id": 10319760087,
+      "artifact_sha256": "d44038629cab5df55ee65bfd64e34c56346597ff7af0aea9ffcd0a16a07fe3b3",
+      "stats": {
+        "startTime": "2026-09-13T14:04:40.766Z",
+        "duration": 69480.92700000001,
+        "expected": 96,
+        "skipped": 0,
+        "unexpected": 0,
+        "flaky": 0
+      },
+      "projects": {
+        "desktop-chromium": { "passed": 24, "failed": 0, "skipped": 0 },
+        "iphone-webkit": { "passed": 24, "failed": 0, "skipped": 0 },
+        "android-chromium": { "passed": 24, "failed": 0, "skipped": 0 },
+        "narrow-320": { "passed": 24, "failed": 0, "skipped": 0 }
+      },
+      "screenshots": "native-chat.png, chat-reduced-height.png and connection-foundation.png for all four projects in the browser artifact"
+    },
+    "vanilla_hermes": {
+      "run": 34761566052,
+      "result": "success",
+      "artifact_id": 10319700185,
+      "artifact_sha256": "6dc6b9792e064dc476c5af6485aff59b586e32af5be0b9bc896524d78e07ec0f"
+    }
+  },
+  "phase0_acceptance": {
+    "upstream": "b6b53c69a6ed49cb099cf1bfe76b5e6edd718e5a",
+    "commit": "da2838db6f02b6296f21555a8adfa20ce2d4b7b1",
+    "gates": [
+      "authenticated-dashboard-proxy",
+      "official-proxied-login",
+      "one-use-ticket-upgrade-gateway-ready",
+      "native-session-create",
+      "real-agent-controlled-model-response",
+      "socket-loss-rehydrate-without-replay",
+      "fresh-client-native-history-no-local-persistence",
+      "controlled-provider-received-real-agent-request"
+    ],
+    "modelRequests": 2,
+    "hermes": "unmodified official serve (Dashboard API + native Gateway)",
+    "model": "deterministic loopback fixture",
+    "webui": "production Docker image"
+  },
+  "phase1_acceptance": {
+    "upstream": "b6b53c69a6ed49cb099cf1bfe76b5e6edd718e5a",
+    "commit": "da2838db6f02b6296f21555a8adfa20ce2d4b7b1",
+    "phase": 1,
+    "success": true,
+    "gates": [
+      "healthy-rest-without-gateway-admission",
+      "authenticated-schema-and-gateway-capabilities",
+      "vanilla-one-use-ticket-replay-rejected",
+      "allowlisted-support-report",
+      "revoked-cookie-closes-existing-admission",
+      "verified-logout-and-fresh-sign-in"
+    ]
+  },
+  "phase2_acceptance": {
+    "upstream": "b6b53c69a6ed49cb099cf1bfe76b5e6edd718e5a",
+    "commit": "da2838db6f02b6296f21555a8adfa20ce2d4b7b1",
+    "phase": 2,
+    "success": true,
+    "gates": [
+      "two-native-conversations",
+      "official-rest-list-search-history-and-offset",
+      "selection-isolation-and-repeated-turn",
+      "read-only-history-and-native-reattachment",
+      "fresh-controller-authoritative-resume",
+      "real-inflight-turn-interrupted-and-settled",
+      "subsequent-turn-after-interruption-without-replay",
+      "account-boundary-clears-browser-chat-state"
+    ],
+    "terminalOutcomes": ["complete", "complete", "complete", "interrupted", "complete"]
+  },
+  "recovery_verification": {
+    "source": "GitHub exact-source checkpoint for the implementation commit",
+    "node": "22.16.0",
+    "build": "passed",
+    "typecheck": "passed",
+    "lint": "passed",
+    "unit_tests": 73,
+    "wire_tests": 9,
+    "browser_and_container": "Verified completed CI jobs and downloaded reports; not rerun locally"
+  },
+  "verification_boundaries": [
+    "Unmodified pinned Hermes and actual non-root, read-only WebUI image; test configuration via the official Hermes CLI only.",
+    "Only the model endpoint is controlled in live tests. Phase 2 confirms a real interrupted native turn, then a successful subsequent turn.",
+    "Browser tests use the clearly labelled synthetic Dashboard and emulated viewports. Physical iPhone/Android, real virtual keyboards, installed PWA and Firefox are not certified.",
+    "No release-hardening, public-internet security, complete Markdown/highlighting or final modern-shell sign-off is implied."
+  ]
+}
