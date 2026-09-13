@@ -10,7 +10,7 @@ test('capabilities use positive schema and Gateway evidence, not version or REST
   store.applySchema(epoch, { ...schema, version: '999.0.0', private: 'never retained' });
   assert.equal(store.snapshot().gateway.state, 'unknown');
   assert.equal(store.snapshot().sessionsList.state, 'available');
-  assert.equal(store.snapshot().sessionsList.implemented, false);
+  assert.equal(store.snapshot().sessionsList.implemented, true);
   assert.equal(store.snapshot().sessionsSearch.state, 'unavailable');
   store.gateway('ready', { heartbeat: true, change_events: false, secret: 'never retained' });
   assert.equal(store.snapshot().gateway.state, 'available');

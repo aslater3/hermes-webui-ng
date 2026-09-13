@@ -36,7 +36,7 @@ try {
   await connection.refreshCapabilities();
   const capabilities = connection.capabilities.snapshot();
   assert.equal(capabilities.gateway.state, 'available'); assert.equal(capabilities.heartbeat.state, 'available');
-  assert.equal(capabilities.sessionsList.state, 'available'); assert.equal(capabilities.sessionsList.implemented, false);
+  assert.equal(capabilities.sessionsList.state, 'available'); assert.equal(capabilities.sessionsList.implemented, true);
   assert.equal(capabilities.workspace.state, 'unavailable'); passed('authenticated-schema-and-gateway-capabilities');
   const ticket = await wsAuth.credential();
   const first = new WebSocket(ticket.url, ticket.protocols, { origin }); sockets.push(first); first.on('error', () => {});

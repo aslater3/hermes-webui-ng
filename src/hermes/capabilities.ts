@@ -13,7 +13,7 @@ export type CapabilityMap = Record<Feature, Capability>;
 function initial(): CapabilityMap {
   return Object.fromEntries(
     ['gateway', 'heartbeat', 'changeEvents', ...Object.keys(REST), 'workspace', 'pwa'].map((name) => [name, {
-      state: 'unknown', evidence: 'unverified', implemented: ['gateway', 'heartbeat', 'changeEvents'].includes(name),
+      state: 'unknown', evidence: 'unverified', implemented: ['gateway', 'heartbeat', 'changeEvents', 'sessionsList', 'sessionsSearch'].includes(name),
     }]),
   ) as CapabilityMap;
 }
