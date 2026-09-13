@@ -28,7 +28,7 @@ export class AppRuntime {
     this.connection = new ConnectionStore(this.dashboard, this.gateway, this.diagnostics);
     this.chat = new ChatController(this.dashboard, this.gateway, error => this.gateway.suspend(error));
   }
-  get readable() { return this.connection.state.auth === 'signed-in' && !this.connection.state.offline; }
+  get readable() { return this.connection.hasAccess && !this.connection.state.offline; }
   get ready() { return this.readable && this.gateway.state.phase === 'ready'; }
   getSnapshot = () => this.revision;
   subscribe = (listener: () => void) => { this.listeners.add(listener); return () => { this.listeners.delete(listener); }; };
