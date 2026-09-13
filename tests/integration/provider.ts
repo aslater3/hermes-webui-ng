@@ -1,5 +1,6 @@
 /** Deterministic, loopback-only MODEL endpoint. Hermes itself is not mocked. */
 import { createServer } from 'node:http';
+import { phase3Tool } from './phase3-model.js';
 import { randomUUID } from 'node:crypto';
 
 export const EXPECTED_RESPONSE = 'HERMES_WEBUI_NG_PHASE0_OK';
@@ -43,6 +44,7 @@ export async function startProvider(port = 0, holdMs = 5000) {
           json(400, {});
           return;
         }
+        const call = phase3Tool(body.messages, 'tools' in body ? body.tools : undefined);
         completions++;
         const latest = [...body.messages].reverse().find((message: unknown) =>
           typeof message === 'object' && message !== null && 'role' in message && message.role === 'user');
@@ -59,8 +61,9 @@ export async function startProvider(port = 0, holdMs = 5000) {
           res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-store' });
           for (const [delta, finish_reason] of [
             [{ role: 'assistant', content: '' }, null],
-            [{ content: EXPECTED_RESPONSE }, null],
-            [{}, 'stop'],
+            [call ? {reasoning_content:'Controlled Hermes clarification test.'} : { content: EXPECTED_RESPONSE }, null],
+            ...(call ? [[{tool_calls:[{index:0,...call}]}, null]] : []),
+            [{}, call ? 'tool_calls' : 'stop'],
           ]) {
             res.write(`data: ${JSON.stringify({
               ...common,
@@ -79,8 +82,8 @@ export async function startProvider(port = 0, holdMs = 5000) {
             choices: [
               {
                 index: 0,
-                message: { role: 'assistant', content: EXPECTED_RESPONSE },
-                finish_reason: 'stop',
+                message: call ? {role:'assistant',content:null,reasoning_content:'Controlled Hermes clarification test.',tool_calls:[call]} : { role: 'assistant', content: EXPECTED_RESPONSE },
+                finish_reason: call ? 'tool_calls' : 'stop',
               },
             ],
             usage,
