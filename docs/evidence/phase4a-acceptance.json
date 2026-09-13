@@ -1,0 +1,85 @@
+{
+  "milestone": "Phase 4A - modern application shell and explicit local deployment",
+  "verifiedDate": "2026-09-13",
+  "applicationCommit": "4aeb23bd246d20ebac8935b44cdec94aa24326da",
+  "ciCheckoutCommit": "ad847f89efd691bcf3ccd93ee160632680940a01",
+  "ciCheckoutComparison": "GitHub compare returned no changed files against applicationCommit",
+  "hermesRef": "b6b53c69a6ed49cb099cf1bfe76b5e6edd718e5a",
+  "results": {
+    "build": "passed",
+    "typecheck": "passed",
+    "lint": "passed",
+    "unit": { "passed": 103, "failed": 0, "skipped": 0 },
+    "wireContracts": { "passed": 16, "failed": 0, "skipped": 0 },
+    "browser": {
+      "passed": 204,
+      "failed": 0,
+      "skipped": 0,
+      "flaky": 0,
+      "casesPerProject": 51,
+      "projects": ["desktop-chromium", "iphone-webkit", "android-chromium", "narrow-320"],
+      "screenshotsInArtifact": 44,
+      "fixture": "Synthetic Dashboard behind the real WebUI proxy; modern and diagnostic routes tested separately"
+    },
+    "docker": "Non-root, read-only production image smoke passed",
+    "vanillaHermesGated": "M0, M1, M2 and initial M3 clarification acceptance passed",
+    "vanillaHermesLocal": "Explicit loopback-token production-container acceptance passed"
+  },
+  "runs": {
+    "checkpoint": 34777909102,
+    "browsers": 34777909106,
+    "image": 34777909098,
+    "vanillaHermes": 34777909100
+  },
+  "artifacts": {
+    "source": {
+      "id": 10324063334,
+      "sha256": "b24174d42e3f5e4a8c64db1eacf41f6c7704c836a5010cf972a190cd781e6640"
+    },
+    "browsers": {
+      "id": 10324053377,
+      "sha256": "116d8c3826b7d965d33671182427ff5269da239ae0f3fba1a495f5f2f60d43f8"
+    },
+    "vanillaHermes": {
+      "id": 10323363801,
+      "sha256": "8e3f5f4f3a51f31de1a6e8e847e936ed24518ca6f0f05a63cf114318c552792b"
+    },
+    "integrity": "Downloaded ZIP SHA-256 values verified against GitHub artifact metadata"
+  },
+  "localRevalidation": {
+    "node": "22.16.0",
+    "source": "The exact source-checkpoint archive at ciCheckoutCommit",
+    "passed": ["build", "typecheck", "lint", "103 unit tests", "16 wire tests"],
+    "browserAndDocker": "Executed in GitHub Actions, not represented as local recovery-container runs"
+  },
+  "localHermesGates": [
+    "upstream-rest-still-requires-operator-token",
+    "explicit-local-state-and-browser-compatible-upgrade",
+    "native-prompt-completes-through-local-container",
+    "network-reconnect-without-replay",
+    "fresh-client-authoritative-rest-and-native-history",
+    "disconnect-is-not-fabricated-logout",
+    "redacted-report-and-preserved-browser-origin-guards"
+  ],
+  "visualInspection": {
+    "source": "Actual Playwright browser artifact, not generated mock-ups",
+    "inspected": [
+      "desktop-chromium/shell-dark-conversation.png",
+      "iphone-webkit/shell-light-conversation.png"
+    ],
+    "observed": [
+      "Conversation-first full-height shell with settings/diagnostics off the main canvas",
+      "Anchored composer and independently scrolling conversation",
+      "Readable mobile table headings with overflow constrained to the table region"
+    ]
+  },
+  "boundaries": [
+    "Hermes is unmodified and configured by its own CLI in an isolated test home; only model decisions are controlled fixture responses",
+    "The actual production Docker image is used in gated and explicit local-mode native acceptance",
+    "Trusted-local is intentionally not browser authentication; network reachability grants access to the agent",
+    "Default Dashboard authentication and strict supported one-use WS admission remain separate",
+    "No WebUI Hermes Python imports, direct Hermes config/state access, Relay or local conversation database",
+    "Viewport emulation and automated accessibility checks are not physical-phone, real-keyboard, PWA or full WCAG certification",
+    "M3 native approval/sudo/secret execution, historical/off-selection activity, workspace/model controls, OAuth and release hardening remain open"
+  ]
+}
