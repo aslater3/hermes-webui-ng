@@ -1,6 +1,6 @@
 # Phase 3 — tools, reasoning and interactive prompts
 
-Work in progress. Phase 2 remains on `main` at `daf0bbfcf704ea588003f4816e49110ef431f061` for local operator testing. Phase 3 increments are published to `phase3-agent-interactions` before starting the next increment; do not merge until its acceptance gates pass.
+Work in progress, now available on `main`. At the repository owner's request, the initial Phase 3 implementation was merged through PR #1 at `6659055bcfba6ad143037fd0e1824d8fd180ddb5` before local deployment testing. Its seven individual commits are preserved. This supersedes the earlier branch-isolation/hold instruction: Phase 2 is available historically at `daf0bbfcf704ea588003f4816e49110ef431f061`, but main contains the combined implementation. M3 remains open; merging is not acceptance sign-off.
 
 ## Contract baseline
 
@@ -18,11 +18,10 @@ Authoritative `session.activate` snapshots expose `pending_approval` and `pendin
 
 Passwords and secret values are held only in masked form controls until a deliberate submit, cleared immediately, and never copied into transcripts, generic drafts, diagnostic events, support reports or browser persistence. A secret request may cause Hermes to store the supplied value; make that upstream effect explicit before submission. The WebUI never edits Hermes files itself.
 
-## Planned increments and gates
+## Delivery and remaining gates
 
-1. Bounded, validated request/tool/reasoning projection with race and malformed-payload tests.
-2. Native response admission and authoritative pending-request reconciliation with no-replay/expiry tests.
-3. Responsive activity and input cards, session attention indicators and browser regression coverage.
-4. Controlled native-Hermes integration, retained evidence and Phase 3 sign-off.
+The initial bounded projection, response admission/reconciliation, responsive input cards and synthetic coverage are implemented. Build/typecheck/lint, 92 unit tests, 12 wire contracts, 120 browser cases, image smoke and the initial real-Hermes clarification gate passed. All four PR workflows also passed at merged branch head `cbefddd`. Evidence and exact run references remain in `evidence/phase3-initial-checkpoint.json` and `implementation-status.md`.
 
-Phase 3 is not complete at this checkpoint. Physical phones, real virtual keyboards and installed PWA remain separate later acceptance gates.
+Still required for M3: real-Hermes approval/sudo/secret execution acceptance; broader tool-heavy and historical presentation; off-selection attention/reconciliation; further adverse-response and multi-request recovery tests; and final acceptance/review. The current tool/reasoning view is limited to the current or most-recent observed turn and selected conversation. Physical phones, real virtual keyboards and installed PWA remain separate later acceptance gates.
+
+Every subsequent completed increment must still be committed and pushed remotely before starting the next increment. Do not report M3 complete merely because PR #1 has been merged.

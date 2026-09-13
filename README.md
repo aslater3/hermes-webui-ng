@@ -1,8 +1,14 @@
 # Hermes WebUI NG
 
-> Phase 2 native chat alpha implemented and verified. The full product described below remains in development.
+> Phase 2 chat alpha plus the initial Phase 3 agent-interaction implementation are on `main`. M3 remains open; this is a development build, not a production release.
 
 ## Current implementation
+
+**Phase 3's initial implementation was merged into `main` through PR #1 on 13 September 2026**, at the repository owner's request before local deployment testing. Merge commit `6659055` preserves all seven individual Phase 3 commits; nothing was squashed. Phase 2 remains available as historical checkpoint `daf0bbf`, but `main` now includes Phase 3.
+
+The initial Phase 3 work adds bounded reasoning/tool activity cards, approval once/deny, single/batch/multi-select clarification and masked sudo/secret inputs, with generation-scoped response admission, explicit expiry/unknown outcomes and no automatic response replay. Approval/clarify can recover through supported native snapshots; sudo/secret cards disable after disconnect where the tested backend has no recovery snapshot. Credential values clear on submit, backgrounding, disconnect, selection or account changes.
+
+The initial Phase 3 checkpoint passed build/typecheck/lint, **92 unit tests, 12 synthetic wire contracts, 120 browser cases, Docker smoke and native-Hermes clarification/reconnect acceptance**, along with M0–M2 regressions. All four PR workflows also passed at the merged head `cbefddd`. **This does not complete M3:** live approval/sudo/secret execution acceptance, historical activity, off-selection attention and further adverse-response/recovery coverage remain outstanding. See `docs/phase3-interactions.md`, `docs/evidence/phase3-initial-checkpoint.json` and `docs/implementation-status.md`.
 
 **M0, Phase 1 and Phase 2 automated gates passed on 13 September 2026** against vanilla `NousResearch/hermes-agent@b6b53c69a6ed49cb099cf1bfe76b5e6edd718e5a`. The standalone Docker image uses the authenticated Dashboard proxy and native Gateway; it does not run Hermes or own a conversation database.
 
@@ -10,9 +16,9 @@ The chat alpha provides a searchable/paginated desktop session sidebar and mobil
 
 The Phase 1 foundation remains: password sign-in and verified sign-out, separate REST/auth/Gateway status, identity-safe reconnect, conservative capabilities and a sanitised support report. An available backend endpoint is not presented as an implemented UI feature.
 
-At code/test checkpoint **`da2838d`**, all four CI jobs passed: **73 unit tests, 9 synthetic wire contracts, 96 browser/viewport cases, non-root read-only Docker smoke and pinned vanilla-Hermes M0/Phase 1/Phase 2 acceptance**. Browser coverage uses desktop Chromium, iPhone WebKit emulation, Android Chromium emulation and 320px layouts. The separate live test uses unmodified Hermes and replaces only its model endpoint with a controlled fixture; it confirms a real interrupted native turn followed by a successful subsequent turn. Reports and CI references are retained in `docs/evidence/phase2-acceptance.json` and `docs/implementation-status.md`.
+At Phase 2 code/test checkpoint **`da2838d`**, all four CI jobs passed: **73 unit tests, 9 synthetic wire contracts, 96 browser/viewport cases, non-root read-only Docker smoke and pinned vanilla-Hermes M0/Phase 1/Phase 2 acceptance**. Browser coverage uses desktop Chromium, iPhone WebKit emulation, Android Chromium emulation and 320px layouts. The separate live test uses unmodified Hermes and replaces only its model endpoint with a controlled fixture; it confirms a real interrupted native turn followed by a successful subsequent turn. Reports and CI references are retained in `docs/evidence/phase2-acceptance.json` and `docs/implementation-status.md`.
 
-This is not the final React application or a public-internet production release. Rendering is escaped text plus bounded code fences, not complete GFM/highlighting. Phase 3 reasoning, tool cards and approval/clarify/sudo/secret controls are next; the modern shell, profile/model pickers, workspace and PWA remain later phases. Physical mobile/virtual-keyboard and installed-PWA verification remain outstanding.
+This is not the final React application or a public-internet production release. Rendering is escaped text plus bounded code fences, not complete GFM/highlighting. Completion of Phase 3 remains outstanding; the modern shell, profile/model pickers, workspace and PWA remain later phases. Physical mobile/virtual-keyboard and installed-PWA verification remain outstanding.
 
 ### Run the chat alpha
 
@@ -24,7 +30,9 @@ cp .env.example .env
 docker compose up --build -d
 ```
 
-The Compose example publishes only on host loopback. Credentials belong in Hermes, not WebUI configuration. `docs/phase0-running.md` provides the existing private-proxy/host-network topology guidance; `docs/phase1-foundation.md` and `docs/phase2-chat.md` supersede its original authentication and chat-scope limitations. `Disconnect transport` is not logout. `Sign out` clears the local view and reports success only after Hermes rejects the old identity.
+For an existing checkout, retain your configured `.env`, switch to `main`, pull with `git pull --ff-only origin main`, and rebuild with `docker compose up --build -d`.
+
+The Compose example publishes only on host loopback. Credentials belong in Hermes, not WebUI configuration. `docs/phase0-running.md` provides the existing private-proxy/host-network topology guidance; `docs/phase1-foundation.md`, `docs/phase2-chat.md` and `docs/phase3-interactions.md` supersede its original authentication, chat and input-scope limitations. `Disconnect transport` is not logout. `Sign out` clears the local view and reports success only after Hermes rejects the old identity.
 
 ### Local checks
 
@@ -96,6 +104,7 @@ Hermes WebUI NG container :8787
 | `docs/15-repo-layout-standards.md` | Proposed repo tree, coding standards and CI rules |
 | `docs/phase1-foundation.md` | Delivered foundation behaviour and verification boundaries |
 | `docs/phase2-chat.md` | Native chat alpha, session/history contract and verification limits |
+| `docs/phase3-interactions.md` | Initial agent interaction implementation and remaining M3 gates |
 | `docs/implementation-status.md` | Completed gates, exact compatibility and remaining work |
 
 ## Required upstream references
