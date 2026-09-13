@@ -27,6 +27,7 @@ test('choose an actual model before the first prompt without losing its draft; r
 test('reasoning changes are session-scoped and the composer uses the confirmed native effort', async ({ page }, info) => {
   await login(page); await send(page, 'Reasoning setup'); await idle(page);
   await page.getByRole('button', { name: 'Reasoning: Medium', exact: true }).click();
+  await expect(page.getByText('Avoid deleting this conversation in another client', { exact: false })).toBeVisible();
   await page.getByRole('button', { name: 'Set reasoning high', exact: true }).click();
   await expect(page.getByText('Current effort:', { exact: false })).toContainText('High');
   await page.screenshot({ path: info.outputPath('reasoning-picker.png') });

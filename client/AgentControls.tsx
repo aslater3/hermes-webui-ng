@@ -63,6 +63,7 @@ export function AgentControls({ runtime: rt }: { runtime: AppRuntime }) {
         </>}
         {panel === 'reasoning' && <>
           <p className="muted">Adjust how much reasoning effort Hermes requests for this conversation. This does not hide or reveal reasoning text.</p>
+          <p className="small muted">Avoid deleting this conversation in another client while applying an effort. On the tested Hermes version, a vanished runtime can make the setter fall back to the profile default.</p>
           <p className="picker-current">Current effort: <strong>{effortLabel(effort)}</strong></p>
           {data.loading && <p role="status">Checking model capabilities…</p>}
           {selected?.reasoning !== true ? <Notice>{selected?.reasoning === false ? 'This model does not advertise adjustable reasoning.' : 'Reasoning capability has not been confirmed for this model. Refresh the model inventory or select another configured model.'}</Notice> : <>
