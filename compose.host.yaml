@@ -10,6 +10,8 @@ services:
       PUBLIC_ORIGIN: ${PUBLIC_ORIGIN:?Set the exact browser-facing origin}
       HOST: ${WEBUI_HOST:-127.0.0.1}
       PORT: ${WEBUI_PORT:-8788}
+      HERMES_AUTH_MODE: ${HERMES_AUTH_MODE:-dashboard}
+      HERMES_DASHBOARD_SESSION_TOKEN: ${HERMES_DASHBOARD_SESSION_TOKEN:-}
     read_only: true
     tmpfs:
       - /tmp:rw,noexec,nosuid,size=16m
