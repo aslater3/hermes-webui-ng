@@ -10,7 +10,7 @@ async function chat(page: Page) {
   await page.getByRole('button', { name: 'New session' }).click(); await expect(page.locator('#session-state')).toHaveText('idle');
   await page.getByLabel('Prompt', { exact: true }).fill('private-foundation-prompt');
   await page.getByRole('button', { name: 'Send prompt' }).click();
-  await expect(page.getByLabel('Conversation')).toContainText('SYNTHETIC_RESPONSE'); await expect(page.locator('#session-state')).toHaveText('idle');
+  await expect(page.locator('#transcript')).toContainText('SYNTHETIC_RESPONSE'); await expect(page.locator('#session-state')).toHaveText('idle');
 }
 async function lifecycle(page: Page) { await page.evaluate(() => window.dispatchEvent(new PageTransitionEvent('pageshow'))); }
 test('automatic reconnect stops if another tab changed the authenticated account', async ({ page }) => {
@@ -21,7 +21,7 @@ test('automatic reconnect stops if another tab changed the authenticated account
   await page.route('**/__hermes/api/auth/me', (route) => route.fulfill({ json: { user_id: 'different-private-user', provider: 'basic' } }));
   drop!(); await expect(page.locator('#auth-state')).toHaveText('auth-required');
   await expect(page.locator('#session-key')).toHaveValue('');
-  await expect(page.getByLabel('Conversation')).not.toContainText('private-foundation-prompt'); expect(tickets).toBe(0);
+  await expect(page.locator('#transcript')).not.toContainText('private-foundation-prompt'); expect(tickets).toBe(0);
 });
 for (const status of [401, 403]) {
   test(`ticket HTTP ${status} is terminal and accurately displayed`, async ({ page }) => {

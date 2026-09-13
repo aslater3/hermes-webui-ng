@@ -12,16 +12,16 @@ test('sign in, native prompt, reload recovery and mobile controls', async ({ pag
   await expect(page.locator('#session-state')).toHaveText('idle');
   await page.getByLabel('Prompt', { exact: true }).fill('<img src=x onerror=alert(1)> ' + 'long'.repeat(200));
   await page.getByRole('button', { name: 'Send prompt' }).click();
-  await expect(page.getByLabel('Conversation')).toContainText('SYNTHETIC_RESPONSE');
+  await expect(page.locator('#transcript')).toContainText('SYNTHETIC_RESPONSE');
   await expect(page.locator('#transcript img')).toHaveCount(0);
   const key = await page.locator('#session-key').inputValue();
   await page.reload();
   await expect(page.locator('#session-state')).toHaveText('idle');
   await expect(page.locator('#session-key')).toHaveValue(key);
-  await expect(page.getByLabel('Conversation')).toContainText('SYNTHETIC_RESPONSE');
+  await expect(page.locator('#transcript')).toContainText('SYNTHETIC_RESPONSE');
   await page.getByRole('button', { name: 'Reconnect', exact: true }).click();
   await expect(page.locator('#gateway-state')).toHaveText('ready');
-  await expect(page.getByLabel('Conversation')).toContainText('SYNTHETIC_RESPONSE');
+  await expect(page.locator('#transcript')).toContainText('SYNTHETIC_RESPONSE');
   expect(await page.evaluate(() => ({ local: localStorage.length, session: sessionStorage.length }))).toEqual(
     { local: 0, session: 0 },
   );

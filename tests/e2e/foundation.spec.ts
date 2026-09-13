@@ -10,7 +10,7 @@ async function chat(page: Page) {
   await page.getByRole('button', { name: 'New session' }).click(); await expect(page.locator('#session-state')).toHaveText('idle');
   await page.getByLabel('Prompt', { exact: true }).fill('private-foundation-prompt');
   await page.getByRole('button', { name: 'Send prompt' }).click();
-  await expect(page.getByLabel('Conversation')).toContainText('SYNTHETIC_RESPONSE'); await expect(page.locator('#session-state')).toHaveText('idle');
+  await expect(page.locator('#transcript')).toContainText('SYNTHETIC_RESPONSE'); await expect(page.locator('#session-state')).toHaveText('idle');
 }
 async function lifecycle(page: Page) { await page.evaluate(() => window.dispatchEvent(new PageTransitionEvent('pageshow'))); }
 
@@ -36,7 +36,7 @@ test('auth expiry on resume clears private state and requires explicit sign-in',
   await page.route('**/__hermes/api/auth/me', (route) => route.fulfill({ status: 401, json: { error: 'session_expired' } }));
   await lifecycle(page); await expect(page.locator('#auth-state')).toHaveText('auth-required');
   await expect(page.locator('#gateway-state')).toHaveText('auth-required');
-  await expect(page.getByLabel('Conversation')).not.toContainText('private-foundation-prompt');
+  await expect(page.locator('#transcript')).not.toContainText('private-foundation-prompt');
   await expect(page.locator('#session-key')).toHaveValue(''); await expect(page.locator('#prompt')).toHaveValue('');
   expect(new URL(page.url()).hash).toBe(''); await lifecycle(page); expect(tickets).toBe(0);
   await page.unroute('**/__hermes/api/auth/me');
@@ -48,7 +48,7 @@ test('auth expiry on resume clears private state and requires explicit sign-in',
 test('verified sign-out clears scoped cookies and does not reconnect on resume', async ({ page, context }) => {
   await chat(page); await page.getByRole('button', { name: 'Sign out', exact: true }).click();
   await expect(page.locator('#auth-state')).toHaveText('signed-out'); await expect(page.locator('#connection-banner')).toContainText('Signed out of Hermes');
-  await expect(page.getByLabel('Conversation')).not.toContainText('private-foundation-prompt');
+  await expect(page.locator('#transcript')).not.toContainText('private-foundation-prompt');
   expect((await context.cookies()).some((cookie) => cookie.name === 'fixture_auth' && cookie.value)).toBe(false);
   await lifecycle(page); await expect(page.locator('#gateway-state')).toHaveText('disconnected');
   await page.reload(); await expect(page.locator('#auth-state')).toHaveText('auth-required');
@@ -79,7 +79,7 @@ test('offline and resume recover upstream history but deliberate disconnect rema
   await expect(page.locator('#connection-banner')).toContainText('Offline'); await expect(page.getByRole('button', { name: 'Send prompt' })).toBeDisabled();
   await context.setOffline(false); await page.evaluate(() => window.dispatchEvent(new Event('online')));
   await expect(page.locator('#gateway-state')).toHaveText('ready'); await expect(page.locator('#session-state')).toHaveText('idle');
-  await expect(page.getByLabel('Conversation')).toContainText('private-foundation-prompt');
+  await expect(page.locator('#transcript')).toContainText('private-foundation-prompt');
   await page.getByRole('button', { name: 'Disconnect transport' }).click(); await lifecycle(page);
   await expect(page.locator('#gateway-state')).toHaveText('disconnected'); await expect(page.locator('#auth-state')).toHaveText('signed-in');
 });

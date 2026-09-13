@@ -20,7 +20,8 @@ test('completion settles and permits a second deliberate prompt without reload o
     );
     // Vanilla Hermes emits completion before cleanup. Re-enable only after authoritative settlement.
     await expect(page.locator('#session-state')).toHaveText('idle');
-    await expect(page.getByRole('button', { name: 'Send prompt', exact: true })).toBeEnabled();
+    await expect(page.getByLabel('Prompt', { exact: true })).toBeEnabled();
+    await expect(page.getByRole('button', { name: 'Send prompt', exact: true })).toBeDisabled(); // empty composer
     await expect(page.locator('#session-key')).toHaveValue(sessionKey);
   }
 
