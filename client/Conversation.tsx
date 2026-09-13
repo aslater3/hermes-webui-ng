@@ -1,24 +1,14 @@
 import { AgentControls } from './AgentControls.js';
-import { Suspense, lazy, memo, useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { ArrowDown, ArrowUp, ArrowUpRight, Check, Copy, Code2, Compass, ListChecks, LoaderCircle, Sparkles, Square, Wrench } from 'lucide-react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { ArrowDown, ArrowUp, ArrowUpRight, Code2, Compass, ListChecks, LoaderCircle, Sparkles, Square, Wrench } from 'lucide-react';
 import type { AppRuntime } from './runtime.js';
 import type { NativeSession } from '../src/hermes/native-session.js';
 import { AgentView } from '../src/hermes/agent-view.js';
 import { draftKey } from '../src/hermes/chat-controller.js';
 import { enterSends } from '../src/hermes/chat-behaviour.js';
 import { Notice } from './primitives.js';
-const Markdown = lazy(() => import('./Markdown.js'));
+import { HistoryMessage as Message } from './HistoryMessage.js';
 
-const Message = memo(function Message({ role, text, truncated = false }: { role: string; text: string; truncated?: boolean }) {
-  const [copied, setCopied] = useState(false), [note, setNote] = useState('');
-  const user = role === 'user';
-  return <article className={`message message-${user ? 'user' : 'assistant'}`} data-role={role}>
-    <div className="message-label">{!user && <span className="assistant-mark"><Sparkles size={15}/></span>}<span>{user ? 'You' : role === 'assistant' ? 'Hermes' : role}</span></div>
-    <div className="message-content">{user ? <div className="user-text">{text}</div> : <Suspense fallback={<pre className="plain-message">{text}</pre>}><Markdown text={text}/></Suspense>}</div>
-    {truncated && <p className="muted small">This message reached the display limit.</p>}
-    {!user && <div className="message-actions"><button aria-label="Copy message" title="Copy message" onClick={() => { if (!navigator.clipboard) { setNote('Select the message to copy.'); return; } void navigator.clipboard.writeText(text).then(() => { setCopied(true); setNote('Message copied.'); }).catch(() => setNote('Select the message to copy.')); }}>{copied ? <Check size={14}/> : <Copy size={14}/>}</button><span className="sr-only" role="status">{note}</span></div>}
-  </article>;
-});
 function Activity({ owner, enabled, historical, revision }: { owner: NativeSession; enabled: boolean; historical: boolean; revision: number }) {
   const root = useRef<HTMLElement>(null), view = useRef<AgentView | null>(null);
   useLayoutEffect(() => { const renderer = new AgentView(root.current!); view.current = renderer; return () => { renderer.dispose(); root.current?.replaceChildren(); view.current = null; }; }, []);
@@ -74,10 +64,10 @@ export function Conversation({ runtime: rt, revision }: { runtime: AppRuntime; r
       {state.deliveryUnknown && <Notice>Delivery was not confirmed. Check the recovered conversation before resending. Nothing has been replayed.</Notice>}
       {empty && <div className="welcome"><div className="welcome-mark"><Sparkles size={30} strokeWidth={1.4}/></div><p className="eyebrow">A SPACE FOR YOUR NEXT IDEA</p><h1>What are we working on?</h1><p>Think it through. Build it out. Make it happen with Hermes.</p><div className="welcome-suggestions">{starters.map(({ icon: Icon, title, subtitle, draft }) => <button key={title} onClick={() => useStarter(draft)} disabled={!writable} title={`Use “${title}” as a draft`}><Icon size={19}/><span><strong>{title}</strong><small>{subtitle}</small></span><ArrowUpRight size={15}/></button>)}</div></div>}
       {loading && <div className="loading-conversation" role="status"><LoaderCircle size={19} className="spin"/>Opening your conversation…</div>}
-      {messages.slice(0, activityAt).map((message, index) => <Message key={`${scope}:${index}`} role={message.role} text={message.text} truncated={message.truncated}/>)}
+      {messages.slice(0, activityAt).map((message, index) => <Message key={`${scope}:${index}`} {...message}/>)}
       <Activity owner={chat.native} enabled={rt.ready && !loading} historical={snapshot} revision={revision}/>
-      {messages.slice(activityAt).map((message, index) => <Message key={`${scope}:${activityAt + index}`} role={message.role} text={message.text} truncated={message.truncated}/>)}
-      {streaming && <div className="message message-assistant streaming"><div className="message-label"><span className="assistant-mark"><Sparkles size={15}/></span>Hermes <span className="working-label">Working</span></div><pre className="plain-message">{streaming}<span className="stream-cursor"/></pre></div>}
+      {messages.slice(activityAt).map((message, index) => <Message key={`${scope}:${activityAt + index}`} {...message}/>)}
+      {streaming && <div className="message message-assistant streaming"><div className="message-label"><span className="assistant-mark"><Sparkles size={15} aria-hidden="true" focusable="false"/></span>Hermes <span className="working-label">Working</span></div><pre className="plain-message">{streaming}<span className="stream-cursor"/></pre></div>}
       {busy && !streaming && !pending && <div className="thinking-indicator" role="status"><span/><span/><span/>Hermes is working</div>}
       {state.phase === 'waiting' && !pending && <Notice>Hermes is waiting for input, but no recoverable request is available. Refresh or use the original client.</Notice>}
       <span className="sr-only" role="status" aria-live="polite">{state.phase === 'idle' && messages.length ? 'Response complete.' : pending ? 'Hermes needs your input.' : ''}</span>
