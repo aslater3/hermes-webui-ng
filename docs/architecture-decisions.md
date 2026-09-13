@@ -22,6 +22,16 @@ The BFF's `/api/webui/*` metadata routes do not receive widened Hermes auth cook
 
 Identity is revalidated through the official endpoint before every browser WS credential mint and on periodic/resume checks. Observed account changes invalidate transient selection before admission. This is defence in depth; Hermes remains responsible for authorisation. Logout is confirmed only by a subsequent rejected identity probe, and outages must not be reported as successful sign-out.
 
+## ADR-016 — Phase 2 chat alpha on disposable native projections
+
+Accepted, 13 September 2026. Retain the tested framework-independent clients/stores and platform DOM view for the minimal chat slice. The production proxy is unchanged. The final React/Vite composition and full-height mobile/PWA shell remain Phase 4 work; this is an explicit intermediate implementation, not the final visual design.
+
+Use Dashboard REST for session list/search/history and retain the upstream owning profile; use native Gateway admission and settled session state for live sends/interruption. Browser URLs are navigation pointers. Per-conversation drafts are tab-memory only and bounded; no browser or BFF transcript/draft database is added. Account changes invalidate the whole transient chat view before another admission.
+
+Use 100-entry history windows and stable completed DOM nodes rather than introducing a virtualisation library before dynamic tool cards exist. Escaped text and bounded fenced-code blocks satisfy this phase's basic renderer; complete GFM/highlighting and reasoning/tool presentation remain explicit gaps. The RPC snapshot itself is bounded by transport size, not paginated server-side. Do not present this as arbitrary-size history support.
+
+Reduced-height tests exposed sticky composer overlap; the alpha uses normal flow so messages and jump controls remain reachable. Physical keyboard/PWA behaviour is not certified by those tests. Phase 2 sign-off requires both browser fixture coverage and separate unmodified-Hermes acceptance; neither substitutes for the remaining physical-device/release gates.
+
 ## Recovery discipline
 
 Every completed recovery or implementation slice must be committed AND pushed to the remote branch before starting the next slice. A local commit or unreferenced Git object is not a checkpoint. Verify the remote ref after publishing. Never accumulate a monolithic end-of-session push. Record current test evidence separately from historical results; milestone sign-off requires the relevant real-upstream and browser gates, not synthetic tests alone.

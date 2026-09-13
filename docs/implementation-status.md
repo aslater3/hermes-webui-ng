@@ -1,28 +1,56 @@
 # Implementation Status
 
-Updated: 13 September 2026. M0 and Phase 1 passed. **Phase 2 native chat is in progress; browser and live sign-off are pending.** Completed increments are committed and pushed to remote main before the next increment.
+Updated: 13 September 2026. **Phase 2 / M2 Chat Alpha automated exit gates passed.** M0 and Phase 1 remain green. The interrupted run's application changes were already on remote main at `da2838d`; recovery restored that exact source archive, repeated the local checks and verified the completed CI reports. The verified application required no source reconstruction or further code changes for Phase 2 sign-off.
 
-## Compatibility
+Completed increments are committed and pushed to remote main before the next increment. Evidence and sign-off are separate remote checkpoints.
 
-Pinned runtime: `NousResearch/hermes-agent@b6b53c69a6ed49cb099cf1bfe76b5e6edd718e5a`. The production WebUI image talks only to supported Dashboard REST and native Gateway APIs. Test Hermes is unmodified and configured through its own CLI; only its model endpoint is a deterministic test fixture. Newer upstream `b05a47b9d2df4d62124a80f70d657c6b8e1b07fb` was inspected, not runtime-certified.
+## Compatibility and evidence
 
-Prior permanent evidence: `evidence/phase0-acceptance.json`, `evidence/phase1-acceptance.json`. Phase 1 tested checkpoint `645af2c`: 49 unit, 7 synthetic wire, 56 browser tests; container and real Hermes passed. Sign-off `57f8d04`.
+Runtime-tested Hermes: `NousResearch/hermes-agent@b6b53c69a6ed49cb099cf1bfe76b5e6edd718e5a`. Live acceptance uses unmodified official `hermes serve` and the actual non-root, read-only WebUI Docker image. Only the model endpoint is a controlled test fixture; Hermes setup uses its own CLI. There are no WebUI Hermes imports, direct state/config operations or local conversation database.
 
-## Phase 2 delivered increments
+Phase 2 implementation inspected newer upstream session contracts at `b05a47b9d2df4d62124a80f70d657c6b8e1b07fb`; upstream main was observed at `fadcff92270dec3781b2d6b422d828424c105c67` during sign-off. Neither newer ref is runtime-certified. The tested compatibility baseline remains the exact pin above.
 
-- Validated REST list/search/history clients and owning-profile propagation (`b2f6e0e`).
-- Independent generation-scoped navigation and history state (`c6bde3c0`).
-- Prompt/interrupt admission, uncertain-delivery retention, bounded native transcript (`c71aa7e`).
-- Socket-level paginated browsing and interruption/recovery contracts (`b3cffae`).
-- Conversation selection and transient, per-session drafts (`2742529`).
-- Stable transcript nodes, safe code fences, explicit scroll follow and desktop/touch keyboard policy (`ac2c42d`).
-- Account reset disables authenticated browsing before subscriber callbacks (`3faa0b2`).
-- Adaptive two-pane conversation view, mobile modal drawer, search/paging, history windows and composer are now wired with cross-viewport browser tests.
+Permanent reports: `evidence/phase0-acceptance.json`, `evidence/phase1-acceptance.json`, and **`evidence/phase2-acceptance.json`**. The Phase 2 report retains M0/M1 regression results, all eight Phase 2 live gates, browser counts, run IDs and artifact SHA-256 values. Recovery checked the downloaded artifact digests against GitHub metadata.
 
-Current local evidence: compilation/build/lint, **72 unit tests and 9 synthetic wire tests pass**. Browser suite has 84 cases across the four existing desktop/mobile projects; its new Phase 2 cases have not yet received a CI verdict at this checkpoint. Real M0/M1 regressions continue on every push; Phase 2 live REST/history/interrupt acceptance is next. No Phase 2 exit-gate pass is claimed yet.
+## Completed Phase 2 scope
 
-## Boundaries
+- [x] Native create/resume/submit/stream/interrupt through the supported Gateway.
+- [x] Official REST session list, search and history, retaining each conversation's owning profile.
+- [x] Independent, generation-scoped list/search/history requests; stale account/selection responses cannot replace the active view.
+- [x] Desktop session sidebar and mobile modal drawer, search, list pagination, new/open/resume and browser back/forward navigation.
+- [x] Read-only saved history when REST is available but Gateway is disconnected; native reattachment after reconnect.
+- [x] Bounded transcript windows, stable completed message nodes, inert text/code-fence rendering and copy controls.
+- [x] Explicit bottom-follow/new-activity/Jump to latest behaviour without replacing earlier nodes on every delta.
+- [x] Desktop Enter/Shift+Enter, composition-safe input and explicit touch Send; guarded send/interrupt admission.
+- [x] Memory-only per-conversation drafts, bounded to 20 conversations and cleared at account boundaries; no draft or transcript browser persistence.
+- [x] Uncertain delivery remains visible; no automatic prompt replay and no locally invented queue.
+- [x] Older history replaces the view and disables sending until returning to latest.
 
-No production Hermes imports, state/config access, Relay or local conversation database. Drafts are memory-only, capped at 20 conversations and cleared at account boundaries; no draft or transcript browser persistence. Transcript windows contain at most 100 entries; earlier history replaces the view and disables sending until returning to latest.
+## Tested code checkpoint
 
-The renderer currently provides escaped text and bounded fenced-code blocks/copy controls, not the complete GFM/highlighting design. Rich rendering, reasoning/tools, input approvals and the final React/mobile/PWA shell remain in planned later phases. Physical-device/keyboard/PWA testing, OAuth, public-internet hardening and release image publication remain outstanding. Synthetic browser fixtures are not vanilla-Hermes proof.
+**`da2838db6f02b6296f21555a8adfa20ce2d4b7b1`** — all four CI jobs passed. Subsequent evidence/sign-off commits change documentation only.
+
+| Gate | Result | GitHub Actions run |
+|---|---|---|
+| Compilation, lint, unit and synthetic wire contracts | 73 unit + 9 wire tests passed | `34761566071` |
+| Browser tests | 96 passed; 0 failures, skips or flaky results | `34761566063` |
+| Non-root read-only Docker smoke | Passed | `34761566028` |
+| Pinned vanilla-Hermes M0 + Phase 1 + Phase 2 acceptance | Passed | `34761566052` |
+
+Fresh recovery checks on Node 22.16.0 also passed build, typecheck, lint, all 73 unit tests and all 9 socket-level contract tests. Browser/container jobs were verified in CI rather than rerun in the recovery container.
+
+Browser coverage is 24 cases each in desktop Chromium, iPhone WebKit emulation, Android Chromium emulation and a 320px viewport. It covers repeated conversations, search, reload, history windows, interruption, streaming scroll behaviour, hostile text/code, composition keys, back/forward drafts, sign-out clearing, drawer focus and reduced-height non-overlap. Twelve screenshots are retained in the browser artifact. These tests are not physical-phone, real virtual-keyboard, Firefox or installed-PWA certification.
+
+The real Phase 2 acceptance confirms two native conversations; official REST list/search/history/offset; repeated turns with selection isolation; read-only browsing and native reattachment; a fresh controller resuming authoritative history; an in-flight turn confirmed as interrupted by Hermes; a subsequent successful turn without replay; and account-boundary clearing. Original native reconnect and Phase 1 auth/capability gates also pass.
+
+## Remote implementation increments
+
+REST clients `b2f6e0e`; generation-scoped browser `c6bde3c0`; native admission/bounds `c71aa7e`; browsing/interrupt wire contracts `b3cffae`; controller/drafts `2742529`; transcript/scroll/keyboard behaviour `ac2c42d`; account-reset ordering `3faa0b2`; adaptive view and acceptance tests in subsequent increments; final composer non-overlap and mobile navigation regression `da2838d`. These remain separate remote commits; the evidence checkpoint is `e724938`.
+
+## Limits and next phase
+
+**Next: Phase 3 — reasoning, tool lifecycle cards and interactive approval/clarify/sudo/secret requests.** No Phase 3 implementation or completion is claimed. The current client indicates waiting for input but cannot answer these requests; use another supported Hermes client until Phase 3.
+
+This is a chat alpha, not the final React/Vite shell or a production release. Rendering is escaped text plus bounded code fences, not complete GFM/highlighting. The mobile composer remains in normal document flow after fixing a sticky-overlap defect; a full-height keyboard-aware shell and real-device acceptance remain Phase 4. DOM windows are bounded, but native history RPC still fetches an upstream snapshot within the transport's response limit; this is not arbitrary-size transcript support.
+
+Workspace/Git, profile/model pickers, attachments/voice, OAuth, physical-device/PWA checks, public-internet hardening, multi-architecture publishing, SBOM/scanning, full accessibility/performance and broader browser gates remain outstanding. See `phase2-chat.md`, ADR-016 and `12-phased-delivery-plan.md`. Legacy local image aliases/version suffixes still reference `phase0`; they are not published release tags.

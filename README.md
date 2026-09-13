@@ -1,18 +1,20 @@
 # Hermes WebUI NG
 
-> Phase 1 connection/auth/capability foundation implemented and verified. The full product described below remains in development.
+> Phase 2 native chat alpha implemented and verified. The full product described below remains in development.
 
 ## Current implementation
 
-**M0 and Phase 1 passed on 13 September 2026** against vanilla `NousResearch/hermes-agent@b6b53c69a6ed49cb099cf1bfe76b5e6edd718e5a`. The Docker image authenticates through the Dashboard proxy, mints supported one-use WebSocket credentials, receives `gateway.ready`, creates native sessions, submits a controlled prompt and recovers history after reconnect without a local chat database.
+**M0, Phase 1 and Phase 2 automated gates passed on 13 September 2026** against vanilla `NousResearch/hermes-agent@b6b53c69a6ed49cb099cf1bfe76b5e6edd718e5a`. The standalone Docker image uses the authenticated Dashboard proxy and native Gateway; it does not run Hermes or own a conversation database.
 
-The current responsive diagnostic provides password sign-in and verified sign-out, independent REST/auth/Gateway status, account/expiry-safe reconnect, conservative capability discovery and a sanitised support report with copy/download/clear controls. The native create/resume/prompt/interrupt diagnostic remains available. Backend endpoint advertisement is not presented as implemented UI.
+The chat alpha provides a searchable/paginated desktop session sidebar and mobile Conversations drawer, native new/open/resume, streaming text, guarded send/interrupt, read-only REST history when Gateway is disconnected, older-history windows and same-tab per-conversation drafts. Browser refresh reconstructs the selected conversation from Hermes, not local history. Desktop and touch input behaviours are implemented together; completed transcript nodes remain stable while streaming, with explicit scroll-follow/Jump to latest controls.
 
-At code/test checkpoint **`645af2c`**, all four CI jobs passed: **49 unit tests, 7 synthetic wire contracts, 56 browser/viewport checks, production Docker smoke and pinned vanilla-Hermes M0/Phase 1 acceptance**. Browser coverage includes desktop Chromium, iPhone WebKit emulation, Android Chromium emulation and 320px layouts. The live test uses unmodified Hermes and replaces only the model endpoint with a deterministic fixture. Permanent evidence and CI references are in `docs/evidence/phase1-acceptance.json` and `docs/implementation-status.md`.
+The Phase 1 foundation remains: password sign-in and verified sign-out, separate REST/auth/Gateway status, identity-safe reconnect, conservative capabilities and a sanitised support report. An available backend endpoint is not presented as an implemented UI feature.
 
-This is not the final React application or a public-internet production release. Phase 2 session navigation/chat refinement is next; rich tools and interactive prompts, the modern shell, profile/model controls, workspace and PWA remain in their planned later phases. Physical mobile/virtual-keyboard and installed-PWA verification remain outstanding.
+At code/test checkpoint **`da2838d`**, all four CI jobs passed: **73 unit tests, 9 synthetic wire contracts, 96 browser/viewport cases, non-root read-only Docker smoke and pinned vanilla-Hermes M0/Phase 1/Phase 2 acceptance**. Browser coverage uses desktop Chromium, iPhone WebKit emulation, Android Chromium emulation and 320px layouts. The separate live test uses unmodified Hermes and replaces only its model endpoint with a controlled fixture; it confirms a real interrupted native turn followed by a successful subsequent turn. Reports and CI references are retained in `docs/evidence/phase2-acceptance.json` and `docs/implementation-status.md`.
 
-### Run the diagnostic
+This is not the final React application or a public-internet production release. Rendering is escaped text plus bounded code fences, not complete GFM/highlighting. Phase 3 reasoning, tool cards and approval/clarify/sudo/secret controls are next; the modern shell, profile/model pickers, workspace and PWA remain later phases. Physical mobile/virtual-keyboard and installed-PWA verification remain outstanding.
+
+### Run the chat alpha
 
 Configure an authenticated Hermes Dashboard reachable from the container, then:
 
@@ -22,7 +24,7 @@ cp .env.example .env
 docker compose up --build -d
 ```
 
-The Compose example publishes only on host loopback. Credentials belong in Hermes, not WebUI configuration. `docs/phase0-running.md` provides the existing private-proxy/host-network topology guidance; `docs/phase1-foundation.md` supersedes its original authentication and feature-scope limitations. `Disconnect transport` is not logout. `Sign out` clears the local view and reports success only after Hermes rejects the old identity.
+The Compose example publishes only on host loopback. Credentials belong in Hermes, not WebUI configuration. `docs/phase0-running.md` provides the existing private-proxy/host-network topology guidance; `docs/phase1-foundation.md` and `docs/phase2-chat.md` supersede its original authentication and chat-scope limitations. `Disconnect transport` is not logout. `Sign out` clears the local view and reports success only after Hermes rejects the old identity.
 
 ### Local checks
 
@@ -93,6 +95,7 @@ Hermes WebUI NG container :8787
 | `docs/14-architecture-decisions.md` | Initial ADR set and unresolved decisions |
 | `docs/15-repo-layout-standards.md` | Proposed repo tree, coding standards and CI rules |
 | `docs/phase1-foundation.md` | Delivered foundation behaviour and verification boundaries |
+| `docs/phase2-chat.md` | Native chat alpha, session/history contract and verification limits |
 | `docs/implementation-status.md` | Completed gates, exact compatibility and remaining work |
 
 ## Required upstream references
