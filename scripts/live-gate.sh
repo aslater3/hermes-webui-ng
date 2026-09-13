@@ -60,5 +60,6 @@ npm run test:live
 node build/tests/integration/phase1.js
 node build/tests/integration/phase2.js
 node build/tests/integration/phase3.js
+node build/tests/integration/phase4b.js
 # Tests may create upstream state; they must never alter tracked upstream source.
 test -z "$(git -C upstream diff --name-only HEAD)"

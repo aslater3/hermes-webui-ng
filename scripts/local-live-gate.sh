@@ -48,4 +48,5 @@ for attempt in $(seq 1 30); do
 done
 curl --fail --silent http://127.0.0.1:8789/readyz
 node build/tests/integration/local-live.js
+PHASE4B_LOCAL=true node build/tests/integration/phase4b.js
 test -z "$(git -C upstream diff --name-only HEAD)"
