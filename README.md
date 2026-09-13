@@ -1,44 +1,67 @@
 # Hermes WebUI NG
 
-> Phase 2 chat alpha plus the initial Phase 3 agent-interaction implementation are on `main`. M3 remains open; this is a development build, not a production release.
+A standalone, modern web client for **vanilla Hermes Agent**. Hermes owns the agent and durable conversations; the WebUI owns the browser experience.
 
-## Current implementation
+> Development build. The modern React shell is the default application at `/`; the former diagnostic interface remains available at `/diagnostic`. Phase 4A brings the usable application shell forward, not full PWA or production-release certification. See `docs/implementation-status.md` for the exact verified commit and remaining gates.
 
-**Phase 3's initial implementation was merged into `main` through PR #1 on 13 September 2026**, at the repository owner's request before local deployment testing. Merge commit `6659055` preserves all seven individual Phase 3 commits; nothing was squashed. Phase 2 remains available as historical checkpoint `daf0bbf`, but `main` now includes Phase 3.
+## The application
 
-The initial Phase 3 work adds bounded reasoning/tool activity cards, approval once/deny, single/batch/multi-select clarification and masked sudo/secret inputs, with generation-scoped response admission, explicit expiry/unknown outcomes and no automatic response replay. Approval/clarify can recover through supported native snapshots; sudo/secret cards disable after disconnect where the tested backend has no recovery snapshot. Credential values clear on submit, backgrounding, disconnect, selection or account changes.
+The chat-first interface provides a full-height desktop workspace and mobile conversation drawer, searchable session history, streaming messages, and an anchored Send/Stop composer. Connection state is compact; authentication, appearance and diagnostics live in Settings rather than above the conversation.
 
-The initial Phase 3 checkpoint passed build/typecheck/lint, **92 unit tests, 12 synthetic wire contracts, 120 browser cases, Docker smoke and native-Hermes clarification/reconnect acceptance**, along with M0–M2 regressions. All four PR workflows also passed at the merged head `cbefddd`. **This does not complete M3:** live approval/sudo/secret execution acceptance, historical activity, off-selection attention and further adverse-response/recovery coverage remain outstanding. See `docs/phase3-interactions.md`, `docs/evidence/phase3-initial-checkpoint.json` and `docs/implementation-status.md`.
+Light, dark and system themes, a keyboard/touch-accessible command palette, safe GFM Markdown/tables, highlighted code, and code copy/wrap controls are implemented. Tables and code scroll within their own regions instead of widening the phone viewport. Remote images do not load automatically, raw HTML is not injected, and unusually large messages use a plain-text fallback.
 
-**M0, Phase 1 and Phase 2 automated gates passed on 13 September 2026** against vanilla `NousResearch/hermes-agent@b6b53c69a6ed49cb099cf1bfe76b5e6edd718e5a`. The standalone Docker image uses the authenticated Dashboard proxy and native Gateway; it does not run Hermes or own a conversation database.
+The existing native workflow remains: new/open/resume, repeated turns, interrupt, read-only saved history while the Gateway is disconnected, authoritative recovery after reload and no automatic replay of unacknowledged prompts. Drafts are bounded tab-memory only. Appearance may persist in the browser; transcripts, credentials and drafts do not.
 
-The chat alpha provides a searchable/paginated desktop session sidebar and mobile Conversations drawer, native new/open/resume, streaming text, guarded send/interrupt, read-only REST history when Gateway is disconnected, older-history windows and same-tab per-conversation drafts. Browser refresh reconstructs the selected conversation from Hermes, not local history. Desktop and touch input behaviours are implemented together; completed transcript nodes remain stable while streaming, with explicit scroll-follow/Jump to latest controls.
+Initial Phase 3 reasoning/tool cards and approval/clarify/sudo/secret inputs are integrated. Approval and clarification recover from supported native snapshots. Credential cards become non-actionable after disconnect where Hermes has no recovery snapshot. Values clear on submission and lifecycle/account boundaries. **M3 remains open:** live approval/sudo/secret execution acceptance, historical activity and off-selection attention are not completed by the new shell.
 
-The Phase 1 foundation remains: password sign-in and verified sign-out, separate REST/auth/Gateway status, identity-safe reconnect, conservative capabilities and a sanitised support report. An available backend endpoint is not presented as an implemented UI feature.
+The runtime-tested Hermes baseline is **`NousResearch/hermes-agent@b6b53c69a6ed49cb099cf1bfe76b5e6edd718e5a`**. Newer upstream source inspections are not runtime certifications. Tests separately cover the browser fixture, the actual Docker image and unmodified Hermes with a deterministic model endpoint. Evidence and verification limitations are recorded under `docs/evidence/`.
 
-At Phase 2 code/test checkpoint **`da2838d`**, all four CI jobs passed: **73 unit tests, 9 synthetic wire contracts, 96 browser/viewport cases, non-root read-only Docker smoke and pinned vanilla-Hermes M0/Phase 1/Phase 2 acceptance**. Browser coverage uses desktop Chromium, iPhone WebKit emulation, Android Chromium emulation and 320px layouts. The separate live test uses unmodified Hermes and replaces only its model endpoint with a controlled fixture; it confirms a real interrupted native turn followed by a successful subsequent turn. Reports and CI references are retained in `docs/evidence/phase2-acceptance.json` and `docs/implementation-status.md`.
+## Deploy
 
-This is not the final React application or a public-internet production release. Rendering is escaped text plus bounded code fences, not complete GFM/highlighting. Completion of Phase 3 remains outstanding; the modern shell, profile/model pickers, workspace and PWA remain later phases. Physical mobile/virtual-keyboard and installed-PWA verification remain outstanding.
+### Default: authenticated Hermes Dashboard
 
-### Run the chat alpha
-
-Configure an authenticated Hermes Dashboard reachable from the container, then:
+Configure Hermes authentication through Hermes itself. From a new, clean checkout:
 
 ```sh
 cp .env.example .env
-# Set HERMES_DASHBOARD_URL and the exact browser-facing PUBLIC_ORIGIN in .env.
+# Set HERMES_DASHBOARD_URL and the exact browser-facing PUBLIC_ORIGIN.
 docker compose up --build -d
 ```
 
-For an existing checkout, retain your configured `.env`, switch to `main`, pull with `git pull --ff-only origin main`, and rebuild with `docker compose up --build -d`.
+The default Compose file publishes only on host loopback. The browser signs in through the supported Hermes flow; each WebSocket connection uses a fresh one-use ticket. `Disconnect` is not logout. `Sign out` reports success only after Hermes rejects the old identity. OAuth is not implemented yet.
 
-The Compose example publishes only on host loopback. Credentials belong in Hermes, not WebUI configuration. `docs/phase0-running.md` provides the existing private-proxy/host-network topology guidance; `docs/phase1-foundation.md`, `docs/phase2-chat.md` and `docs/phase3-interactions.md` supersede its original authentication, chat and input-scope limitations. `Disconnect transport` is not logout. `Sign out` clears the local view and reports success only after Hermes rejects the old identity.
+### Linux: an upstream bound to host loopback
 
-### Local checks
+Use the **standalone** host-network file, not a merge with the bridge-network configuration:
+
+```sh
+docker compose -f compose.host.yaml up --build -d
+```
+
+`compose.host.yaml` defaults to a WebUI loopback bind on port 8788. Set `WEBUI_HOST`, `WEBUI_PORT` and `PUBLIC_ORIGIN` deliberately for the desired browser-facing address. Host networking does not use a `ports` mapping. It allows the WebUI to reach a Hermes backend at `127.0.0.1:9119` without changing Hermes' bind.
+
+### Explicit trusted-LAN access without browser login
+
+An intentionally ungated loopback Hermes instance can be bridged only with **`HERMES_AUTH_MODE=trusted-local`** and an operator-supplied **`HERMES_DASHBOARD_SESSION_TOKEN`** matching Hermes. This is opt-in; `auth_required:false` cannot silently downgrade the default authenticated mode. The upstream must be literal loopback and the public origin a permitted private/loopback address.
+
+The server retains the token and uses the supported loopback REST/WS boundary. It does not invent a local user, provider or WS ticket, expose the token in browser URLs/configuration, or weaken the gated-mode protocol checks. The interface explicitly states **Trusted LAN · No login** and does not offer a fictional logout. Readiness truthfully reports `authenticatedMode:false`.
+
+**Anyone who can reach this address can use the agent and its tools.** Keep it restricted to a trusted LAN/VPN, not the public Internet. Origin checks and read-only REST filtering are not authentication or a restriction on native agent tools. Keep `.env` private; do not publish expanded Compose configuration or upstream logs that may contain query credentials. Full trust boundaries are in `docs/adr-018-trusted-local-access.md`.
+
+### Preserve an existing locally modified deployment
+
+Do not reset a working checkout, overwrite its `.env`, or blindly apply diagnostic-era auth patches. Follow **`docs/local-testing-upgrade.md`** to retain private patch backups, create a clean worktree, preserve the token file with mode 0600, and reuse the correct NG Compose project. That guide includes the reported LAN/8788 deployment and leaves the unrelated legacy service on 8787 untouched. No Docker storage, volume or disk cleanup is part of a WebUI upgrade.
+
+The runtime image is non-root and supports a read-only root filesystem. There is no runtime `apt-get` layer or disabled signature verification; Compose supplies the init process. `/healthz` is process liveness, while `/readyz` reports upstream readiness. The legacy local image alias `phase0` is retained for harness compatibility and is not a published release tag.
+
+## Develop and verify
+
+Use Node 22:
 
 ```sh
 npm ci
 npm run build
+npm run typecheck
 npm run lint
 npm test
 npm run test:contract
@@ -46,82 +69,66 @@ npx playwright install --with-deps chromium webkit
 npm run test:e2e:critical
 ```
 
-Every completed implementation increment is pushed remotely before the next increment. CI also retains exact source checkpoints and test evidence. The local Docker alias still uses `phase0` for harness compatibility; it is not a published release tag.
+`npm run dev:fixture` starts explicitly synthetic loopback fixtures for browser development. They are test-only and not copied into the runtime image. The modern root route and retained diagnostic route have separate browser coverage. Every completed implementation increment is committed and pushed remotely; CI retains source checkpoints and test evidence.
 
-## Mission
+**Not yet delivered or certified:** installed PWA/service worker, physical-phone keyboard testing, workspace/Git, model/profile mutation controls, voice/attachments, broader management, OAuth, multi-architecture publication and public-internet release hardening. Unsupported actions are omitted rather than presented as decorative controls. Browser emulation and automated accessibility checks are not full physical-device or WCAG certification.
 
-Build a modern, reliable, mobile-first web client for **vanilla Hermes Agent** that keeps the best interaction ideas from `hermes-webui`—persistent conversations, a strong chat surface, inline tools/reasoning, model/profile controls near the composer, and an optional workspace pane—without copying its runtime architecture or visual design.
-
-The finished product is a **single self-contained Docker image** for the WebUI. It must not install, import, embed, or require Hermes-Relay, Hermes Workspace, `hermes-webui`, `AIAgent`, or `SessionDB`. The only runtime dependency is an existing supported Hermes Agent Dashboard endpoint.
+## Architecture
 
 ```text
 Browser
   |
   v
-Hermes WebUI NG container :8787
-  |-- SPA (React/TypeScript — final shell planned)
-  |-- WebUI BFF + reverse proxy
-  |-- optional mounted-workspace file/Git API (later phase)
+Hermes WebUI NG container :8787 (configurable)
+  |-- React/TypeScript application at /
+  |-- troubleshooting interface at /diagnostic
+  |-- Node BFF + same-origin reverse proxy
   |
-  +----> vanilla Hermes Dashboard :9119
-           |-- /api/ws       native TUI Gateway JSON-RPC/WebSocket
-           |-- /api/*        sessions, profiles, models, config, skills, cron, voice, etc.
-           `-- /api/auth/*   browser authentication + one-use WS tickets
+  +----> vanilla Hermes Dashboard
+           |-- /api/ws       native Gateway JSON-RPC/WebSocket
+           |-- /api/*        sessions and supported management APIs
+           `-- /api/auth/*   browser auth + one-use tickets (gated mode)
 ```
 
-## Non-negotiable architecture
+No Hermes Python imports, `AIAgent`, `SessionDB`, direct `state.db`/config/profile access, second agent loop, Relay dependency or local conversation database. The production image does not contain a Hermes runtime. Optional future workspace features must act only on configured WebUI-owned mounts, never Hermes state.
 
-1. **Hermes owns agent behaviour and durable agent state.** The WebUI is a client, not another Hermes runtime.
-2. **Use Hermes' native TUI Gateway JSON-RPC WebSocket for live agent interaction.** Upstream identifies the TUI Gateway as the integration for custom hosts needing sessions, approvals, slash commands and streaming.
-3. **Use Dashboard REST for management and read-heavy surfaces.** Do not read `state.db`, `config.yaml`, profile directories or other Hermes internals directly.
-4. **Never import `AIAgent` or `SessionDB`.** Never execute the Hermes agent loop in the WebUI process.
-5. **Never create a second conversation/session database.** Browser UI preferences are fine; duplicate Hermes state is not.
-6. **No Hermes-Relay dependency.** Relay may be consulted as a reference implementation only.
-7. **One WebUI image, one public port.** No mandatory nginx sidecar, Redis, database, worker service or other WebUI dependency.
-8. **Mobile is a primary surface.** iPhone/iOS Safari/PWA and Android Chrome/PWA must be designed and tested alongside desktop from the first milestone.
-9. **Capabilities, not assumptions.** Detect supported Hermes endpoints/features and degrade cleanly.
-10. **Failures must be explicit.** A healthy REST call must never be presented as “chat connected” if the live Gateway socket is unavailable.
+REST health, authentication and Gateway readiness are independent. A feature is enabled only when its supported contract and implementation exist. Late responses must remain scoped to the active account/session/connection generation; losses must not result in automatic prompt or secret-response replay.
 
-## Pack contents
+## Design and implementation pack
 
-| File | Purpose |
+Read `AGENTS.md` and `BUILD-BRIEF.md` before changes. The original product, architecture and full delivery plan remain in:
+
+| Document | Purpose |
 |---|---|
-| `AGENTS.md` | Binding instructions for an implementation agent |
 | `docs/01-core-principles.md` | Product and engineering invariants |
-| `docs/02-product-ux-design.md` | Full UX, information architecture and component behaviour |
-| `docs/03-mobile-ios-android.md` | iPhone/Android/PWA rendering and interaction specification |
-| `docs/04-system-architecture.md` | Runtime architecture, state ownership, data flows |
-| `docs/05-hermes-protocol.md` | Hermes REST/JSON-RPC/auth integration contract |
-| `docs/06-bff-workspace-git-api.md` | WebUI BFF, proxy, filesystem and Git API |
-| `docs/07-security-auth.md` | Authentication, threat model and hardening |
-| `docs/08-frontend-implementation.md` | Recommended frontend stack and state architecture |
-| `docs/09-docker-deployment.md` | Image, configuration, Compose examples and deployment modes |
-| `docs/10-testing-quality.md` | Unit, contract, E2E, mobile, chaos, security and performance testing |
-| `docs/11-observability-operations.md` | Health, diagnostics, logs, metrics and support bundle |
-| `docs/12-phased-delivery-plan.md` | Build sequence with entry/exit gates |
+| `docs/02-product-ux-design.md` | Product UX and component behaviour |
+| `docs/03-mobile-ios-android.md` | Binding mobile/PWA expectations |
+| `docs/04-system-architecture.md` | Runtime and state ownership |
+| `docs/05-hermes-protocol.md` | REST/JSON-RPC/auth contract |
+| `docs/06-bff-workspace-git-api.md` | BFF and planned workspace API |
+| `docs/07-security-auth.md` | Threat model and authentication |
+| `docs/08-frontend-implementation.md` | Frontend architecture |
+| `docs/09-docker-deployment.md` | Deployment topology |
+| `docs/10-testing-quality.md` | Quality and verification strategy |
+| `docs/11-observability-operations.md` | Health and sanitised diagnostics |
+| `docs/12-phased-delivery-plan.md` | Original milestone sequence |
 | `docs/13-acceptance-criteria.md` | Release-level definition of done |
-| `docs/14-architecture-decisions.md` | Initial ADR set and unresolved decisions |
-| `docs/15-repo-layout-standards.md` | Proposed repo tree, coding standards and CI rules |
-| `docs/phase1-foundation.md` | Delivered foundation behaviour and verification boundaries |
-| `docs/phase2-chat.md` | Native chat alpha, session/history contract and verification limits |
-| `docs/phase3-interactions.md` | Initial agent interaction implementation and remaining M3 gates |
-| `docs/implementation-status.md` | Completed gates, exact compatibility and remaining work |
+| `docs/14-architecture-decisions.md` | Original ADRs |
+| `docs/15-repo-layout-standards.md` | Repository conventions |
+
+Delivered behaviour and deviations are documented in `phase1-foundation.md`, `phase2-chat.md`, `phase3-interactions.md`, `phase4-modern-shell.md`, `architecture-decisions.md`, `adr-017-modern-application-shell.md` and `adr-018-trusted-local-access.md` under `docs/`. **`docs/implementation-status.md` is the current gate/evidence record.**
 
 ## Required upstream references
 
-The implementation agent must read current upstream Hermes source before coding protocol/auth logic. At minimum:
+Inspect supported upstream Hermes sources before protocol/auth changes, recording the exact ref. At minimum:
 
-- `NousResearch/hermes-agent/website/docs/developer-guide/programmatic-integration.md`
-- `NousResearch/hermes-agent/tui_gateway/AGENTS.md`
-- `NousResearch/hermes-agent/tui_gateway/ws.py`
-- `NousResearch/hermes-agent/hermes_cli/web_routers/chat_ws.py`
-- `NousResearch/hermes-agent/hermes_cli/dashboard_auth/ws_tickets.py`
-- `NousResearch/hermes-agent/web/src/lib/api.ts`
-- `NousResearch/hermes-agent/web/src/lib/gatewayClient.ts`
-- `NousResearch/hermes-agent/website/docs/user-guide/features/web-dashboard.md`
+- `website/docs/developer-guide/programmatic-integration.md`
+- `tui_gateway/AGENTS.md`
+- `tui_gateway/ws.py`
+- `hermes_cli/web_routers/chat_ws.py`
+- `hermes_cli/dashboard_auth/ws_tickets.py`
+- `web/src/lib/api.ts`
+- `web/src/lib/gatewayClient.ts`
+- `website/docs/user-guide/features/web-dashboard.md`
 
-Do not freeze assumptions from this handover if upstream has changed. Preserve these principles while adapting to the current official contract.
-
-## Recommended implementation headline
-
-**“A modern Hermes-native web client: Hermes owns the agent; the WebUI owns the experience.”**
+These paths are in `NousResearch/hermes-agent`. Preserve the architecture while adapting to supported upstream changes; do not fill API gaps with internal imports or direct filesystem access.
