@@ -1,0 +1,33 @@
+{
+  "phase": 3,
+  "milestone_complete": false,
+  "status": "initial-implementation-verified",
+  "branch": "phase3-agent-interactions",
+  "pull_request": 1,
+  "phase2_main": "daf0bbfcf704ea588003f4816e49110ef431f061",
+  "head": "cda56a8240be57f530d729dcec783771f35337d4",
+  "ci_merge_ref": "d4c87108283bc64374dda166b540c8c9e413c48b",
+  "merge_ref_changed_files_from_head": [],
+  "upstream": "b6b53c69a6ed49cb099cf1bfe76b5e6edd718e5a",
+  "local_checks": { "build": "passed", "typecheck": "passed", "lint": "passed", "unit_passed": 92, "wire_passed": 12 },
+  "ci": {
+    "checkpoint": { "run": 34764903077, "conclusion": "success" },
+    "image": { "run": 34764903079, "conclusion": "success" },
+    "browsers": { "run": 34764903089, "conclusion": "success", "passed": 120, "failed": 0, "skipped": 0, "flaky": 0, "artifact_id": 10319259951, "artifact_sha256": "3d8b9b285cafcbfc29bd9b25d2e58ea9c5813d73195018fa48fdd48549d8e866" },
+    "vanilla_hermes": { "run": 34764903078, "conclusion": "success", "artifact_id": 10320805016, "artifact_sha256": "6e7f9a7eb778fdeace2e037d66df2694dfbe388097546b759b74d3333f5a22c1" }
+  },
+  "phase3_live_gates": [
+    "real-clarify-tool-and-batch-request",
+    "pending-clarify-recovered-after-reconnect",
+    "native-partial-batch-acknowledgement",
+    "confirmed-response-resumes-real-agent",
+    "next-turn-without-response-replay"
+  ],
+  "verification_boundary": {
+    "hermes": "Unmodified official Hermes serve; setup through its CLI",
+    "webui": "Actual non-root read-only production Docker image",
+    "model": "Deterministic loopback model endpoint",
+    "browser": "Synthetic Dashboard fixture; desktop and emulated mobile, not physical phones",
+    "remaining": ["Real approval, sudo and secret execution acceptance", "Broader tool/history and off-selection attention", "Additional adverse protocol/receipt cases", "Phase 3 sign-off"]
+  }
+}

@@ -3,6 +3,7 @@ import type { ConnectionStore } from './connection-store.js';
 import type { GatewayClient } from './gateway-client.js';
 import { ClientError } from './protocol.js';
 import { enterSends } from './chat-behaviour.js';
+import { AgentView } from './agent-view.js';
 import { TranscriptView } from './transcript-view.js';
 import type { SessionRef } from './session-rest.js';
 function element<T extends HTMLElement>(id:string):T { const node = document.getElementById(id); if (!node) throw new Error('Missing chat element'); return node as T; }
@@ -12,6 +13,7 @@ export class ChatView {
   private readonly dialog = element<HTMLDialogElement>('sessions-dialog');
   private readonly sidebar = element('conversation-sidebar');
   private readonly transcript = new TranscriptView(element('transcript'), () => this.scrollStatus());
+  private readonly agentView = new AgentView(element('agent-activity'));
   private readonly mobile = matchMedia('(max-width: 760px)');
   private indexSignature = '';
   private searchTimer?: ReturnType<typeof setTimeout>;
@@ -95,7 +97,10 @@ export class ChatView {
     element<HTMLButtonElement>('interrupt').disabled=!ready||chat.historical||chat.busy||!!state.submitting||stopping||!['running','waiting'].includes(state.phase);
     element('interrupt').textContent=stopping?'Interrupting…':'Interrupt';
     element<HTMLButtonElement>('refresh').disabled=!this.canRead()||chat.busy||!chat.selected;
-    element('attention').hidden=state.phase!=='waiting';
+    const pending = chat.native.activity.state.inputs.filter(p=>['pending','sending'].includes(p.status)).length;
+    element('attention').hidden=state.phase!=='waiting' && !pending;
+    element('attention').textContent=pending?'Hermes needs your input. Review the request cards below.':'Hermes is waiting for input. No supported pending card is available; refresh or use the original client.';
+    this.agentView.update(chat.native,ready&&!chat.busy,snapshot);
     element('delivery-unknown').hidden=!state.deliveryUnknown;
     const current=index.rows.find((row)=>row.id===chat.selected?.id && (!chat.selected?.profile||row.profile===chat.selected.profile));
     element('chat-title').textContent=current?.title||(!chat.selected?'Start a conversation':'Conversation');
@@ -117,7 +122,7 @@ export class ChatView {
     const loading=historyState.phase==='loading'||state.phase==='attaching';
     this.transcript.update(`${draftKey(chat.selected)}:${chat.historical?historyState.page?.offset??'loading':'live'}`,messages,streaming,
       loading?'Loading conversation…':error?'Conversation could not be loaded. Refresh or choose another session.':chat.selected?'No messages in this session yet.':'Your conversations stay in Hermes. Start a new session or open one from the sidebar.');
-    const indexSignature=JSON.stringify([index.rows,chat.selected]);
+    const indexSignature=JSON.stringify([index.rows,chat.selected,state.phase,pending]);
     if(indexSignature!==this.indexSignature){
       this.indexSignature=indexSignature;
       element('session-list').replaceChildren(...index.rows.map((row)=>{
@@ -127,7 +132,10 @@ export class ChatView {
         if(row.id===chat.selected?.id)button.setAttribute('aria-current','page');
         const name=document.createElement('strong');name.textContent=title;
         const meta=document.createElement('span');meta.textContent=`${row.profile??'default'} · ${row.messageCount} messages`;
-        button.append(name,meta);button.addEventListener('click',()=>this.open(row));li.append(button);return li;
+        button.append(name,meta);
+        if(row.id===chat.selected?.id && (pending||state.phase==='waiting'))button.append(document.createTextNode(' · Needs input'));
+        else if(row.id===chat.selected?.id && state.phase==='running')button.append(document.createTextNode(' · Running'));
+        button.addEventListener('click',()=>this.open(row));li.append(button);return li;
       }));
     }
     element('session-list').setAttribute('aria-busy',String(index.phase==='loading'));
@@ -140,6 +148,6 @@ export class ChatView {
   }
   clear():void {
     this.openedLocation=false;this.invalidLocation=false;clearTimeout(this.searchTimer);this.search.value='';this.prompt.value='';element<HTMLInputElement>('session-key').value='';
-    this.transcript.clear();this.indexSignature='';this.closeDrawer();
+    this.agentView.clear();this.transcript.clear();this.indexSignature='';this.closeDrawer();
   }
 }

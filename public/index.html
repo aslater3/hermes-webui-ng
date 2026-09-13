@@ -11,7 +11,7 @@
 <body>
 <main>
   <header>
-    <p class="eyebrow">HERMES WEBUI NG <span>PHASE 2</span></p>
+    <p class="eyebrow">HERMES WEBUI NG <span>PHASE 3 · DEVELOPMENT</span></p>
     <h1>Hermes conversations</h1>
     <p>Your history in Hermes. Your conversation, here.</p>
   </header>
@@ -90,11 +90,12 @@
     <p class="hint">The address fragment holds only the Hermes session key and profile. No transcript is saved in browser storage.</p></details>
     <p id="chat-error" role="alert" hidden></p>
     <p id="delivery-unknown" role="status" hidden>Prompt delivery was not confirmed. Inspect recovered history before sending again. Nothing has been replayed.</p>
-    <p id="attention" role="status" hidden>Hermes needs interactive input. Approval, clarify, sudo and secret controls are not implemented in this diagnostic. Use a supported Hermes client.</p>
+    <p id="attention" role="status" hidden>Hermes needs your input. Review the request cards below.</p>
     <div class="actions history-actions"><button id="older-history" type="button" disabled>Older messages</button><button id="newer-history" type="button" disabled>Newer messages</button><button id="return-live" type="button" hidden>Return to latest</button></div>
     <p id="history-status" class="hint"></p>
     <div id="transcript" class="transcript" aria-label="Conversation" tabindex="0"></div>
     <div class="scroll-actions"><button id="latest" class="secondary" type="button">Jump to latest</button><span id="new-activity" role="status" class="hint"></span></div>
+    <section id="agent-activity" class="agent-activity" hidden></section>
     <form id="prompt-form">
       <label>Prompt<textarea id="prompt" rows="3" maxlength="32768" placeholder="Message Hermes…" disabled></textarea></label>
       <div class="actions">
@@ -108,7 +109,7 @@
   </section>
   </div>
   <dialog id="sessions-dialog" aria-labelledby="conversations-title"></dialog>
-  <footer>Native chat alpha · No Relay · No local conversation database · Workspace, rich tools and PWA deferred</footer>
+  <footer>Native chat alpha · No Relay · No local conversation database · Workspace and PWA deferred</footer>
 </main>
 </body>
 </html>

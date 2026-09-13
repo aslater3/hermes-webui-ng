@@ -1,56 +1,53 @@
 # Implementation Status
 
-Updated: 13 September 2026. **Phase 2 / M2 Chat Alpha automated exit gates passed.** M0 and Phase 1 remain green. The interrupted run's application changes were already on remote main at `da2838d`; recovery restored that exact source archive, repeated the local checks and verified the completed CI reports. The verified application required no source reconstruction or further code changes for Phase 2 sign-off.
+Updated: 13 September 2026. **Phase 3 has a verified initial implementation on `phase3-agent-interactions`, in draft PR #1. M3 remains OPEN.** Main remains the signed-off Phase 2 deployment. Completed increments are committed and pushed before the next increment; the remote branch ref is verified.
 
-Completed increments are committed and pushed to remote main before the next increment. Evidence and sign-off are separate remote checkpoints.
+## Stable deployment and compatibility
 
-## Compatibility and evidence
+Phase 2 main: `daf0bbfcf704ea588003f4816e49110ef431f061`. Phase 2 tested application checkpoint `da2838db6f02b6296f21555a8adfa20ce2d4b7b1`: 73 unit tests, 9 wire contracts, 96 browser tests, Docker smoke and real-Hermes M0/M1/M2 acceptance passed. Those reports remain under `docs/evidence/`.
 
-Runtime-tested Hermes: `NousResearch/hermes-agent@b6b53c69a6ed49cb099cf1bfe76b5e6edd718e5a`. Live acceptance uses unmodified official `hermes serve` and the actual non-root, read-only WebUI Docker image. Only the model endpoint is a controlled test fixture; Hermes setup uses its own CLI. There are no WebUI Hermes imports, direct state/config operations or local conversation database.
+Runtime baseline remains `NousResearch/hermes-agent@b6b53c69a6ed49cb099cf1bfe76b5e6edd718e5a`. Relevant Phase 3 sources were additionally inspected at `422bc9bde9d212ab3741fbc45a871a3938436d59`; that newer runtime is not certified. The live harness uses unmodified official Hermes, its official CLI setup and the actual non-root/read-only WebUI Docker image. Only model decisions are controlled test responses.
 
-Phase 2 implementation inspected newer upstream session contracts at `b05a47b9d2df4d62124a80f70d657c6b8e1b07fb`; upstream main was observed at `fadcff92270dec3781b2d6b422d828424c105c67` during sign-off. Neither newer ref is runtime-certified. The tested compatibility baseline remains the exact pin above.
+## Phase 3 implemented so far
 
-Permanent reports: `evidence/phase0-acceptance.json`, `evidence/phase1-acceptance.json`, and **`evidence/phase2-acceptance.json`**. The Phase 2 report retains M0/M1 regression results, all eight Phase 2 live gates, browser counts, run IDs and artifact SHA-256 values. Recovery checked the downloaded artifact digests against GitHub metadata.
+- [x] Separate remote branch, leaving Phase 2 available for local operator testing.
+- [x] Validated bounded tool start/progress/complete projection, failure/duration fields and reasoning/thinking display.
+- [x] Approval once/deny controls; no persistent policy grants and no authorisation when command details are incomplete.
+- [x] Single/batch clarification, multi-select choices, per-question confirmations and supported cancel-all semantics.
+- [x] Masked sudo/secret fields; explicit send/skip and disclosure of Hermes-side secret storage.
+- [x] Native response admission scoped to the request and session generation; expiry/unsupported/unknown outcomes and no automatic response replay.
+- [x] Supported pending approval/clarify recovery. Unrecoverable credential prompts disable after disconnect rather than becoming actionable from old events.
+- [x] Stable desktop/mobile cards; focused question drafts survive streaming/refresh, credential values clear on submit/background/disconnect/selection/account change.
+- [x] Selected conversation running/input indicators and visible fallback when Hermes waits without a recoverable card.
+- [x] Socket-level synthetic coverage of all four request types, partial batch acknowledgement, denial, expiry and no credential leakage into transcript/proxy logs.
+- [x] Real-Hermes clarification tool lifecycle, pending batch recovery after reconnect, per-question acknowledgement and resumed/subsequent agent turns.
 
-## Completed Phase 2 scope
+## Current verified checkpoint
 
-- [x] Native create/resume/submit/stream/interrupt through the supported Gateway.
-- [x] Official REST session list, search and history, retaining each conversation's owning profile.
-- [x] Independent, generation-scoped list/search/history requests; stale account/selection responses cannot replace the active view.
-- [x] Desktop session sidebar and mobile modal drawer, search, list pagination, new/open/resume and browser back/forward navigation.
-- [x] Read-only saved history when REST is available but Gateway is disconnected; native reattachment after reconnect.
-- [x] Bounded transcript windows, stable completed message nodes, inert text/code-fence rendering and copy controls.
-- [x] Explicit bottom-follow/new-activity/Jump to latest behaviour without replacing earlier nodes on every delta.
-- [x] Desktop Enter/Shift+Enter, composition-safe input and explicit touch Send; guarded send/interrupt admission.
-- [x] Memory-only per-conversation drafts, bounded to 20 conversations and cleared at account boundaries; no draft or transcript browser persistence.
-- [x] Uncertain delivery remains visible; no automatic prompt replay and no locally invented queue.
-- [x] Older history replaces the view and disables sending until returning to latest.
+Branch head tested: **`cda56a8240be57f530d729dcec783771f35337d4`**. PR CI checked merge ref `d4c87108283bc64374dda166b540c8c9e413c48b`; comparison with the branch head returned no changed files. All four jobs passed. This checkpoint updates documentation/evidence only.
 
-## Tested code checkpoint
-
-**`da2838db6f02b6296f21555a8adfa20ce2d4b7b1`** — all four CI jobs passed. Subsequent evidence/sign-off commits change documentation only.
-
-| Gate | Result | GitHub Actions run |
+| Gate | Evidence | CI run |
 |---|---|---|
-| Compilation, lint, unit and synthetic wire contracts | 73 unit + 9 wire tests passed | `34761566071` |
-| Browser tests | 96 passed; 0 failures, skips or flaky results | `34761566063` |
-| Non-root read-only Docker smoke | Passed | `34761566028` |
-| Pinned vanilla-Hermes M0 + Phase 1 + Phase 2 acceptance | Passed | `34761566052` |
+| Build/typecheck/lint; 92 unit and 12 synthetic wire tests | Local checks passed; checkpoint CI passed | `34764903077` |
+| Browser suite | 120 passed; 0 skipped, failed or flaky | `34764903089` |
+| Non-root read-only production-image smoke | Passed | `34764903079` |
+| Pinned vanilla-Hermes M0/M1/M2 plus initial Phase 3 tool gate | Passed | `34764903078` |
 
-Fresh recovery checks on Node 22.16.0 also passed build, typecheck, lint, all 73 unit tests and all 9 socket-level contract tests. Browser/container jobs were verified in CI rather than rerun in the recovery container.
+Browser coverage is 30 cases in each of desktop Chromium, iPhone WebKit emulation, Android Chromium emulation and a 320px viewport. Phase 3 cases exercise all input types, approval reload/denial, masked-value clearing, credential recovery gaps, expiry, partial-question draft retention, reduced-height controls and account/selection clearing. Browser fixtures are explicitly synthetic. Physical phone keyboards and installed-PWA behavior are NOT certified by these tests.
 
-Browser coverage is 24 cases each in desktop Chromium, iPhone WebKit emulation, Android Chromium emulation and a 320px viewport. It covers repeated conversations, search, reload, history windows, interruption, streaming scroll behaviour, hostile text/code, composition keys, back/forward drafts, sign-out clearing, drawer focus and reduced-height non-overlap. Twelve screenshots are retained in the browser artifact. These tests are not physical-phone, real virtual-keyboard, Firefox or installed-PWA certification.
+The initial real Phase 3 test uses Hermes' actual `clarify` tool and callback. It verifies a two-question batch, its authoritative reconnect snapshot, a partial answer, final resolution and a subsequent normal turn. It does not claim native approval/sudo/secret execution acceptance. Permanent initial evidence: `docs/evidence/phase3-initial-checkpoint.json`.
 
-The real Phase 2 acceptance confirms two native conversations; official REST list/search/history/offset; repeated turns with selection isolation; read-only browsing and native reattachment; a fresh controller resuming authoritative history; an in-flight turn confirmed as interrupted by Hermes; a subsequent successful turn without replay; and account-boundary clearing. Original native reconnect and Phase 1 auth/capability gates also pass.
+## Remote increments
 
-## Remote implementation increments
+Scope/branch contract `c6ce7ae`; activity/input parser `32dd0fd`; native admission/recovery `da244e9`; socket scenarios/contracts `6f17503`; responsive cards and browser tests `b7cdaf2`; real clarification gate `cda56a8`. Each was pushed independently. No Phase 3 merge or release has occurred.
 
-REST clients `b2f6e0e`; generation-scoped browser `c6bde3c0`; native admission/bounds `c71aa7e`; browsing/interrupt wire contracts `b3cffae`; controller/drafts `2742529`; transcript/scroll/keyboard behaviour `ac2c42d`; account-reset ordering `3faa0b2`; adaptive view and acceptance tests in subsequent increments; final composer non-overlap and mobile navigation regression `da2838d`. These remain separate remote commits; the evidence checkpoint is `e724938`.
+## Remaining before Phase 3 sign-off
 
-## Limits and next phase
+- Real-Hermes approval, sudo and secret acceptance (currently covered by contract/browser fixtures and source inspection).
+- Broader tool-heavy workflows, historical tool/reasoning presentation and off-selection session attention/reconciliation. Current activity covers only the current/most-recent observed turn and selected conversation.
+- Additional adversarial receipt/payload and multi-request recovery hardening; a green initial suite is not full protocol/security certification.
+- Final Phase 3 acceptance report and review before marking PR #1 ready/merging.
 
-**Next: Phase 3 — reasoning, tool lifecycle cards and interactive approval/clarify/sudo/secret requests.** No Phase 3 implementation or completion is claimed. The current client indicates waiting for input but cannot answer these requests; use another supported Hermes client until Phase 3.
+The inspected upstream does not expose pending sudo/secret snapshots. Disconnect therefore disables observed credential cards and offers refresh/original-client/interrupt guidance; no history replay is used to invent live prompts. Tool/reasoning displays are bounded (40 tools, 16 input cards, 32 KiB text areas); large/deep data is visibly constrained. Conventional structured secret keys are redacted, but arbitrary unstructured tool output is not a universal secret scrubber and is never included in diagnostics.
 
-This is a chat alpha, not the final React/Vite shell or a production release. Rendering is escaped text plus bounded code fences, not complete GFM/highlighting. The mobile composer remains in normal document flow after fixing a sticky-overlap defect; a full-height keyboard-aware shell and real-device acceptance remain Phase 4. DOM windows are bounded, but native history RPC still fetches an upstream snapshot within the transport's response limit; this is not arbitrary-size transcript support.
-
-Workspace/Git, profile/model pickers, attachments/voice, OAuth, physical-device/PWA checks, public-internet hardening, multi-architecture publishing, SBOM/scanning, full accessibility/performance and broader browser gates remain outstanding. See `phase2-chat.md`, ADR-016 and `12-phased-delivery-plan.md`. Legacy local image aliases/version suffixes still reference `phase0`; they are not published release tags.
+No production Hermes imports, direct Hermes state/config operations, Relay or local transcript database have been introduced. Input responses are not composer drafts or browser persistence. Full React/PWA shell and physical mobile verification, workspace/Git, profile/model pickers, attachments/voice, OAuth and release hardening remain their planned later phases. See `phase3-interactions.md` and `12-phased-delivery-plan.md`.

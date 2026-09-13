@@ -1,3 +1,4 @@
+import { AgentActivity, inputRpc } from './agent-activity.js';
 import type { ConnectionState, GatewayClient } from './gateway-client.js';
 import { ClientError, record, textField, type GatewayEvent } from './protocol.js';
 
@@ -23,6 +24,7 @@ export interface SessionState {
 
 /** Disposable view of upstream state. Nothing is written to browser or server storage. */
 export class NativeSession {
+  readonly activity = new AgentActivity();
   state: SessionState = { phase: 'empty', messages: [], streaming: '', deliveryUnknown: false };
   private epoch = 0;
   private revision = 0;
@@ -58,6 +60,7 @@ export class NativeSession {
   }
   private connection(connection: ConnectionState): void {
     if (connection.phase !== 'ready') {
+      this.activity.disconnect();
       ++this.epoch;
       this.flight = undefined;
       if (this.state.storedId) this.publish({ phase: 'unknown', runtimeId: undefined,
@@ -76,6 +79,7 @@ export class NativeSession {
   }
   private async attach(method: string, storedId?: string, profile?: string, reconnect = false): Promise<void> {
     const epoch = ++this.epoch;
+    if (!reconnect) this.activity.reset();
     this.flight = undefined;
     this.submission = undefined; this.interruption = undefined;
     this.publish({
@@ -167,6 +171,7 @@ export class NativeSession {
             ? inflight.assistant.slice(-131072)
             : ''
         : '';
+      this.activity.snapshot(live);
       this.publish({
         messages,
         totalMessages: history.messages.length,
@@ -180,6 +185,7 @@ export class NativeSession {
   }
   private event(event: GatewayEvent): void {
     if (!this.state.runtimeId || event.session_id !== this.state.runtimeId) return;
+    if (this.activity.receive(event)) this.publish({});
     if (event.type === 'message.delta') {
       const payload = record(event.payload);
       if (typeof payload.text === 'string') {
@@ -193,7 +199,7 @@ export class NativeSession {
       // Completion precedes upstream cleanup; settled session.info must invalidate the
       // current snapshot too. Do not guess idle from message.complete alone.
       ['message.complete', 'session.info', 'error', 'session.interrupted'].includes(event.type) ||
-      event.type.endsWith('.request')
+      event.type.endsWith('.request') || event.type.endsWith('.expire')
     ) {
       ++this.revision;
       void this.refresh().catch(() => {});
@@ -238,8 +244,43 @@ export class NativeSession {
     });
     this.interruption = { epoch, promise }; return promise;
   }
+  /** The active request and session generation authorise one deliberate response, never a replay. */
+  async respond(key: string, value: string, questionId?: string): Promise<void> {
+    const epoch = this.epoch;
+    this.valid(epoch);
+    const runtimeId = this.state.runtimeId;
+    const input = this.activity.state.inputs.find((p) => p.key === key);
+    if (!runtimeId || !input || this.state.interrupting)
+      throw new ClientError('disconnected', 'No active agent request');
+    const rpc = inputRpc(input, { value, questionId }, runtimeId);
+    value = ''; // Do not retain a reply in a view model or a generic composer draft.
+    this.activity.status(key, 'sending'); ++this.revision; this.publish({});
+    try {
+      const pending = this.gateway.call(rpc.method, rpc.params);
+      // GatewayClient serialises synchronously. The pending RPC table stores no params/body.
+      for (const field of ['password', 'value', 'answer']) delete rpc.params[field];
+      const result = await pending;
+      this.valid(epoch);
+      this.activity.result(key, result, questionId);
+      ++this.revision; this.publish({});
+      await this.refresh();
+    } catch (error) {
+      if (epoch === this.epoch && !this.disposed) {
+        const current = this.activity.state.inputs.find((p) => p.key === key);
+        if (current?.status === 'sending') this.activity.status(key,
+          error instanceof ClientError && error.rpcCode === -32601 ? 'unsupported' :
+          error instanceof ClientError && error.rpcCode === 4009 ? 'expired' : 'unknown');
+        this.publish({});
+      }
+      // Expiry, rejection and lost acknowledgements are never converted into a second send.
+      throw error instanceof ClientError ? error : new ClientError('protocol', 'Agent response failed');
+    } finally {
+      for (const field of ['password', 'value', 'answer']) delete rpc.params[field];
+    }
+  }
   dispose(): void {
     this.disposed = true;
+    this.activity.reset();
     ++this.epoch;
     this.unsubscribe.forEach((unsubscribe) => unsubscribe());
     this.listeners.clear();
