@@ -34,6 +34,8 @@ jobs:
       - name: Compile recovered sources
         run: npx tsc
       - name: Lint recovered sources
-        run: npx eslint server tests
+        run: npm run lint
       - name: Unit tests
         run: npm test
+      - name: Synthetic wire contracts
+        run: npm run test:contract
