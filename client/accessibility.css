@@ -15,3 +15,8 @@ button:not(:disabled), summary { transition: none; }
 /* The selected row has a tinted background: its faint metadata token was 4.34:1
    in light mode. Use the muted text token on both desktop and drawer rows. */
 .session-row.selected .row-meta { color: var(--muted); }
+
+/* Wide Markdown belongs in its keyboard-accessible scroll region, not in
+   compressed letter-by-letter columns or a page-wide horizontal overflow. */
+.table-scroll table { min-width: 34rem; overflow-wrap: normal; word-break: normal; }
+.table-scroll th { white-space: nowrap; }
