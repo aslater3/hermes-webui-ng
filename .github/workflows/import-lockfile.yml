@@ -1,0 +1,42 @@
+name: Import captured dependency lockfile
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - .github/workflows/import-lockfile.yml
+permissions:
+  contents: write
+  actions: read
+jobs:
+  import:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: phase0-reference-tooling
+          run-id: 34749877033
+          github-token: ${{ github.token }}
+          path: /tmp/phase0-reference
+      - name: Import the exact lockfile used for local validation
+        run: |
+          node --input-type=module <<'JS'
+          import fs from 'node:fs';
+          const manifest = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+          const lock = JSON.parse(fs.readFileSync('/tmp/phase0-reference/tooling/package-lock.json', 'utf8'));
+          lock.name = manifest.name;
+          lock.version = manifest.version;
+          Object.assign(lock.packages[''], {
+            name: manifest.name, version: manifest.version, license: manifest.license,
+            devDependencies: manifest.devDependencies, engines: manifest.engines,
+          });
+          fs.writeFileSync('package-lock.json', JSON.stringify(lock, null, 2) + '\n');
+          JS
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add package-lock.json
+          if ! git diff --cached --quiet; then
+            git commit -m 'build: import verified Phase 0 dependency lockfile'
+            git push
+          fi

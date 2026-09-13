@@ -1,0 +1,34 @@
+{
+  "name": "hermes-webui-ng",
+  "version": "0.0.1",
+  "description": "Hermes-native standalone WebUI — Phase 0 protocol spike",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "start": "node build/server/index.js",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint server src tests",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "test": "node --test build/tests/unit/*.test.js",
+    "test:contract": "node --test build/tests/contract/*.test.js",
+    "test:e2e:critical": "playwright test",
+    "test:live": "node build/tests/integration/live.js",
+    "dev:fixture": "node scripts/dev-fixture.mjs"
+  },
+  "license": "UNLICENSED",
+  "devDependencies": {
+    "@playwright/test": "1.63.0",
+    "@types/node": "22.20.2",
+    "@types/ws": "8.18.1",
+    "eslint": "9.39.5",
+    "prettier": "3.9.6",
+    "typescript": "5.9.3",
+    "typescript-eslint": "8.70.0",
+    "ws": "8.21.3"
+  },
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22 <23"
+  }
+}
