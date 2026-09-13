@@ -4,6 +4,7 @@ import App from './App.js';
 import { AppRuntime } from './runtime.js';
 import { applyTheme, readTheme } from './preferences.js';
 import './styles.css';
+import './accessibility.css';
 applyTheme(readTheme());
 const runtime = new AppRuntime(location.origin);
 class ErrorBoundary extends Component<{ children: ReactNode }, { failed: boolean }> {

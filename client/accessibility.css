@@ -1,0 +1,4 @@
+/* A theme changes foreground and background together. Interpolating individual
+   controls between palettes creates low-contrast frames (320px axe regression).
+   Keep drawer/overlay transforms; do not animate theme-dependent colours. */
+button:not(:disabled), summary { transition: none; }
