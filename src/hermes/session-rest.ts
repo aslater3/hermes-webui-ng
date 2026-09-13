@@ -1,3 +1,4 @@
+import { displayMessage, type DisplayMessage } from './history-message.js';
 import { ClientError, record, textField } from './protocol.js';
 
 export interface SessionRef { id: string; profile?: string }
@@ -5,7 +6,7 @@ export interface SessionRow extends SessionRef {
   title: string; preview: string; source: string; lastActive: number; messageCount: number;
 }
 export interface SessionPage { rows: SessionRow[]; total: number; offset: number; limit: number }
-export interface HistoryMessage { role: string; text: string; rowId?: number; truncated?: boolean }
+export type HistoryMessage = DisplayMessage;
 export interface HistoryPage extends SessionRef {
   messages: HistoryMessage[]; offset: number; limit: number; returned: number;
 }
@@ -74,11 +75,8 @@ export function historyPage(input: unknown, ref: SessionRef, offset: number): Hi
   return { id: sessionId(textField(data, 'session_id')),
     profile: profileName(typeof data.profile === 'string' ? data.profile : ref.profile),
     offset, limit: HISTORY_LIMIT, returned,
-    messages: data.messages.map((item: unknown) => {
-      const message = record(item), content = message.content;
-      return { role: textField(message, 'role').slice(0, 32),
-        text: typeof content === 'string' ? content.slice(0, MESSAGE_LIMIT) : '[Non-text entry — richer rendering is not available yet]',
-        ...(typeof message.id === 'number' && Number.isSafeInteger(message.id) ? { rowId: message.id } : {}),
-        ...(typeof content === 'string' && content.length > MESSAGE_LIMIT ? { truncated: true } : {}) };
+    messages: data.messages.flatMap((item: unknown): HistoryMessage[] => {
+      const message = displayMessage(item, 'rest');
+      return message ? [message] : [];
     }) };
 }

@@ -1,3 +1,4 @@
+import { displayMessage, type DisplayMessage } from './history-message.js';
 import { NativeSettings } from './native-settings.js';
 import { agentMetadata, type AgentMetadata } from './model-catalog.js';
 import { AgentActivity, inputRpc } from './agent-activity.js';
@@ -5,11 +6,7 @@ import type { ConnectionState, GatewayClient } from './gateway-client.js';
 import { ClientError, record, textField, type GatewayEvent } from './protocol.js';
 
 type Transport = Pick<GatewayClient, 'call' | 'onEvent' | 'onState' | 'state'>;
-export interface Message {
-  role: string;
-  text: string;
-  truncated?: boolean;
-}
+export type Message = DisplayMessage;
 export interface SessionState {
   phase: 'empty' | 'attaching' | 'idle' | 'running' | 'waiting' | 'unknown' | 'error';
   storedId?: string;
@@ -166,13 +163,9 @@ export class NativeSession {
       const live = record(rawLive);
       if (!Array.isArray(history.messages) || typeof live.running !== 'boolean')
         throw new ClientError('protocol', 'Unsupported native session snapshot');
-      const messages = history.messages.slice(-100).map((item: unknown): Message => {
-        const message = record(item);
-        return {
-          role: textField(message, 'role').slice(0, 32),
-          text: typeof message.text === 'string' ? message.text.slice(0, 131072) : '[Non-text entry]',
-          ...(typeof message.text === 'string' && message.text.length > 131072 ? { truncated: true } : {}),
-        };
+      const messages = history.messages.slice(-100).flatMap((item: unknown): Message[] => {
+        const message = displayMessage(item, 'native');
+        return message ? [message] : [];
       });
       const inflight =
         typeof live.inflight === 'object' && live.inflight !== null ? record(live.inflight) : {};
