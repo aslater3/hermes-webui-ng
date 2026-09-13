@@ -2,7 +2,7 @@
 
 A standalone, modern web client for **vanilla Hermes Agent**. Hermes owns the agent and durable conversations; the WebUI owns the browser experience.
 
-> Development build. The modern React shell is the default application at `/`; the former diagnostic interface remains available at `/diagnostic`. Phase 4A brings the usable application shell forward, not full PWA or production-release certification. See `docs/implementation-status.md` for the exact verified commit and remaining gates.
+> Development build. The modern React shell is the default application at `/`; the former diagnostic interface remains available at `/diagnostic`. Phase 4B adds native composer controls and typed history rendering. This is not full PWA or production-release certification. See `docs/implementation-status.md` for the exact verified commit and remaining gates.
 
 ## The application
 
@@ -10,9 +10,15 @@ The chat-first interface provides a full-height desktop workspace and mobile con
 
 Light, dark and system themes, a keyboard/touch-accessible command palette, safe GFM Markdown/tables, highlighted code, and code copy/wrap controls are implemented. Tables and code scroll within their own regions instead of widening the phone viewport. Remote images do not load automatically, raw HTML is not injected, and unusually large messages use a plain-text fallback.
 
-The existing native workflow remains: new/open/resume, repeated turns, interrupt, read-only saved history while the Gateway is disconnected, authoritative recovery after reload and no automatic replay of unacknowledged prompts. Drafts are bounded tab-memory only. Appearance may persist in the browser; transcripts, credentials and drafts do not.
+The composer has **Profile, Model and Reasoning** controls backed by native Hermes RPC. Models come from the configured provider inventory, with separate confirmation when Hermes flags additional cost. Settings apply to an attached idle conversation and are read back from Hermes; unknown acknowledgements require read-only recovery, not automatic replay. A profile pick starts a separate conversation and retains old history/drafts under their owner. Choosing a model before the first prompt preserves the draft. Unsupported reasoning is explained rather than guessed; Hermes effort names are not a guarantee of every provider's support.
 
-Initial Phase 3 reasoning/tool cards and approval/clarify/sudo/secret inputs are integrated. Approval and clarification recover from supported native snapshots. Credential cards become non-actionable after disconnect where Hermes has no recovery snapshot. Values clear on submission and lifecycle/account boundaries. **M3 remains open:** live approval/sudo/secret execution acceptance, historical activity and off-selection attention are not completed by the new shell.
+**Reasoning compatibility caveat:** the tested Hermes setter can fall back to the profile default if another client deletes the live runtime during a setting change. The WebUI preflights the session and blocks observed stale state, but cannot make that upstream operation atomic. Avoid deleting the same conversation in another client while applying effort. The dialog and `docs/phase4b-composer-controls.md` disclose this remaining limitation.
+
+The existing native workflow remains: new/open/resume, repeated turns, interrupt, read-only saved history while the Gateway is disconnected, authoritative recovery after reload and no automatic replay of unacknowledged prompts. Drafts are bounded tab-memory only. Appearance may persist in the browser; transcripts, credentials, model preferences and drafts do not.
+
+Saved native tool summaries have their own expandable cards rather than `[Non-text entry]` assistant bubbles. Known structured text, sidecar replies and public reasoning are recovered from history; missing tool output and encrypted reasoning are not fabricated or dumped into chat. Decorative message SVGs are hidden from the accessibility tree without stripping legitimate SVG words or code from message content.
+
+Initial Phase 3 reasoning/tool cards and approval/clarify/sudo/secret inputs are integrated. Approval and clarification recover from supported native snapshots. Credential cards become non-actionable after disconnect where Hermes has no recovery snapshot. Values clear on submission and lifecycle/account boundaries. **M3 remains open:** live approval/sudo/secret execution acceptance, broader historical activity and off-selection attention are not completed by this slice.
 
 The runtime-tested Hermes baseline is **`NousResearch/hermes-agent@b6b53c69a6ed49cb099cf1bfe76b5e6edd718e5a`**. Newer upstream source inspections are not runtime certifications. Tests separately cover the browser fixture, the actual Docker image and unmodified Hermes with a deterministic model endpoint. Evidence and verification limitations are recorded under `docs/evidence/`.
 
@@ -71,7 +77,9 @@ npm run test:e2e:critical
 
 `npm run dev:fixture` starts explicitly synthetic loopback fixtures for browser development. They are test-only and not copied into the runtime image. The modern root route and retained diagnostic route have separate browser coverage. Every completed implementation increment is committed and pushed remotely; CI retains source checkpoints and test evidence.
 
-**Not yet delivered or certified:** installed PWA/service worker, physical-phone keyboard testing, workspace/Git, model/profile mutation controls, voice/attachments, broader management, OAuth, multi-architecture publication and public-internet release hardening. Unsupported actions are omitted rather than presented as decorative controls. Browser emulation and automated accessibility checks are not full physical-device or WCAG certification.
+Diagnostics now identify phase 4 / milestone 4B. They contain only bounded metadata: no prompt bodies, settings arguments, selected model values or credentials. This is a development milestone label, not a claim that the full mobile/PWA phase is complete.
+
+**Not yet delivered or certified:** installed PWA/service worker, physical-phone keyboard testing, workspace/Git, global provider/profile management, slash-command polish, voice/attachments, broader management, OAuth, multi-architecture publication and public-internet release hardening. Unsupported actions are omitted rather than presented as decorative controls. Browser emulation and automated accessibility checks are not full physical-device or WCAG certification.
 
 ## Architecture
 
@@ -92,7 +100,7 @@ Hermes WebUI NG container :8787 (configurable)
 
 No Hermes Python imports, `AIAgent`, `SessionDB`, direct `state.db`/config/profile access, second agent loop, Relay dependency or local conversation database. The production image does not contain a Hermes runtime. Optional future workspace features must act only on configured WebUI-owned mounts, never Hermes state.
 
-REST health, authentication and Gateway readiness are independent. A feature is enabled only when its supported contract and implementation exist. Late responses must remain scoped to the active account/session/connection generation; losses must not result in automatic prompt or secret-response replay.
+REST health, authentication and Gateway readiness are independent. A feature is enabled only when its supported contract and implementation exist. Late responses must remain scoped to the active account/session/connection generation; losses must not result in automatic prompt, settings or secret-response replay.
 
 ## Design and implementation pack
 
@@ -116,7 +124,7 @@ Read `AGENTS.md` and `BUILD-BRIEF.md` before changes. The original product, arch
 | `docs/14-architecture-decisions.md` | Original ADRs |
 | `docs/15-repo-layout-standards.md` | Repository conventions |
 
-Delivered behaviour and deviations are documented in `phase1-foundation.md`, `phase2-chat.md`, `phase3-interactions.md`, `phase4-modern-shell.md`, `architecture-decisions.md`, `adr-017-modern-application-shell.md` and `adr-018-trusted-local-access.md` under `docs/`. **`docs/implementation-status.md` is the current gate/evidence record.**
+Delivered behaviour and deviations are documented in `phase1-foundation.md`, `phase2-chat.md`, `phase3-interactions.md`, `phase4-modern-shell.md`, `phase4b-composer-controls.md`, `architecture-decisions.md` and ADRs 017–019 under `docs/`. **`docs/implementation-status.md` is the current gate/evidence record.**
 
 ## Required upstream references
 
@@ -130,5 +138,7 @@ Inspect supported upstream Hermes sources before protocol/auth changes, recordin
 - `web/src/lib/api.ts`
 - `web/src/lib/gatewayClient.ts`
 - `website/docs/user-guide/features/web-dashboard.md`
+
+For the composer controls also inspect `tui_gateway/methods_complete.py`, `methods_profiles.py`, `methods_config.py`, `methods_config_set.py`, `methods_session.py`, `model_switch.py`, `session_history.py` and `hermes_cli/inventory.py`.
 
 These paths are in `NousResearch/hermes-agent`. Preserve the architecture while adapting to supported upstream changes; do not fill API gaps with internal imports or direct filesystem access.
