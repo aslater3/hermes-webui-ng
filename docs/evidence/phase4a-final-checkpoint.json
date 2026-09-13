@@ -1,0 +1,54 @@
+{
+  "milestone": "Phase 4A final pre-merge verification",
+  "date": "2026-09-13",
+  "branchCommit": "a3557abf7d8425fba7536c833eba2204a6aee15d",
+  "testedMergeRef": "0a53cc110926724db207c058bcf55658aa1b9187",
+  "treeComparison": "GitHub compare against branchCommit returned no changed files",
+  "hermesRef": "b6b53c69a6ed49cb099cf1bfe76b5e6edd718e5a",
+  "supersedesForMerge": "phase4a-acceptance.json remains the earlier verified 4aeb23b checkpoint; this report additionally verifies DocumentRequests and its runtime wiring",
+  "results": {
+    "build": "passed",
+    "typecheck": "passed",
+    "lint": "passed",
+    "unitPassed": 105,
+    "wirePassed": 16,
+    "browserPassed": 204,
+    "browserFailed": 0,
+    "browserSkipped": 0,
+    "browserFlaky": 0,
+    "dockerSmoke": "passed",
+    "vanillaHermesGated": "passed, including M0/M1/M2 and initial M3 clarification gates",
+    "vanillaHermesTrustedLocal": "passed"
+  },
+  "runs": {
+    "checkpoint": 34778282913,
+    "browsers": 34778282919,
+    "image": 34778282915,
+    "vanillaHermes": 34778282912
+  },
+  "artifacts": {
+    "source": { "id": 10324153549, "sha256": "418fee0034a6c14db700700b86bd615ebfe40c96fd6bbf0296fbe320cc14e545" },
+    "browsers": { "id": 10324128923, "sha256": "3ca9f0d65e98c880d4657376510cdb6b89dea68400b4980cfc99fad1838b09bf" },
+    "vanillaHermes": { "id": 10324485062, "sha256": "5b25931d3982ef7e0c585eef23c42ed5433cdb4a601d2fee4ff9c1ff96454b67" },
+    "integrity": "All three downloaded ZIP digests matched GitHub metadata"
+  },
+  "localChecks": "The exact source artifact also passed fresh build, web/server typecheck, lint, 105 unit tests and 16 wire contracts on Node 22.16.0; browser and Docker results are CI execution",
+  "navigationHardening": "Deferred REST requests are aborted before document teardown and cannot re-enter the network stack while the document is paused. Cached document restoration gets a fresh request scope. This complements non-cached page-exit disposal, not a CORS bypass or error-filter workaround.",
+  "browserCoverage": "51 cases each in desktop Chromium, iPhone WebKit emulation, Android Chromium emulation and narrow 320px Chromium; modern and diagnostic routes have separate scenarios",
+  "nativeLocalGates": [
+    "upstream-rest-still-requires-operator-token",
+    "explicit-local-state-and-browser-compatible-upgrade",
+    "native-prompt-completes-through-local-container",
+    "network-reconnect-without-replay",
+    "fresh-client-authoritative-rest-and-native-history",
+    "disconnect-is-not-fabricated-logout",
+    "redacted-report-and-preserved-browser-origin-guards"
+  ],
+  "scopeLimits": [
+    "Hermes runtime is unmodified and configured only through its CLI in isolated test homes; only model decisions are deterministic fixtures",
+    "Trusted-local deliberately has no browser authentication; restrict network reachability",
+    "No WebUI Hermes imports, direct Hermes state/config access, Relay or local conversation database",
+    "M3 native approval/sudo/secret execution and historical/off-selection activity remain open",
+    "Physical mobile/keyboard/PWA, full accessibility, workspace/model controls, OAuth and public-internet/release hardening are not certified"
+  ]
+}
