@@ -1,44 +1,38 @@
 # Implementation Status
 
-Updated: 13 September 2026. Recovery is being committed in small, sequential slices.
+Updated: 13 September 2026. Each completed slice is committed, pushed and checked remotely before the next slice begins.
 
 ## Upstream baseline
 
 - Repository: `NousResearch/hermes-agent`
-- Pinned ref: `b6b53c69a6ed49cb099cf1bfe76b5e6edd718e5a`
-- Reference capture: GitHub Actions run `34749877033`, artifact `10315577369`.
-- This is the recovery baseline, not yet a claim of runtime compatibility.
+- Pinned ref: `b6b53c69a6ed49cb099cf1bfe76b5e6edd718e5a`; confirmed still upstream main during recovery.
+- Reference capture: run `34749877033`, artifact `10315577369`.
+- Runtime compatibility is not yet proven.
 
 ## Current phase
 
-Phase 0 — recover and verify the authenticated Dashboard proxy and native Gateway protocol spike.
+Phase 0 — authenticated Dashboard proxy and native Gateway protocol spike.
 
 ## Recovery checkpoints
 
-- [x] Original handover and dependency lockfile present in GitHub.
-- [x] Pinned upstream reference and development tooling recovered from the capture artifact.
-- [x] TypeScript, lint, formatting and build scaffolding restored.
-- [x] Proxy configuration, header/origin/path validation restored; five fresh unit tests pass locally.
-- [ ] Streaming HTTP/WebSocket transport committed and contract-tested.
-- [ ] Dashboard/Gateway clients and native-session recovery restored.
+- [x] Handover, lockfile, strict TypeScript and quality tooling present remotely.
+- [x] HTTP/WebSocket proxy, configuration and origin/path/header guards restored.
+- [x] Every-push checkpoint workflow; initial compile/lint/five-unit-test run `34752880638` passed.
+- [x] Official Dashboard login/identity/ticket client and JSON-RPC boundary restored.
+- [x] Ten local unit tests pass with TypeScript compilation and ESLint after the auth/client slice.
+- [ ] Gateway connection state machine and native-session recovery restored.
+- [ ] Proxy/Gateway synthetic integration tests restored.
 - [ ] Responsive diagnostic page and browser tests restored.
 - [ ] Container and controlled vanilla-Hermes integration restored and executed.
 
 ## Milestones
 
-- [ ] M0 Protocol Spike
-- [ ] M1 Connected Shell
-- [ ] M2 Chat Alpha
-- [ ] M3 Agent Interaction Beta
-- [ ] M4 Mobile/PWA Beta
-- [ ] M5 Workspace Beta
-- [ ] M6 Release Candidate
-- [ ] v1.0
+M0 Protocol Spike: OPEN. M1 Connected Shell through v1.0: not started.
 
-## Verification
+## Verification boundaries
 
-Current local recovery verification: TypeScript compilation and ESLint pass for restored server and security tests; five unit tests pass. Historical original-run passes are not current verification. The real-Hermes container gate remains open. Synthetic fixtures must not be represented as vanilla-Hermes proof.
+Historical original-run passes are not current verification. Current local evidence: 10 unit tests, compilation and lint pass. The real-Hermes container gate remains open. Synthetic tests must not be labelled vanilla-Hermes proof. Physical iOS/Android, PWA, OAuth and public-internet deployment remain unverified.
 
-## Known gaps and boundaries
+## Known gaps
 
-The final React interface, rich tool/interactive prompt cards, session sidebar, profile/model controls, workspace and PWA are later phases. No Hermes imports, direct Hermes state/config access or local conversation database are permitted. Physical iOS/Android and PWA checks remain unverified.
+Final React interface, session sidebar/search, tool and interactive prompt cards, profile/model controls, workspace and PWA are later phases. No Hermes imports, direct Hermes state/config access or local conversation database are permitted. See `architecture-decisions.md` for supported subprotocol admission and Phase 0 scope.
