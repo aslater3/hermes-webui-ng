@@ -56,7 +56,7 @@ export class ChatView {
     };
     window.addEventListener('popstate',navigate); window.addEventListener('hashchange',navigate);
   }
-  private canRead():boolean{return this.foundation.state.auth==='signed-in'&&!this.foundation.state.offline;}
+  private canRead():boolean{return this.foundation.hasAccess&&!this.foundation.state.offline;}
   activate():void {
     this.chat.setEnabled(this.canRead());
     if(this.canRead()&&!this.openedLocation){

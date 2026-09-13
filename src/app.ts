@@ -47,7 +47,7 @@ function render(): void {
     banner.textContent = connectionSummary(connection, gateway.state);
     banner.dataset.state = connection.offline ? 'offline' : gateway.state.phase;
     element('gateway-state').textContent = gateway.state.phase;
-    loginForm.hidden = connection.auth === 'signed-in';
+    loginForm.hidden = foundation.hasAccess;
     const providers = foundation.providers.filter((provider) => provider.supports_password);
     const signature = JSON.stringify(providers);
     if (signature !== providersSignature) {
@@ -56,7 +56,7 @@ function render(): void {
       if (providers.some((provider) => provider.name === selected)) select.value = selected;
       providersSignature = signature;
     }
-    element('provider-note').hidden = providers.length !== 0 || connection.rest !== 'healthy';
+    element('provider-note').hidden = connection.auth === 'local-access' || providers.length !== 0 || connection.rest !== 'healthy';
     element<HTMLButtonElement>('login').disabled = connection.busy || connection.offline || connection.auth === 'checking' || !providers.length;
     for (const id of ['reconnect', 'disconnect', 'signout', 'refresh-capabilities'])
       element<HTMLButtonElement>(id).disabled = connection.busy || connection.offline;
