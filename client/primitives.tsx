@@ -6,7 +6,7 @@ export function IconButton({ label, children, ...props }: ButtonHTMLAttributes<H
   return <button type="button" className="icon-button" aria-label={label} title={label} {...props}>{children}</button>;
 }
 export function Brand({ compact = false }: { compact?: boolean }) {
-  return <div className="brand"><span className="brand-mark" aria-hidden="true"><HermesMark size={19}/></span>{!compact && <><span>HermesUI</span><span className="brand-ng">NG</span></>}</div>;
+  return <div className="brand"><span className="brand-mark" aria-hidden="true"><HermesMark size={19} tone="on-accent"/></span>{!compact && <><span>HermesUI</span><span className="brand-ng">NG</span></>}</div>;
 }
 export function useMedia(query: string) {
   const [matches, setMatches] = useState(() => matchMedia(query).matches);
