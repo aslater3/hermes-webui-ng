@@ -1,0 +1,12 @@
+.git
+node_modules
+build
+dist
+.env
+.env.*
+playwright-report
+test-results
+coverage
+upstream
+hermes-upstream
+*.log

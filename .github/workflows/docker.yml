@@ -1,0 +1,44 @@
+name: Production image smoke
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  image:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Build single runtime image
+        run: docker build -t hermes-webui-ng:phase0 .
+      - name: Read-only non-root smoke with unavailable upstream
+        run: |
+          set -euo pipefail
+          docker run -d --name webui --read-only --tmpfs /tmp:rw,noexec,nosuid,size=16m \
+            --cap-drop ALL --security-opt no-new-privileges:true \
+            -p 127.0.0.1:8787:8787 \
+            -e HERMES_DASHBOARD_URL=http://127.0.0.1:1 \
+            -e PUBLIC_ORIGIN=http://127.0.0.1:8787 hermes-webui-ng:phase0
+          for attempt in $(seq 1 30); do
+            curl --fail --silent http://127.0.0.1:8787/healthz && break
+            sleep 1
+          done
+          curl --fail --silent http://127.0.0.1:8787/healthz
+          curl --fail --silent http://127.0.0.1:8787/ | grep 'Native connection diagnostic'
+          test "$(curl --silent -o /dev/null -w '%{http_code}' http://127.0.0.1:8787/readyz)" = 503
+          test "$(docker exec webui id -u)" = 10001
+          docker exec webui sh -c 'test ! -d node_modules && test ! -d build/tests && ! command -v python3'
+          docker stop --time 10 webui
+          test "$(docker inspect -f '{{.State.ExitCode}}' webui)" = 0
+      - name: Container diagnostics and cleanup
+        if: always()
+        run: |
+          docker logs webui || true
+          docker rm -f webui || true

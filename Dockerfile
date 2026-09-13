@@ -1,0 +1,27 @@
+FROM node:22-bookworm-slim AS build
+WORKDIR /app
+COPY package.json package-lock.json ./
+RUN npm ci
+COPY tsconfig.json ./
+COPY server ./server
+COPY src ./src
+COPY tests ./tests
+COPY public ./public
+COPY scripts ./scripts
+RUN npm run typecheck && npm run build
+
+FROM node:22-bookworm-slim AS runtime
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends ca-certificates git tini \
+ && rm -rf /var/lib/apt/lists/*
+WORKDIR /app
+ENV NODE_ENV=production HOST=0.0.0.0 PORT=8787
+COPY --from=build /app/build/server ./build/server
+COPY --from=build /app/dist ./dist
+COPY --from=build /app/package.json ./package.json
+USER 10001:10001
+EXPOSE 8787
+HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
+  CMD node -e "fetch('http://127.0.0.1:'+process.env.PORT+'/healthz',{signal:AbortSignal.timeout(3000)}).then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+ENTRYPOINT ["/usr/bin/tini", "--"]
+CMD ["node", "build/server/index.js"]
