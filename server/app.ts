@@ -1,0 +1,122 @@
+import { createServer } from 'node:http';
+import { readFile } from 'node:fs/promises';
+import { join } from 'node:path';
+import { randomUUID } from 'node:crypto';
+import type { Duplex } from 'node:stream';
+import type { Config } from './config.js';
+import { PROXY_PREFIX } from './config.js';
+import { allowedRequest, upstreamPath } from './proxy/headers.js';
+import { json, proxyHttp, proxyUpgrade, refuseUpgrade, type Log } from './proxy/hermes-proxy.js';
+
+export function createApp(config: Config, log: Log = (event) => console.log(JSON.stringify(event))) {
+  const sockets = new Set<Duplex>();
+  const server = createServer(
+    { maxHeaderSize: 16384, requestTimeout: 20_000, headersTimeout: 15_000 },
+    (req, res) => {
+      const raw = req.url ?? '/';
+      const requestId = randomUUID();
+      if (raw === '/healthz' && req.method === 'GET') {
+        json(res, 200, { ok: true, version: '0.0.1-phase0' });
+        return;
+      }
+      if (!allowedRequest(req, config)) {
+        json(res, 403, { error: { code: 'ORIGIN_REJECTED', requestId } });
+        return;
+      }
+      if (raw.startsWith(`${PROXY_PREFIX}/`)) {
+        const path = upstreamPath(raw);
+        if (!path) {
+          json(res, 400, { error: { code: 'INVALID_PROXY_PATH', requestId } });
+          return;
+        }
+        proxyHttp(req, res, path, config, requestId, log);
+        return;
+      }
+      if (raw === '/readyz' && req.method === 'GET') {
+        void fetch(new URL('/api/status', config.upstream), {
+          headers: { host: config.publicOrigin.host },
+          signal: AbortSignal.timeout(3000),
+          redirect: 'error',
+        })
+          .then(async (response) => {
+            const data: unknown = await response.json();
+            const gated =
+              typeof data === 'object' &&
+              data !== null &&
+              'auth_required' in data &&
+              data.auth_required === true;
+            json(res, response.ok && gated ? 200 : 503, {
+              webui: 'ready',
+              hermes: { reachable: response.ok, authenticatedMode: gated },
+              gateway: 'browser-not-probed',
+            });
+          })
+          .catch(() =>
+            json(res, 503, { webui: 'ready', hermes: { reachable: false }, gateway: 'browser-not-probed' }),
+          );
+        return;
+      }
+      // Phase 0 has no file, Git, configuration-write or diagnostics-content API.
+      if (raw.startsWith('/api/')) {
+        json(res, 404, { error: { code: 'CAPABILITY_UNAVAILABLE', requestId } });
+        return;
+      }
+      if (!['GET', 'HEAD'].includes(req.method ?? '')) {
+        json(res, 405, { error: { code: 'METHOD_NOT_ALLOWED' } });
+        return;
+      }
+      const path = raw.split('?')[0] ?? '';
+      const asset =
+        path === '/'
+          ? 'index.html'
+          : /^\/(?:app\.js|styles\.css|hermes\/[a-z-]+\.js)$/.test(path)
+            ? path.slice(1)
+            : undefined;
+      if (!asset) {
+        json(res, 404, { error: { code: 'NOT_FOUND' } });
+        return;
+      }
+      void readFile(join(config.staticDir, asset))
+        .then((content) => {
+          const mime = asset.endsWith('.html')
+            ? 'text/html'
+            : asset.endsWith('.css')
+              ? 'text/css'
+              : 'text/javascript';
+          res.writeHead(200, {
+            'Content-Type': `${mime}; charset=utf-8`,
+            'Cache-Control': 'no-store',
+            'X-Content-Type-Options': 'nosniff',
+            'Referrer-Policy': 'no-referrer',
+            'Permissions-Policy': 'camera=(), microphone=(), geolocation=()',
+            'Content-Security-Policy':
+              "default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self' data:; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'",
+          });
+          res.end(req.method === 'HEAD' ? undefined : content);
+        })
+        .catch(() => json(res, 404, { error: { code: 'NOT_FOUND' } }));
+    },
+  );
+  server.on('upgrade', (req, socket, head) => {
+    const path = upstreamPath(req.url ?? '');
+    if (
+      req.method !== 'GET' ||
+      !allowedRequest(req, config, true) ||
+      !path ||
+      path.split('?')[0] !== '/api/ws' ||
+      req.headers.upgrade?.toLowerCase() !== 'websocket'
+    ) {
+      refuseUpgrade(socket, 403);
+      return;
+    }
+    proxyUpgrade(req, socket, head, path, config, randomUUID(), log, sockets);
+  });
+  return {
+    server,
+    close: async () => {
+      for (const socket of sockets) socket.destroy();
+      server.closeAllConnections();
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    },
+  };
+}
