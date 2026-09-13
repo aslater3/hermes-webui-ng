@@ -1,6 +1,13 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, type Locator } from '@playwright/test';
 
 test.use({ baseURL: 'http://127.0.0.1:8787' });
+
+async function expectLoadedHermesMark(mark: Locator) {
+  await expect(mark).toBeVisible();
+  await expect(mark).toHaveAttribute('src', /hermes-mark/);
+  await expect.poll(() => mark.evaluate(element => element instanceof HTMLImageElement && element.complete && element.naturalWidth > 0)).toBe(true);
+}
+
 test('production shell mounts without a global React dependency', async ({ page }) => {
   const errors: string[] = [];
   page.on('pageerror', error => errors.push(error.message));
@@ -15,13 +22,7 @@ test('uses HermesUI NG branding and the supplied Hermes mark', async ({ page }) 
   const brand = page.locator('.brand').first();
   await expect(brand.getByText('HermesUI', { exact: true })).toBeVisible();
   await expect(brand.getByText('NG', { exact: true })).toBeVisible();
-  const mark = brand.locator('.hermes-mark');
-  await expect(mark).toBeVisible();
-  const maskImage = await mark.evaluate(element => {
-    const style = getComputedStyle(element);
-    return `${style.maskImage} ${style.getPropertyValue('-webkit-mask-image')}`;
-  });
-  expect(maskImage.replaceAll('none', '').trim()).not.toBe('');
+  await expectLoadedHermesMark(brand.locator('.hermes-mark'));
 });
 
 test('identity discovery completes before credentials become editable', async ({ page }) => {
@@ -41,11 +42,6 @@ test('identity discovery completes before credentials become editable', async ({
   await page.getByRole('button', { name: 'Sign in', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Connection status: Connected' })).toBeVisible();
   const welcomeMark = page.locator('.welcome-mark');
-  await expect(welcomeMark).toBeVisible();
-  await expect(welcomeMark.locator('.lucide-sparkles')).toBeHidden();
-  const replacementMask = await welcomeMark.evaluate(element => {
-    const style = getComputedStyle(element, '::before');
-    return `${style.maskImage} ${style.getPropertyValue('-webkit-mask-image')}`;
-  });
-  expect(replacementMask.replaceAll('none', '').trim()).not.toBe('');
+  await expect(welcomeMark.locator('.lucide-sparkles')).toHaveCount(0);
+  await expectLoadedHermesMark(welcomeMark.locator('.hermes-mark'));
 });
