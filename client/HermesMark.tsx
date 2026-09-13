@@ -1,15 +1,20 @@
-import type { CSSProperties } from 'react';
-
 type HermesMarkProps = {
   size?: number;
   className?: string;
+  tone?: 'plain' | 'on-accent';
 };
 
-/**
- * Hermes brand mark sourced from the artwork supplied by the repository owner.
- * CSS masks keep the SVG colour theme-aware without duplicating the vector path in JS.
- */
-export function HermesMark({ size = 20, className = '' }: HermesMarkProps) {
-  const style = { width: size, height: size } satisfies CSSProperties;
-  return <span aria-hidden="true" className={`hermes-mark${className ? ` ${className}` : ''}`} style={style}/>;
+const hermesMarkUrl = new URL('./hermes-mark.svg', import.meta.url).href;
+
+/** The repository-owner-supplied Hermes SVG, used anywhere the UI identifies Hermes. */
+export function HermesMark({ size = 20, className = '', tone = 'plain' }: HermesMarkProps) {
+  return <img
+    alt=""
+    aria-hidden="true"
+    className={`hermes-mark hermes-mark-${tone}${className ? ` ${className}` : ''}`}
+    draggable={false}
+    height={size}
+    src={hermesMarkUrl}
+    width={size}
+  />;
 }
