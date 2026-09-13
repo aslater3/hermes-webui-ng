@@ -45,7 +45,7 @@ export class DashboardClient {
     const deadline = AbortSignal.timeout(this.timeoutMs);
     let response: Response;
     try {
-      response = await this.fetcher(`${this.origin}/__hermes${path}`, {
+      response = await this.fetcher.call(globalThis, `${this.origin}/__hermes${path}`, {
         method,
         credentials: 'include',
         cache: 'no-store',
