@@ -2,11 +2,13 @@
 import { createServer } from 'node:http';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { WebSocketServer, type WebSocket } from 'ws';
+import { AgentScenarios } from './agent-scenarios.js';
 import { WS_PROTOCOL } from '../../src/hermes/dashboard-client.js';
 
 export async function startFixture(port = 0) {
   const cookie = `fixture_auth=${randomBytes(24).toString('hex')}`;
   const tickets = new Set<string>();
+  const interactions = new AgentScenarios();
   const validCookies = new Set([cookie]);
   const sessions = new Map<string, { key: string; messages: {role:string; text:string}[]; running: boolean; profile: string; updated: number; turn: number; inflight: string }>();
   const metrics = { tickets: 0, creates: 0, submits: 0, upgrades: 0 };
@@ -105,15 +107,18 @@ export async function startFixture(port = 0) {
       }
       const session = sessions.get(params.session_id);
       if (!session) { error(); return; }
+      const emitAgent = (type:string,payload:unknown) => {if(client.readyState===1)event(type,params.session_id,payload);};
+      if(interactions.respond(params.session_id,method,params,reply))return;
       if (method === 'session.history') { reply({ messages: session.messages }); return; }
-      if (method === 'session.activate') { reply({ running: session.running, status: session.running ? 'working' : 'idle', inflight: { assistant: session.inflight } }); return; }
-      if (method === 'session.interrupt') { session.turn++; session.running = false; session.inflight = ''; reply({ ok: true }); event('session.info', params.session_id, { running:false }); return; }
+      if (method === 'session.activate') { reply({ running: session.running, status: session.running ? 'working' : 'idle', inflight: { assistant: session.inflight },...interactions.snapshot(params.session_id,emitAgent) }); return; }
+      if (method === 'session.interrupt') { interactions.interrupt(params.session_id); session.turn++; session.running = false; session.inflight = ''; reply({ ok: true }); event('session.info', params.session_id, { running:false }); return; }
       if (method === 'prompt.submit') {
         if (session.running) { error(); return; }
         metrics.submits++; session.running = true; session.messages.push({ role: 'user', text: params.text });
         session.updated = Date.now()/1000; session.inflight = '';
         const turn = ++session.turn;
         reply({ status: 'streaming' }); event('message.start', params.session_id);
+        if(interactions.start(params.session_id,String(params.text),emitAgent,(text)=>{session.messages.push({role:'assistant',text});session.running=false;session.inflight='';session.updated=Date.now()/1000;}))return;
         const slow = String(params.text).startsWith('[slow-test]');
         const streaming = String(params.text).startsWith('[stream-test]');
         const later = (callback: () => void, delay: number) => {
@@ -141,7 +146,7 @@ export async function startFixture(port = 0) {
   });
   await new Promise<void>((resolve) => server.listen(port, '127.0.0.1', resolve));
   const address = server.address(); if (!address || typeof address === 'string') throw new Error('No fixture address');
-  return { origin: `http://127.0.0.1:${address.port}`, metrics, cookie,
+  return { origin: `http://127.0.0.1:${address.port}`, metrics, cookie, interactions,
     seed: (count: number, messageCount = 2) => {
       for (let i=0; i<count; i++) sessions.set(`seed-live-${i}`, { key:`seed-${i}`, profile:'default',
         messages: Array.from({length: messageCount}, (_, j) => ({ role:j%2 ? 'assistant' : 'user', text:`Seed ${i} entry ${j}` })),
@@ -149,7 +154,7 @@ export async function startFixture(port = 0) {
     },
     disconnect: () => { for (const client of ws.clients) client.terminate(); },
     close: async () => {
-      timers.forEach(clearTimeout); ws.clients.forEach((client) => client.terminate()); ws.close();
+      interactions.close();timers.forEach(clearTimeout); ws.clients.forEach((client) => client.terminate()); ws.close();
       server.closeAllConnections(); await new Promise<void>((resolve) => server.close(() => resolve()));
     },
   };
