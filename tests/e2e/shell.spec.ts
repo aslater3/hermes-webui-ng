@@ -61,7 +61,9 @@ test('modern composer stays onscreen at reduced height without overlapping messa
 });
 
 test('modern streaming preserves scroll-up position and stop allows a subsequent turn', async ({ page }) => {
-  await login(page); await send(page, '[stream-test] shell'); await expect(page.locator('.streaming')).toContainText('Streaming line 8');
+  await login(page); await send(page, '[stream-test] shell');
+  // A scroll-up is meaningful only once the content exceeds this viewport.
+  await expect.poll(() => page.locator('#conversation-scroll').evaluate(node => node.scrollHeight - node.clientHeight)).toBeGreaterThan(140);
   await page.locator('#conversation-scroll').evaluate(node => { node.scrollTop = 0; node.dispatchEvent(new Event('scroll')); });
   await expect(page.locator('.streaming')).toContainText('Streaming line 20');
   expect(await page.locator('#conversation-scroll').evaluate(node => node.scrollTop)).toBeLessThan(30);

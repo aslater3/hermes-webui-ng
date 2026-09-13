@@ -19,7 +19,7 @@ export function Sidebar({ runtime: rt, onChoose, onSettings, onCommands, onColla
   let previous = '';
   return <aside className={`sidebar${compact ? ' sidebar-compact' : ''}`} aria-label="Conversations">
     <div className="sidebar-brand"><Brand compact={compact}/>{onCollapse && <IconButton label={compact ? 'Expand sidebar' : 'Collapse sidebar'} onClick={onCollapse}><PanelLeftClose size={18}/></IconButton>}</div>
-    <div className="sidebar-primary"><button className="new-chat" aria-label="New conversation" disabled={!rt.ready || rt.chat.busy} onClick={() => { rt.newChat(); onChoose(); }}><Plus size={18}/>{!compact && <><span>New conversation</span><kbd>⇧ ⌘ O</kbd></>}</button></div>
+    <div className="sidebar-primary"><button className="new-chat" aria-label="New conversation" disabled={!rt.ready || rt.chat.busy} onClick={() => { rt.newChat(); onChoose(); }}><Plus size={18}/>{!compact && <><span>New conversation</span><kbd style={{ opacity: 1 }}>⇧ ⌘ O</kbd></>}</button></div>
     {compact ? <div className="rail-actions"><IconButton label="Search conversations" onClick={onChoose}><Search size={18}/></IconButton><IconButton label="Open command palette" onClick={onCommands}><Command size={18}/></IconButton></div> : <>
       <form className="sidebar-search" role="search" onSubmit={event => { event.preventDefault(); rt.run(() => rt.chat.browser.list(query.trim())); }}><Search size={16}/><input ref={search} id="shell-session-search" type="search" aria-label="Search conversations" placeholder="Search conversations…" value={query} disabled={!rt.readable} maxLength={512} onChange={event => setQuery(event.target.value)}/></form>
       <div className="sidebar-list" aria-busy={index.phase === 'loading'}>
