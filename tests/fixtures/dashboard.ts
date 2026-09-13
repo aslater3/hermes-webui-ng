@@ -8,7 +8,7 @@ export async function startFixture(port = 0) {
   const cookie = `fixture_auth=${randomBytes(24).toString('hex')}`;
   const tickets = new Set<string>();
   const validCookies = new Set([cookie]);
-  const sessions = new Map<string, { key: string; messages: unknown[]; running: boolean }>();
+  const sessions = new Map<string, { key: string; messages: {role:string; text:string}[]; running: boolean; profile: string; updated: number; turn: number; inflight: string }>();
   const metrics = { tickets: 0, creates: 0, submits: 0, upgrades: 0 };
   const timers = new Set<ReturnType<typeof setTimeout>>();
   const ws = new WebSocketServer({ noServer: true, handleProtocols: () => WS_PROTOCOL });
@@ -49,6 +49,32 @@ export async function startFixture(port = 0) {
     if (req.url === '/slow') return;
     if (req.url === '/echo-headers') { send(200, req.headers); return; }
     if (req.url === '/consume') { req.resume(); req.on('end', () => send(200, {})); return; }
+    const url = new URL(req.url ?? '/', 'http://fixture');
+    const rows = [...sessions.values()].filter((session) => session.messages.length &&
+      (!url.searchParams.get('profile') || session.profile === url.searchParams.get('profile')))
+      .sort((a,b) => b.updated - a.updated).map((session) => ({ id: session.key, profile: session.profile,
+        title: session.messages[0]?.text.slice(0,80) ?? '', preview: session.messages.at(-1)?.text.slice(0,120),
+        last_active: session.updated, message_count: session.messages.length, source: 'webui-ng' }));
+    const limit = Math.min(100, Math.max(1, Number(url.searchParams.get('limit') ?? 20)));
+    const offset = Math.max(0, Number(url.searchParams.get('offset') ?? 0));
+    if (req.method === 'GET' && url.pathname === '/api/sessions') {
+      send(200, { sessions: rows.slice(offset, offset + limit), total: rows.length, limit, offset }); return;
+    }
+    if (req.method === 'GET' && url.pathname === '/api/sessions/search') {
+      const query = (url.searchParams.get('q') ?? '').toLowerCase();
+      send(200, { results: rows.filter((row) => row.title.toLowerCase().includes(query) || row.id.includes(query))
+        .slice(0, limit).map((row) => ({ ...row, session_id: row.id, snippet: row.preview })) }); return;
+    }
+    const match = /^\/api\/sessions\/([^/]+)\/messages$/.exec(url.pathname);
+    if (req.method === 'GET' && match) {
+      const session = [...sessions.values()].find((item) => item.key === match[1]);
+      if (!session || !session.messages.length || (url.searchParams.get('profile') && url.searchParams.get('profile') !== session.profile)) { send(404, {}); return; }
+      const end = Math.max(0, session.messages.length - offset);
+      const start = Math.max(0, end - limit);
+      const messages = session.messages.slice(start, end).map((message, i) => ({ id: start + i + 1, role: message.role, content: message.text }));
+      send(200, { session_id: session.key, profile: session.profile, messages,
+        pagination: { order:'latest', limit, offset, returned: messages.length } }); return;
+    }
     send(404, {});
   });
   server.on('upgrade', (req, socket, head) => {
@@ -70,34 +96,45 @@ export async function startFixture(port = 0) {
       if (method === 'gateway.ping') { reply({ ok: true }); return; }
       if (method === 'session.create') {
         const sid = randomUUID(); const key = randomUUID(); metrics.creates++;
-        sessions.set(sid, { key, messages: [], running: false }); reply({ session_id: sid, stored_session_id: key }); return;
+        sessions.set(sid, { key, messages: [], running: false, profile: typeof params.profile === 'string' ? params.profile : 'default', updated: Date.now()/1000, turn: 0, inflight: '' }); reply({ session_id: sid, stored_session_id: key, info: { profile_name: sessions.get(sid)!.profile } }); return;
       }
       if (method === 'session.resume') {
         const entry = [...sessions].find(([, session]) => session.key === params.session_id);
-        if (!entry) { error(); return; }
-        reply({ session_id: entry[0], session_key: entry[1].key }); return;
+        if (!entry || (params.profile && entry[1].profile !== params.profile)) { error(); return; }
+        reply({ session_id: entry[0], session_key: entry[1].key, info: { profile_name: entry[1].profile } }); return;
       }
       const session = sessions.get(params.session_id);
       if (!session) { error(); return; }
       if (method === 'session.history') { reply({ messages: session.messages }); return; }
-      if (method === 'session.activate') { reply({ running: session.running, status: session.running ? 'working' : 'idle' }); return; }
-      if (method === 'session.interrupt') { session.running = false; reply({ ok: true }); return; }
+      if (method === 'session.activate') { reply({ running: session.running, status: session.running ? 'working' : 'idle', inflight: { assistant: session.inflight } }); return; }
+      if (method === 'session.interrupt') { session.turn++; session.running = false; session.inflight = ''; reply({ ok: true }); event('session.info', params.session_id, { running:false }); return; }
       if (method === 'prompt.submit') {
+        if (session.running) { error(); return; }
         metrics.submits++; session.running = true; session.messages.push({ role: 'user', text: params.text });
+        session.updated = Date.now()/1000; session.inflight = '';
+        const turn = ++session.turn;
         reply({ status: 'streaming' }); event('message.start', params.session_id);
-        const timer = setTimeout(() => {
-          timers.delete(timer);
-          // Match vanilla Hermes: completion is emitted BEFORE running is cleared.
-          session.messages.push({ role: 'assistant', text: 'SYNTHETIC_RESPONSE' });
+        const slow = String(params.text).startsWith('[slow-test]');
+        const streaming = String(params.text).startsWith('[stream-test]');
+        const later = (callback: () => void, delay: number) => {
+          const timer = setTimeout(() => { timers.delete(timer); if (session.turn === turn) callback(); }, delay);
+          timers.add(timer);
+        };
+        const delta = (text: string) => { session.inflight += text; if (client.readyState === 1) event('message.delta', params.session_id, {text}); };
+        if (slow) delta('Controlled turn is running…');
+        if (streaming) for (let i=0; i<30; i++) later(() => delta(`Streaming line ${i} ${'text '.repeat(20)}\n`), i*100);
+        later(() => {
+          // Match vanilla Hermes: completion precedes the settled session.info.
+          const text = streaming ? session.inflight + 'SYNTHETIC_RESPONSE' : 'SYNTHETIC_RESPONSE';
+          session.messages.push({ role: 'assistant', text }); session.updated = Date.now()/1000;
           if (client.readyState === 1) {
-            event('message.delta', params.session_id, { text: 'SYNTHETIC_RESPONSE' });
-            event('message.complete', params.session_id, { text: 'SYNTHETIC_RESPONSE' });
+            if (!streaming) delta(text);
+            event('message.complete', params.session_id, { text });
           }
-          const settled = setTimeout(() => {
-            timers.delete(settled); session.running = false;
+          later(() => { session.running = false; session.inflight = '';
             if (client.readyState === 1) event('session.info', params.session_id, { running: false });
-          }, 20); timers.add(settled);
-        }, 40); timers.add(timer); return;
+          }, 20);
+        }, slow || streaming ? 3100 : 40); return;
       }
       error();
     });
@@ -105,6 +142,11 @@ export async function startFixture(port = 0) {
   await new Promise<void>((resolve) => server.listen(port, '127.0.0.1', resolve));
   const address = server.address(); if (!address || typeof address === 'string') throw new Error('No fixture address');
   return { origin: `http://127.0.0.1:${address.port}`, metrics, cookie,
+    seed: (count: number, messageCount = 2) => {
+      for (let i=0; i<count; i++) sessions.set(`seed-live-${i}`, { key:`seed-${i}`, profile:'default',
+        messages: Array.from({length: messageCount}, (_, j) => ({ role:j%2 ? 'assistant' : 'user', text:`Seed ${i} entry ${j}` })),
+        running:false, updated:i, turn:0, inflight:'' });
+    },
     disconnect: () => { for (const client of ws.clients) client.terminate(); },
     close: async () => {
       timers.forEach(clearTimeout); ws.clients.forEach((client) => client.terminate()); ws.close();

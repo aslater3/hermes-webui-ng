@@ -140,3 +140,31 @@ test('synthetic wire: declared and chunked oversized request bodies are rejected
   assert.equal(await send({ 'Content-Length': '64' }, ['a'.repeat(64)]), 413);
   assert.equal(await send({ 'Transfer-Encoding': 'chunked' }, ['a'.repeat(24), 'b'.repeat(24)]), 413);
 });
+
+test('synthetic REST: paginated sessions and older history remain upstream-owned', async (t) => {
+  const h = await harness(t); h.fixture.seed(25, 110);
+  await h.dashboard.login('basic', 'fixture', 'fixture-password');
+  const first = await h.dashboard.sessions(), second = await h.dashboard.sessions({offset:20});
+  assert.equal(first.rows.length, 20); assert.equal(second.rows.length, 5); assert.equal(first.total, 25);
+  assert.equal(first.rows[0]?.id, 'seed-24'); assert.equal(first.rows[0]?.profile, 'default');
+  const latest = await h.dashboard.sessionMessages({id:'seed-24',profile:'default'});
+  const older = await h.dashboard.sessionMessages({id:'seed-24',profile:'default'}, 100);
+  assert.equal(latest.messages[0]?.text, 'Seed 24 entry 10'); assert.equal(older.messages.length, 10);
+  assert.equal(older.messages[0]?.text, 'Seed 24 entry 0');
+  assert.equal((await h.dashboard.searchSessions('Seed 24'))[0]?.id, 'seed-24');
+  await assert.rejects(h.dashboard.sessionMessages({id:'seed-24',profile:'wrong'}));
+  assert.equal(h.fixture.metrics.creates, 0); assert.equal(h.fixture.metrics.submits, 0);
+});
+
+test('synthetic native: interrupt cancels a running turn and a second turn completes', async (t) => {
+  const h = await harness(t); await h.dashboard.login('basic', 'fixture', 'fixture-password'); await h.gateway.connect();
+  const session = new NativeSession(h.gateway); t.after(() => session.dispose()); await session.create();
+  await session.submit('[slow-test] interrupt this');
+  assert.equal(session.state.phase, 'running'); await Promise.all([session.interrupt(), session.interrupt()]);
+  await until(() => session.state.phase === 'idle');
+  assert.equal(session.state.messages.filter((message) => message.role === 'assistant').length, 0);
+  await session.submit('second turn'); await until(() => session.state.phase === 'idle');
+  const history = await h.dashboard.sessionMessages({id:session.state.storedId!,profile:session.state.profile});
+  assert.equal(history.messages.filter((message) => message.role === 'assistant').length, 1);
+  assert.equal(h.fixture.metrics.submits, 2); assert.equal(h.fixture.metrics.creates, 1);
+});
