@@ -1,0 +1,50 @@
+name: Phase 0 reference capture
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - .github/workflows/contract-reference.yml
+
+permissions:
+  contents: read
+
+jobs:
+  capture:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: NousResearch/hermes-agent
+          ref: b6b53c69a6ed49cb099cf1bfe76b5e6edd718e5a
+          path: upstream
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Capture public upstream references
+        run: |
+          mkdir -p capture/reference capture/tooling
+          git -C upstream rev-parse HEAD > capture/reference/HERMES_REF
+          tar -C upstream -czf capture/reference/upstream-reference.tar.gz \
+            website/docs/developer-guide/programmatic-integration.md \
+            website/docs/user-guide/features/web-dashboard.md \
+            tui_gateway hermes_cli apps/shared web/src/lib \
+            pyproject.toml tests/tui_gateway tests/hermes_cli
+      - name: Resolve development tools once for lockfile and local validation
+        working-directory: capture/tooling
+        run: |
+          npm init -y
+          npm install --save-dev typescript@5 @types/node@22 ws@8 @types/ws@8 \
+            prettier@3 eslint@9 typescript-eslint@8 @playwright/test
+          node --version > NODE_VERSION
+          npm --version > NPM_VERSION
+          tar -czf ../tooling.tar.gz package.json package-lock.json node_modules NODE_VERSION NPM_VERSION
+          rm -rf node_modules
+      - uses: actions/upload-artifact@v4
+        with:
+          name: phase0-reference-tooling
+          path: capture/
+          retention-days: 3
