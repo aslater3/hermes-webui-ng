@@ -11,3 +11,7 @@ button:not(:disabled), summary { transition: none; }
   .modal-commands { max-height: min(calc(var(--app-height) - 40px), calc(100dvh - 40px)); }
   .modal-sessions { height: min(var(--app-height), 100dvh); max-height: min(var(--app-height), 100dvh); }
 }
+
+/* The selected row has a tinted background: its faint metadata token was 4.34:1
+   in light mode. Use the muted text token on both desktop and drawer rows. */
+.session-row.selected .row-meta { color: var(--muted); }
