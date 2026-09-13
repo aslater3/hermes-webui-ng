@@ -1,3 +1,5 @@
+import { NativeSettings } from './native-settings.js';
+import { agentMetadata, type AgentMetadata } from './model-catalog.js';
 import { AgentActivity, inputRpc } from './agent-activity.js';
 import type { ConnectionState, GatewayClient } from './gateway-client.js';
 import { ClientError, record, textField, type GatewayEvent } from './protocol.js';
@@ -20,11 +22,13 @@ export interface SessionState {
   interrupting?: boolean;
   totalMessages?: number;
   error?: ClientError;
+  agent?: AgentMetadata;
 }
 
 /** Disposable view of upstream state. Nothing is written to browser or server storage. */
 export class NativeSession {
   readonly activity = new AgentActivity();
+  readonly settings: NativeSettings;
   state: SessionState = { phase: 'empty', messages: [], streaming: '', deliveryUnknown: false };
   private epoch = 0;
   private revision = 0;
@@ -37,6 +41,11 @@ export class NativeSession {
   private interruption?: { epoch: number; promise: Promise<void> };
 
   constructor(private readonly gateway: Transport) {
+    this.settings = new NativeSettings(gateway, {
+      read: () => ({ runtimeId: this.state.runtimeId, profile: this.state.profile,
+        idle: !this.disposed && gateway.state.phase === 'ready' && this.state.phase === 'idle' && !this.submission, agent: this.state.agent }),
+      refresh: () => this.refresh(), notify: () => this.publish({}),
+    });
     this.unsubscribe = [
       gateway.onEvent((event) => this.event(event)),
       gateway.onState((connection) => this.connection(connection)),
@@ -60,6 +69,7 @@ export class NativeSession {
   }
   private connection(connection: ConnectionState): void {
     if (connection.phase !== 'ready') {
+      this.settings.reset();
       this.activity.disconnect();
       ++this.epoch;
       this.flight = undefined;
@@ -79,11 +89,13 @@ export class NativeSession {
   }
   private async attach(method: string, storedId?: string, profile?: string, reconnect = false): Promise<void> {
     const epoch = ++this.epoch;
+    this.settings.reset();
     if (!reconnect) this.activity.reset();
     this.flight = undefined;
     this.submission = undefined; this.interruption = undefined;
     this.publish({
       phase: 'attaching',
+      agent: undefined,
       storedId,
       profile,
       runtimeId: undefined,
@@ -109,7 +121,7 @@ export class NativeSession {
       if (typeof key !== 'string' || !key)
         throw new ClientError('protocol', 'Hermes omitted the durable session key');
       const info = typeof result.info === 'object' && result.info !== null ? record(result.info) : {};
-      this.publish({ runtimeId, storedId: key, profile: typeof info.profile_name === 'string' ? info.profile_name : profile });
+      this.publish({ runtimeId, storedId: key, agent: agentMetadata(info), profile: typeof info.profile_name === 'string' ? info.profile_name : profile });
       await this.refresh();
     } catch (error) {
       this.failure(epoch, error);
@@ -175,6 +187,7 @@ export class NativeSession {
       this.publish({
         messages,
         totalMessages: history.messages.length,
+        agent: { ...this.state.agent, ...agentMetadata(live.info) },
         streaming,
         error: undefined,
         phase: live.status === 'waiting' ? 'waiting' : live.running || this.submission ? 'running' : 'idle',
@@ -206,9 +219,10 @@ export class NativeSession {
     }
   }
   async submit(text: string): Promise<void> {
-    if (this.state.phase !== 'idle' || this.submission || !this.state.runtimeId || !text.trim() || text.length > 32768)
+    if (this.state.phase !== 'idle' || this.settings.state.busy || this.settings.state.outcome === 'unknown' || this.settings.state.confirmation || this.submission || !this.state.runtimeId || !text.trim() || text.length > 32768)
       throw new ClientError('protocol', 'Wait for an idle native session before submitting');
     const epoch = this.epoch;
+    this.settings.cancelConfirmation();
     const submission = { epoch }; this.submission = submission; ++this.revision;
     this.publish({ phase: 'running', streaming: '', error: undefined, deliveryUnknown: false, submitting: true });
     try {
@@ -280,6 +294,7 @@ export class NativeSession {
   }
   dispose(): void {
     this.disposed = true;
+    this.settings.reset();
     this.activity.reset();
     ++this.epoch;
     this.unsubscribe.forEach((unsubscribe) => unsubscribe());

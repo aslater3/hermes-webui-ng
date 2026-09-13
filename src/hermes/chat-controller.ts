@@ -83,10 +83,11 @@ export class ChatController {
     this.historical = false; this.busy = false; this.error = undefined;
     this.publish(); return this.scope;
   }
-  async create(): Promise<void> {
+  async create(profile?: string): Promise<void> {
     if (!this.ready() || this.busy) return;
+    profile = profileName(profile);
     const scope = this.reset(); this.busy = true; this.publish();
-    try { await this.native.create(); } catch (error) { this.fail(error, scope); }
+    try { await this.native.create(profile); } catch (error) { this.fail(error, scope); }
     finally { if (scope === this.scope) { this.busy = false; this.publish(); } }
   }
   async open(ref: SessionRef): Promise<void> {
