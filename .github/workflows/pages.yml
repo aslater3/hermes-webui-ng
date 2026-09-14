@@ -25,14 +25,17 @@ jobs:
   build:
     name: Build website
     runs-on: ubuntu-latest
+    outputs:
+      pages_ready: ${{ steps.pages-status.outputs.enabled }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Use Node.js 22
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: 22
+          package-manager-cache: false
 
       - name: Validate website
         run: npm --prefix website run check
@@ -40,21 +43,55 @@ jobs:
       - name: Build website
         run: npm --prefix website run build
 
-      - name: Configure GitHub Pages
+      # Creating/enabling a Pages site requires repository administration permission,
+      # which GITHUB_TOKEN deliberately does not have. Check the one-time repository
+      # setting without turning an otherwise valid website build red.
+      - name: Check GitHub Pages configuration
+        id: pages-status
         if: github.event_name != 'pull_request'
-        uses: actions/configure-pages@v5
-        with:
-          enablement: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          status="$(curl --silent --show-error --output /tmp/pages.json --write-out '%{http_code}' \
+            -H 'Accept: application/vnd.github+json' \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H 'X-GitHub-Api-Version: 2022-11-28' \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/pages")"
+
+          if [[ "${status}" == '200' ]]; then
+            build_type="$(jq -r '.build_type // empty' /tmp/pages.json)"
+            if [[ "${build_type}" == 'workflow' ]]; then
+              echo 'enabled=true' >> "${GITHUB_OUTPUT}"
+              echo 'GitHub Pages is enabled with GitHub Actions as its source.'
+              exit 0
+            fi
+
+            echo 'enabled=false' >> "${GITHUB_OUTPUT}"
+            echo "::warning::GitHub Pages exists but its source is '${build_type:-unknown}'. In Settings > Pages, set Build and deployment > Source to 'GitHub Actions', then run this workflow again."
+            exit 0
+          fi
+
+          echo 'enabled=false' >> "${GITHUB_OUTPUT}"
+          if [[ "${status}" == '404' ]]; then
+            echo "::warning::GitHub Pages is not enabled yet. In Settings > Pages, set Build and deployment > Source to 'GitHub Actions', then run this workflow again."
+            exit 0
+          fi
+
+          echo "::error::Unable to read the GitHub Pages configuration (HTTP ${status})."
+          cat /tmp/pages.json
+          exit 1
 
       - name: Upload Pages artifact
-        if: github.event_name != 'pull_request'
-        uses: actions/upload-pages-artifact@v3
+        if: github.event_name != 'pull_request' && steps.pages-status.outputs.enabled == 'true'
+        uses: actions/upload-pages-artifact@v5
         with:
           path: website/dist
 
       - name: Upload pull-request preview artifact
         if: github.event_name == 'pull_request'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: hermesui-ng-website-preview
           path: website/dist
@@ -62,7 +99,7 @@ jobs:
 
   deploy:
     name: Deploy GitHub Pages
-    if: github.event_name != 'pull_request'
+    if: github.event_name != 'pull_request' && needs.build.outputs.pages_ready == 'true'
     needs: build
     runs-on: ubuntu-latest
     environment:
@@ -71,4 +108,4 @@ jobs:
     steps:
       - name: Deploy
         id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5
