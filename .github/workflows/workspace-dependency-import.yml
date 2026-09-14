@@ -1,0 +1,49 @@
+name: Import reviewed workspace dependencies
+on:
+  push:
+    paths: ['.github/workflows/workspace-dependency-import.yml']
+permissions:
+  contents: write
+  actions: read
+jobs:
+  import:
+    if: github.ref == 'refs/heads/phase5-readonly-workspace'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref_name }}
+      - uses: actions/download-artifact@v4
+        with:
+          name: workspace-tooling
+          run-id: 34839993265
+          github-token: ${{ github.token }}
+          path: /tmp/workspace-dependencies
+      - name: Import only the captured manifest and integrity lock, never node_modules
+        run: |
+          mkdir /tmp/workspace-manifests
+          tar -xzf /tmp/workspace-dependencies/workspace-tooling.tgz -C /tmp/workspace-manifests package.json package-lock.json
+          node --input-type=module <<'JS'
+          import fs from 'node:fs';
+          import assert from 'node:assert/strict';
+          const current = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+          const next = JSON.parse(fs.readFileSync('/tmp/workspace-manifests/package.json', 'utf8'));
+          const allowed = ['isomorphic-git','diff','codemirror','@codemirror/state','@codemirror/view','@codemirror/lang-javascript','@codemirror/lang-json','@codemirror/lang-python','@codemirror/lang-yaml'];
+          assert.equal(next.dependencies['isomorphic-git'], '1.42.2');
+          for (const key of allowed) assert.match(next.dependencies[key], /^\d+\.\d+\.\d+$/);
+          const stripped = structuredClone(next);
+          for (const key of allowed) delete stripped.dependencies[key];
+          assert.deepEqual(stripped, current);
+          const lock = JSON.parse(fs.readFileSync('/tmp/workspace-manifests/package-lock.json', 'utf8'));
+          assert.deepEqual(lock.packages[''].dependencies, next.dependencies);
+          const audit = JSON.parse(fs.readFileSync('/tmp/workspace-dependencies/workspace-audit.json', 'utf8'));
+          assert.equal(audit.metadata.vulnerabilities.total, 0);
+          fs.copyFileSync('/tmp/workspace-manifests/package.json', 'package.json');
+          fs.copyFileSync('/tmp/workspace-manifests/package-lock.json', 'package-lock.json');
+          JS
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add package.json package-lock.json
+          git commit -m 'build(workspace): pin audited Git parser and CodeMirror dependencies'
+          git push origin HEAD:phase5-readonly-workspace
