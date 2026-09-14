@@ -2,6 +2,10 @@
 
 Updated: 14 September 2026. **Phase 7 has passed its software exit gate; Phase 5 / M5 Read-only Workspace Beta remains accepted.** Phase 5 was delivered through PR #12 with individual remote checkpoints preserved. Phases 0–3, the modern shell/HTTPS/PWA software and approval-attention follow-up retain their accepted evidence. The original Phase 4 physical-device report remains open; Phase 5 does not certify physical devices or the final production release.
 
+## Command picker follow-up (verification in progress)
+
+The command picker now left-aligns names/descriptions, scrolls all filtered catalogue entries instead of limiting the composer to eight, and filters on each edit with scroll/selection reset. The catalogue also removes its 80-row manual page limit, while retaining the 1,000-entry safety bound. Availability labels now distinguish a WebUI implementation gap from a missing native Hermes method; the eight implemented handlers and execution guards are unchanged. Local build/typechecks/lint, 250 unit tests and 34 wire contracts pass. Local Chromium navigation is policy-blocked; branch CI is required. See `command-picker-followup.md` and its pull request for this change's evidence; earlier phase acceptance below is preserved.
+
 ## Phase 6 / Phase 7 integration
 
 The owner requested merging both phases on 14 September 2026. Main `8b800996b44e121ec5ffa0fbfc0f099d742aebfb` already contains the Phase 6 foundation from PR #15. This integration brings that main history into Phase 7 PR #16 at `aef77385ce4d46bea36d08cc765f2a2e18aff508`, retaining both histories without a force-push.

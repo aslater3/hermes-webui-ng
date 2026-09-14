@@ -7,29 +7,32 @@
 .command-suggestions-heading button { min-width: 44px; min-height: 44px; background: transparent; color: var(--text); border: none; cursor: pointer; }
 .command-suggestions p { padding: 4px 8px; font-size: 12px; margin: 0; }
 .command-suggestion-list { position: relative; max-height: min(200px, calc(var(--app-height, 100dvh) * .26)); overflow-y: auto; overscroll-behavior: contain; }
-.command-suggestion { display: flex; align-items: baseline; gap: 12px; width: 100%; min-height: 44px; padding: 10px 8px; text-align: left; background: transparent; color: var(--text); border: none; border-radius: 7px; cursor: pointer; }
+.command-suggestion { display: grid; grid-template-columns: minmax(100px, .35fr) minmax(0, 1fr); justify-content: start; justify-items: start; align-items: start; gap: 12px; width: 100%; min-height: 44px; padding: 10px 8px; text-align: left; background: transparent; color: var(--text); border: none; border-radius: 7px; cursor: pointer; }
 .command-suggestion[aria-selected="true"] { background: var(--accent-soft); }
 .command-suggestion:disabled { cursor: default; opacity: .65; }
-.command-suggestion strong { font-size: 12px; overflow-wrap: anywhere; }
-.command-suggestion span { font-size: 11px; color: var(--muted); overflow-wrap: anywhere; }
+.command-suggestion strong { font-size: 12px; overflow-wrap: anywhere; min-width: 0; max-width: 100%; }
+.command-suggestion-copy { display: flex; flex-direction: column; align-items: flex-start; min-width: 0; max-width: 100%; gap: 3px; font-size: 11px; color: var(--muted); overflow-wrap: anywhere; }
+.command-suggestion-copy small { font-size: 10px; }
+.command-match-count { font-size: 11px; color: var(--muted); margin: 6px 0; text-align: left; }
 .command-completion-hint { display: block; font-size: 10px; color: var(--muted); padding: 8px; }
 .commands-body { padding: 20px max(20px, var(--safe-right)) max(24px, var(--safe-bottom)) max(20px, var(--safe-left)); overflow-y: auto; overscroll-behavior: contain; min-width: 0; }
 .commands-body > p { font-size: 13px; line-height: 1.6; }
 .command-search { display: flex; gap: 8px; align-items: center; }
 .command-search input { min-width: 0; width: 100%; min-height: 44px; background: var(--surface); color: var(--text); border: 1px solid var(--border); border-radius: 8px; padding: 8px; }
 .command-catalogue-summary { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 8px 0; font-size: 12px; }
+.command-catalogue-list { max-height: min(440px, calc(var(--app-height, 100dvh) * .45)); overflow-y: auto; overscroll-behavior: contain; min-height: 44px; text-align: left; }
 .command-catalogue-row { padding: 12px 0; border-bottom: 1px solid var(--border); overflow-wrap: anywhere; }
 .command-catalogue-row > div { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 12px; }
 .command-catalogue-row strong { font-size: 14px; }
 .command-catalogue-row p { font-size: 12px; margin: 6px 0; }
 .command-catalogue-row > small { color: var(--muted); display: block; font-size: 11px; margin: 6px 0; }
-.command-catalogue-row button { min-height: 44px; }
+.command-catalogue-row button { min-height: 44px; justify-content: flex-start; text-align: left; }
 .command-output { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 12px; line-height: 1.65; padding: 14px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; max-height: calc(var(--app-height, 100dvh) * .55); overflow-y: auto; }
 .composer-caption:has(.command-button) { align-items: center; margin-top: 0; gap: 8px; flex-wrap: wrap; }
 @media (max-width: 600px) {
   .composer-caption:has(.command-button) > .composer-privacy { display: none; }
   .composer-caption:has(.command-button) { justify-content: flex-end; gap: 2px; }
-  .command-suggestion { flex-direction: column; gap: 3px; }
+  .command-suggestion { grid-template-columns: minmax(0, 1fr); gap: 3px; }
   .command-completion-hint { display: none; }
   .command-suggestions-heading { min-height: 44px; }
 }

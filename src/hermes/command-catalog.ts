@@ -64,12 +64,15 @@ export function commandCatalogue(raw: unknown): CommandCatalogue {
   return { choices: [...choices.values()], partial };
 }
 
-export function commandMatches(catalogue: CommandCatalogue | undefined, query: string, limit = 80): CommandChoice[] {
+export function commandMatches(catalogue: CommandCatalogue | undefined, query: string, limit: number = COMMAND_LIMITS.entries): CommandChoice[] {
   const needle = query.trim().replace(/^\//, '').toLowerCase();
+  const terms = needle.split(/\s+/).filter(Boolean);
   const score = (row: CommandChoice): number => {
     const names = [row.name, ...row.aliases].map(value => value.slice(1));
+    const searchable = `${names.join(' ')} ${row.description} ${row.category}`.toLowerCase();
+    if (!terms.every(term => searchable.includes(term))) return 4;
     return names.some(value => value === needle) ? 0 : names.some(value => value.startsWith(needle)) ? 1 :
-      names.some(value => value.includes(needle)) ? 2 : `${row.description} ${row.category}`.toLowerCase().includes(needle) ? 3 : 4;
+      names.some(value => value.includes(needle)) ? 2 : 3;
   };
   return (catalogue?.choices ?? []).map(row => ({ row, score: score(row) })).filter(row => row.score < 4)
     .sort((a, b) => a.score - b.score || Number(a.row.action === 'unavailable') - Number(b.row.action === 'unavailable') || a.row.name.localeCompare(b.row.name))
@@ -95,7 +98,16 @@ export function commandChoice(catalogue: CommandCatalogue, input: { name: string
     throw new ClientError('protocol', 'This command takes no arguments here. Use the matching picker for changes; nothing was sent.');
   return choice;
 }
-export function commandHint(choice: CommandChoice): string {
+/** Implementation coverage is separate from a missing upstream method or denied admission. */
+export function commandAvailability(choice: CommandChoice, executionUnavailable = false): string {
+  if (choice.action === 'unavailable') return 'Not implemented in WebUI';
+  if (choice.action === 'native' && executionUnavailable) return 'Not supported by this Hermes version';
+  return 'Available in WebUI';
+}
+
+export function commandHint(choice: CommandChoice, executionUnavailable = false): string {
+  if (choice.action === 'native' && executionUnavailable)
+    return 'This Hermes version does not provide the native command method used by this WebUI.';
   switch (choice.action) {
     case 'catalogue': return 'Browse the Hermes command catalogue';
     case 'models': return 'Open the session model picker';
@@ -103,6 +115,13 @@ export function commandHint(choice: CommandChoice): string {
     case 'reasoning': return 'Open supported reasoning controls';
     case 'context': return 'View native usage and context';
     case 'native': return 'Read-only native command · no arguments';
-    default: return 'Not available in this WebUI · use Hermes CLI or Dashboard';
+    default:
+      if (['/undo', '/retry', '/rewind', '/regenerate'].includes(choice.name))
+        return 'Destructive history controls are not implemented in HermesUI NG yet.';
+      if (choice.name === '/compress' || choice.name === '/compact')
+        return 'Context compression is not implemented in HermesUI NG yet.';
+      if (['Skills', 'Plugin commands', 'User commands'].includes(choice.category))
+        return 'Skill, plugin and custom command execution is not implemented in HermesUI NG yet.';
+      return 'Hermes advertises this command, but HermesUI NG has no handler for it yet.';
   }
 }

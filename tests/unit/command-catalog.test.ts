@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { commandAction, commandCatalogue, commandMatches, commandChoice, slashInput, literalPrompt, COMMAND_LIMITS } from '../../src/hermes/command-catalog.js';
+import { commandAction, commandAvailability, commandHint, commandCatalogue, commandMatches, commandChoice, slashInput, literalPrompt, COMMAND_LIMITS } from '../../src/hermes/command-catalog.js';
 import { commandFixture } from '../fixtures/commands.js';
 
 test('official catalogue shape retains bounded display fields, categories and advertised aliases only', () => {
@@ -57,4 +57,46 @@ test('arguments cannot turn a read into a mutation; pickers require their explic
   for (const input of ['/usage reset', '/model other --global', '/reasoning high', '/profile work', '/status something'])
     assert.throws(() => commandChoice(catalogue, slashInput(input)!));
   assert.equal(commandChoice(catalogue, slashInput('/h model')!).action, 'catalogue');
+});
+
+test('matching exposes the whole bounded catalogue, not an eight or eighty entry preview', () => {
+  const catalogue = commandCatalogue({ pairs: [
+    ...commandFixture().pairs,
+    ...Array.from({ length: 120 }, (_, i) => [`/extra-${String(i).padStart(3, '0')}`, `Fixture command ${i}`]),
+  ] });
+  assert.equal(commandMatches(catalogue, '/').length, 132);
+  assert.equal(commandMatches(catalogue, '/extra-119')[0]?.name, '/extra-119');
+  assert.equal(commandMatches(catalogue, '/extra-11').length, 10);
+  assert.equal(commandMatches(catalogue, '/', 8).length, 8, 'explicit caller bounds are still honoured');
+});
+
+test('typing progressively narrows canonical and alias matches regardless of catalogue position or case', () => {
+  const catalogue = commandCatalogue(commandFixture());
+  assert.ok(commandMatches(catalogue, '/').length > commandMatches(catalogue, '/u').length);
+  assert.deepEqual(commandMatches(catalogue, ' /USAGE ').map(row => row.name), ['/usage', '/context']);
+  assert.equal(commandMatches(catalogue, '/default-sk')[0]?.name, '/default-skill');
+  assert.equal(commandMatches(catalogue, '/H')[0]?.name, '/help');
+  assert.deepEqual(commandMatches(catalogue, '/zzzz'), []);
+});
+
+test('catalogue search accepts multiple terms across descriptions, aliases and categories', () => {
+  const catalogue = commandCatalogue(commandFixture());
+  assert.deepEqual(commandMatches(catalogue, 'SESSION token').map(row => row.name), ['/usage']);
+  assert.deepEqual(commandMatches(catalogue, 'skill profile-owned').map(row => row.name), ['/default-skill']);
+  assert.deepEqual(commandMatches(catalogue, 'token missing'), []);
+});
+
+test('implementation gaps and missing native support have distinct honest explanations, not permission guesses', () => {
+  const catalogue = commandCatalogue(commandFixture());
+  const usage = catalogue.choices.find(row => row.name === '/usage')!;
+  const undo = catalogue.choices.find(row => row.name === '/undo')!;
+  const skill = catalogue.choices.find(row => row.name === '/default-skill')!;
+  assert.equal(commandAvailability(usage), 'Available in WebUI');
+  assert.equal(commandAvailability(usage, true), 'Not supported by this Hermes version');
+  assert.match(commandHint(usage, true), /does not provide the native command method/);
+  assert.equal(commandAvailability(undo), 'Not implemented in WebUI');
+  assert.match(commandHint(undo), /Destructive history controls/);
+  assert.match(commandHint(skill), /Skill, plugin and custom command execution/);
+  assert.equal(commandAvailability(undo, true), 'Not implemented in WebUI');
+  assert.equal(commandAction(undo.name), 'unavailable', 'display improvements do not bypass command guards');
 });
