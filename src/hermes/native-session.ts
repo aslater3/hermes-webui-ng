@@ -32,6 +32,7 @@ export class NativeSession {
   private revision = 0;
   private streamRevision = 0;
   private disposed = false;
+  private foreground = true;
   private flight?: { epoch: number; promise: Promise<void> };
   private listeners = new Set<(state: SessionState) => void>();
   private unsubscribe: (() => void)[];
@@ -41,13 +42,19 @@ export class NativeSession {
   constructor(private readonly gateway: Transport) {
     this.settings = new NativeSettings(gateway, {
       read: () => ({ runtimeId: this.state.runtimeId, profile: this.state.profile, starting: this.state.agentStarting,
-        idle: !this.disposed && gateway.state.phase === 'ready' && this.state.phase === 'idle' && !this.submission, agent: this.state.agent }),
+        idle: this.foreground && !this.disposed && gateway.state.phase === 'ready' && this.state.phase === 'idle' && !this.submission, agent: this.state.agent }),
       refresh: () => this.refresh(), notify: () => this.publish({}),
     });
     this.unsubscribe = [
       gateway.onEvent((event) => this.event(event)),
       gateway.onState((connection) => this.connection(connection)),
     ];
+  }
+  /** Keep live descriptors, not hidden transcripts, while the operator views another conversation. */
+  setForeground(value: boolean): void {
+    if (value !== this.foreground) ++this.revision;
+    this.foreground = value;
+    if (!value) { this.settings.reset(); this.publish({ messages: [], streaming: '' }); }
   }
   subscribe(listener: (state: SessionState) => void): () => void {
     this.listeners.add(listener);
@@ -154,7 +161,7 @@ export class NativeSession {
       const revision = this.revision;
       const streamRevision = this.streamRevision;
       const [rawHistory, rawLive] = await Promise.all([
-        this.gateway.call('session.history', { session_id: runtimeId }),
+        this.foreground ? this.gateway.call('session.history', { session_id: runtimeId }) : Promise.resolve({ messages: [] }),
         this.gateway.call('session.activate', { session_id: runtimeId, omit_messages: true }),
       ]);
       this.valid(epoch);
@@ -179,11 +186,11 @@ export class NativeSession {
         : '';
       this.activity.snapshot(live);
       this.publish({
-        messages,
+        messages: this.foreground ? messages : [],
         totalMessages: history.messages.length,
         agent: { ...this.state.agent, ...agentMetadata(live.info) },
         agentStarting: live.status === 'starting' || (live.info !== null && typeof live.info === 'object' && !Array.isArray(live.info) && record(live.info).lazy === true),
-        streaming,
+        streaming: this.foreground ? streaming : '',
         error: undefined,
         phase: live.status === 'waiting' ? 'waiting' : live.running || this.submission ? 'running' : 'idle',
       });
@@ -195,6 +202,7 @@ export class NativeSession {
     if (!this.state.runtimeId || event.session_id !== this.state.runtimeId) return;
     if (this.activity.receive(event)) this.publish({});
     if (event.type === 'message.delta') {
+      if (!this.foreground) return;
       const payload = record(event.payload);
       if (typeof payload.text === 'string') {
         ++this.streamRevision;
@@ -214,7 +222,7 @@ export class NativeSession {
     }
   }
   async submit(text: string): Promise<void> {
-    if (this.state.phase !== 'idle' || this.settings.state.busy || this.settings.state.outcome === 'unknown' || this.settings.state.confirmation || this.submission || !this.state.runtimeId || !text.trim() || text.length > 32768)
+    if (!this.foreground || this.state.phase !== 'idle' || this.settings.state.busy || this.settings.state.outcome === 'unknown' || this.settings.state.confirmation || this.submission || !this.state.runtimeId || !text.trim() || text.length > 32768)
       throw new ClientError('protocol', 'Wait for an idle native session before submitting');
     const epoch = this.epoch;
     this.settings.cancelConfirmation();
@@ -238,7 +246,7 @@ export class NativeSession {
   interrupt(): Promise<void> {
     const epoch = this.epoch;
     if (this.interruption?.epoch === epoch) return this.interruption.promise;
-    if (!this.state.runtimeId || !['running', 'waiting'].includes(this.state.phase) || this.state.submitting)
+    if (!this.foreground || !this.state.runtimeId || !['running', 'waiting'].includes(this.state.phase) || this.state.submitting)
       return Promise.reject(new ClientError('protocol', 'No running native turn can be interrupted yet'));
     const runtimeId = this.state.runtimeId;
     this.publish({ interrupting: true });
@@ -257,6 +265,7 @@ export class NativeSession {
   async respond(key: string, value: string, questionId?: string): Promise<void> {
     const epoch = this.epoch;
     this.valid(epoch);
+    if (!this.foreground) throw new ClientError('disconnected', 'Select this conversation before answering its request');
     const runtimeId = this.state.runtimeId;
     const input = this.activity.state.inputs.find((p) => p.key === key);
     if (!runtimeId || !input || this.state.interrupting)
