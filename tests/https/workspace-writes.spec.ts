@@ -1,9 +1,19 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, type Locator, type Page } from '@playwright/test';
 import { AxeBuilder } from '@axe-core/playwright';
 import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { workspaceFixture } from '../e2e/workspace-fixture.js';
 import { loginPwa } from '../e2e/pwa-network.js';
+
+// CodeMirror owns selection; use its actual editable surface and keyboard commands,
+// never race a transient loading placeholder or mutate its DOM via fill().
+async function replaceText(page: Page, dialog: Locator, text: string) {
+  const editor = dialog.locator('.cm-content[contenteditable="true"]');
+  await expect(editor).toBeVisible(); await editor.click();
+  await editor.press('ControlOrMeta+A'); await editor.press('Backspace');
+  await expect(editor).toHaveText(''); await page.keyboard.insertText(text);
+  await expect(editor).toHaveText(text);
+}
 
 test('operator-enabled editing saves exact text and preserves a draft across background and discarded-close cancellation', async ({ page }, info) => {
   const f = await workspaceFixture(page, false, true);
@@ -13,15 +23,19 @@ test('operator-enabled editing saves exact text and preserves a draft across bac
     await page.getByRole('button', { name: 'Edit file', exact: true }).click();
     const dialog = page.getByRole('dialog', { name: 'Edit workspace file', exact: true });
     const editor = dialog.getByLabel('Edit file content', { exact: true });
-    await editor.fill('export const edited = true;');
+    await replaceText(page, dialog, 'export const edited = true;');
     await expect(dialog.getByRole('button', { name: 'Save file', exact: true })).toBeEnabled();
     page.once('dialog', event => { void event.dismiss(); });
     await dialog.getByRole('button', { name: 'Discard and close', exact: true }).click();
-    await expect(editor).toContainText('edited = true');
+    await expect(editor).toHaveText('export const edited = true;');
     await page.evaluate(() => { Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => 'hidden' }); document.dispatchEvent(new Event('visibilitychange')); });
     await expect(dialog.locator('.cm-editor')).toHaveCount(0);
     await page.evaluate(() => { Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => 'visible' }); document.dispatchEvent(new Event('visibilitychange')); });
-    await expect(editor).toContainText('edited = true');
+    await expect(editor).toHaveText('export const edited = true;');
+    // Cancel an actual browser reload; a subsequent deliberate Save must still work.
+    page.once('dialog', event => { void event.dismiss(); });
+    await page.evaluate(() => location.reload());
+    await expect(editor).toHaveText('export const edited = true;');
     expect((await new AxeBuilder({ page }).include('.modal-workspace-mutation').analyze()).violations).toEqual([]);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     await page.screenshot({ path: info.outputPath('workspace-edit.png') });
@@ -38,7 +52,7 @@ test('stale file saves preserve the newer file and require explicit readback and
     await loginPwa(page, f.origin); await page.getByRole('button', { name: 'Open workspace', exact: true }).click();
     await page.getByRole('button', { name: 'hello.ts File', exact: true }).click(); await page.getByRole('button', { name: 'Edit file', exact: true }).click();
     const dialog = page.getByRole('dialog', { name: 'Edit workspace file', exact: true });
-    await dialog.getByLabel('Edit file content', { exact: true }).fill('my reviewed edit');
+    await replaceText(page, dialog, 'my reviewed edit');
     await writeFile(join(f.project, 'hello.ts'), 'newer outside edit');
     await dialog.getByRole('button', { name: 'Save file', exact: true }).click();
     await expect(dialog.getByRole('button', { name: 'Read current state' })).toBeVisible();

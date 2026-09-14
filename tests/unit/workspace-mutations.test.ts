@@ -56,3 +56,21 @@ test('mixed line endings and oversized UTF-8 drafts are not silently normalised 
   actions.clear(); actions.edit('workspace', { ...initial, text: 'one\r\ntwo\n' }); assert.equal(actions.state.phase, 'done');
   actions.clear(); actions.edit('workspace', initial); actions.change('é'.repeat(131073)); await actions.perform(); assert.equal(writes, 0); assert.match(actions.state.note, /256 KiB/);
 });
+
+test('interrupted or failed readback never unlocks another uncertain write', async () => {
+  let reads = 0, writes = 0, release!: (response: Response) => void;
+  const api = new WorkspaceApi(async () => {
+    reads++;
+    if (reads === 1) return response({ path: 'folder', kind: 'directory', size: 0, version: 'a'.repeat(64) });
+    if (reads === 2) throw new Error('Readback unavailable');
+    return new Promise(resolve => { release = resolve; });
+  });
+  const actions = new WorkspaceMutations(api, async () => { writes++; throw new Error('Lost acknowledgement'); });
+  await actions.open('delete', 'workspace', 'folder'); await actions.perform();
+  assert.equal(actions.state.phase, 'unknown'); await actions.reconcile();
+  assert.equal(actions.state.phase, 'unknown'); await actions.perform(); assert.equal(writes, 1);
+  const reading = actions.reconcile(); actions.pause();
+  assert.equal(actions.state.phase, 'unknown');
+  release(response({ path: 'folder', kind: 'directory', size: 0, version: 'a'.repeat(64) })); await reading;
+  assert.equal(actions.state.phase, 'unknown'); await actions.perform(); assert.equal(writes, 1);
+});

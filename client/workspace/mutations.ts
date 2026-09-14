@@ -22,7 +22,7 @@ export class WorkspaceMutations {
   target = (value: string) => { if (!this.pending) this.publish({ target: value }); };
   private reset() { this.abort.abort(); this.abort = new AbortController(); ++this.epoch; this.upload = undefined; }
   clear = () => { this.reset(); this.publish(empty()); };
-  pause = () => { if (this.pending) { this.abort.abort(); ++this.epoch; this.publish({ phase: this.state.phase === 'sending' ? 'unknown' : 'ready', note: 'Connection changed. Nothing will be resent automatically.' }); } };
+  pause = () => { if (this.pending) { this.abort.abort(); ++this.epoch; this.publish({ phase: this.state.phase === 'loading' ? 'done' : 'unknown', note: 'Connection changed. Nothing will be resent automatically.' }); } };
   private start(operation: Operation, root: string, path: string) {
     if (this.state.phase !== 'closed' || !this.admitted()) return false;
     this.reset(); this.publish({ ...empty(), operation, root, path, phase: 'ready' }); return true;
@@ -110,7 +110,11 @@ export class WorkspaceMutations {
         if (epoch === this.epoch) this.publish({ phase: 'done', note: `Current state: ${info.kind} exists at ${path}. Review the project before starting a fresh operation. Nothing was resent.` });
       }
     } catch (error) {
-      if (epoch === this.epoch) this.publish({ phase: state.operation === 'save' ? 'unknown' : 'done', note: error instanceof WorkspaceClientError && error.status === 404 ? 'The target is absent. Review the project before starting another operation; nothing was resent.' : 'Readback failed. Reconnect and check current state.' });
+      if (epoch !== this.epoch) return;
+      if (error instanceof WorkspaceClientError && error.status === 401) this.expired();
+      if (epoch !== this.epoch) return;
+      const absent = error instanceof WorkspaceClientError && error.status === 404;
+      this.publish({ phase: absent && state.operation !== 'save' ? 'done' : 'unknown', note: absent ? 'The target is absent. Review the project before starting another operation; nothing was resent.' : 'Readback failed. Reconnect and check current state.' });
     }
   };
   useCurrentBase = () => {

@@ -1,8 +1,13 @@
-import { lazy, Suspense, useEffect, useState } from 'react';
+import { Component, lazy, Suspense, useEffect, useState, type ReactNode } from 'react';
 import type { AppRuntime } from '../runtime.js';
 import { Modal, Notice } from '../primitives.js';
 import './mutations.css';
 const EditText = lazy(() => import('./EditText.js'));
+class EditorBoundary extends Component<{ children: ReactNode; text: string }, { failed: boolean }> {
+  state = { failed: false };
+  static getDerivedStateFromError() { return { failed: true }; }
+  render() { return this.state.failed ? <><Notice error>Editor unavailable. Your draft is retained in this tab; copy it before closing.</Notice><pre className="workspace-plain" tabIndex={0}>{this.props.text}</pre></> : this.props.children; }
+}
 const titles = { save: 'Edit workspace file', mkdir: 'Create folder', rename: 'Rename entry', delete: 'Delete entry', upload: 'Upload file' };
 export default function MutationDialog({ runtime: rt }: { runtime: AppRuntime }) {
   const actions = rt.workspaceMutations, state = actions.state;
@@ -23,7 +28,7 @@ export default function MutationDialog({ runtime: rt }: { runtime: AppRuntime })
   return <Modal title={titles[state.operation]} kind="workspace-mutation" onClose={close}>
     <p className="mutation-path">{access ? `${state.root} / ${state.path || state.target || 'New entry'}` : 'Private workspace operation'}</p>
     {!access ? <Notice>The workspace is paused. Your unsaved edit remains only in this tab’s memory. Reconnect and verify access to continue.</Notice> : <>
-      {state.operation === 'save' && state.phase !== 'done' && <Suspense fallback={<textarea className="mutation-fallback" aria-label="Edit file content" value={state.text} disabled={locked} onChange={event => actions.change(event.target.value)}/>}><EditText key={`${state.root}:${state.path}`} value={state.text} locked={locked} onChange={actions.change}/></Suspense>}
+      {state.operation === 'save' && state.phase !== 'done' && <EditorBoundary text={state.text}><Suspense fallback={<textarea className="mutation-fallback" aria-label="Loading file editor" value={state.text} disabled readOnly/>}><EditText key={`${state.root}:${state.path}`} value={state.text} locked={locked} onChange={actions.change}/></Suspense></EditorBoundary>}
       {['mkdir', 'rename', 'upload'].includes(state.operation) && state.phase !== 'done' && <label className="mutation-field">Destination inside this workspace<input aria-label="Destination path" value={state.target} maxLength={2048} disabled={locked || state.phase === 'conflict'} onChange={event => actions.target(event.target.value)}/><small>Existing destinations are never replaced. Parent folders must already exist.</small></label>}
       {state.operation === 'delete' && <Notice error>This permanently deletes the selected file or empty folder. There is no recycle bin. Non-empty folders are refused.</Notice>}
       {state.remote && <details className="mutation-current"><summary>Review current file</summary><pre>{state.remote.text ?? 'Current content cannot be previewed.'}</pre></details>}

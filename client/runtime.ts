@@ -136,7 +136,7 @@ export class AppRuntime {
   };
   setDraft = (value: string) => { this.chat.setDraft(value); this.notify(); };
   send = () => this.run(async () => {
-    if (!this.ready || this.chat.busy || !this.chat.draft.trim()) return;
+    if (!this.ready || this.chat.busy || this.workspaceMutations.state.phase !== 'closed' || !this.chat.draft.trim()) return;
     if (!this.chat.selected) {
       const text = this.chat.draft, account = this.accountGeneration;
       const creation = this.chat.create(), native = this.chat.native;
@@ -148,7 +148,7 @@ export class AppRuntime {
     await this.chat.send();
   });
   private async settingsSession() {
-    if (!this.ready || this.chat.busy || this.chat.historical)
+    if (!this.ready || this.chat.busy || this.chat.historical || this.workspaceMutations.state.phase !== 'closed')
       throw new ClientError('disconnected', 'Connect to an idle conversation to change settings');
     if (!this.chat.native.state.runtimeId) {
       if (this.chat.selected) throw new ClientError('disconnected', 'Wait for native reattachment');
@@ -183,7 +183,7 @@ export class AppRuntime {
   }
   async newProfile(profile: string): Promise<void> {
     profileIdentifier(profile);
-    if (!this.ready || this.chat.busy || this.chat.native.settings.state.busy || this.chat.native.commands.state.busy ||
+    if (!this.ready || this.chat.busy || this.workspaceMutations.state.phase !== 'closed' || this.chat.native.settings.state.busy || this.chat.native.commands.state.busy ||
       ['running', 'waiting'].includes(this.chat.native.state.phase))
       throw new ClientError('protocol', 'Wait for the current turn before changing profile');
     // A profile is a new conversation boundary. Keep the previous draft with its owner.

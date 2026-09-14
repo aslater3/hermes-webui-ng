@@ -37,7 +37,7 @@ export default function App({ runtime: rt }: { runtime: AppRuntime }) {
   const commands = () => { setCommandQuery(''); setPanel('commands'); };
   useEffect(() => {
     const handler = (event: KeyboardEvent) => {
-      if (rt.pwa.state.updating) return;
+      if (rt.pwa.state.updating || rt.workspaceMutations.state.phase !== 'closed') return;
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') { event.preventDefault(); setPanel(current => current === 'commands' ? null : 'commands'); setCommandQuery(''); }
       if ((event.metaKey || event.ctrlKey) && event.shiftKey && event.key.toLowerCase() === 'o' && rt.ready) { event.preventDefault(); rt.newChat(); setPanel(null); }
     };
