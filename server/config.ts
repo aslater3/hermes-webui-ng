@@ -1,3 +1,5 @@
+import { writePolicy, type WritePolicy } from './workspace/write-policy.js';
+import { nativeBoundary } from './workspace/native-boundary.js';
 import { workspaceRoots, type WorkspaceRoot } from './workspace/files.js';
 import { tlsFiles, type TlsFiles } from './tls.js';
 import { resolve } from 'node:path';
@@ -8,6 +10,7 @@ export interface Config {
   tls?: TlsFiles;
   workspaceRoots?: WorkspaceRoot[];
   gitEnabled?: boolean;
+  writePolicy?: WritePolicy;
   authMode?: 'dashboard' | 'trusted-local';
   readonly sessionToken?: string;
   upstream: URL;
@@ -44,7 +47,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   for (const [key, allowed] of Object.entries({
     HERMES_PROXY_PREFIX: PROXY_PREFIX,
     WEBUI_BASE_PATH: '/',
-    WORKSPACE_WRITE_ENABLED: 'false',
     GIT_WRITE_ENABLED: 'false',
   })) {
     if (env[key] && env[key] !== allowed) throw new Error(`${key} is not supported by this read-only build`);
@@ -63,6 +65,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     maxBodyBytes: 1_048_576,
   };
   config.tls = tlsFiles(env, config.publicOrigin);
+  config.writePolicy = writePolicy(env, config.workspaceRoots ?? [], config.publicOrigin);
+  if (config.writePolicy.enabled) nativeBoundary();
   configureAccess(config, env);
   return config;
 }
