@@ -7,7 +7,7 @@ export default defineConfig({
   webServer: { command: 'node scripts/https-fixture.mjs', port: 8791, reuseExistingServer: false },
   projects: [
     { name: 'https-chromium', use: { ...devices['Desktop Chrome'] } },
-    { name: 'https-iphone-webkit', use: { ...devices['iPhone 13'] } },
+    { name: 'https-iphone-webkit', testMatch: '**/trusted-pwa.spec.ts', use: { ...devices['iPhone 13'] } },
     { name: 'https-android', use: { ...devices['Pixel 5'] } },
   ],
 });

@@ -1,3 +1,4 @@
+import { pwaNetwork, loginPwa } from './pwa-network.js';
 import { reloadPwa } from './pwa-navigation.js';
 import { test, expect, type Page } from '@playwright/test';
 import { login, send, idle, settings } from './shell-fixture.js';
@@ -5,8 +6,10 @@ import { login, send, idle, settings } from './shell-fixture.js';
 test.use({ baseURL: 'http://127.0.0.1:8787', serviceWorkers: 'allow' });
 const appSettings = async (page: Page) => { await settings(page); await page.getByRole('tab',{name:'App',exact:true}).click(); };
 
-test('PWA cache holds only static shell; offline relaunch has no transcript or send queue', async ({page,context}) => {
-  await login(page); await send(page,'PRIVATE_OFFLINE_CANARY'); await idle(page);
+test('PWA cache holds only static shell; offline relaunch has no transcript or send queue', async ({page}) => {
+  const network = await pwaNetwork();
+  try {
+  await loginPwa(page, network.origin); await send(page,'PRIVATE_OFFLINE_CANARY'); await idle(page);
   await page.waitForFunction(() => !!navigator.serviceWorker.controller);
   const keys = await page.evaluate(async()=> (await Promise.all((await caches.keys()).map(async name => {
     const cache=await caches.open(name);return (await cache.keys()).map(req=>new URL(req.url).pathname);
@@ -14,12 +17,13 @@ test('PWA cache holds only static shell; offline relaunch has no transcript or s
   expect(keys.length).toBeGreaterThan(5);expect(keys.every(path=>path==='/' || path==='/manifest.webmanifest' || path.startsWith('/assets/') || /^\/pwa\/icon-\d+\.png$/.test(path))).toBe(true);
   const cached = await page.evaluate(async()=> {const name=(await caches.keys())[0]!;const cache=await caches.open(name);return Promise.all((await cache.keys()).filter(req=>!req.url.endsWith('.png')).map(async req=>(await cache.match(req))!.text()));});
   expect(cached.join('')).not.toContain('PRIVATE_OFFLINE_CANARY');
-  await context.setOffline(true); await reloadPwa(page);
+  await network.stop(page); await reloadPwa(page);
   await expect(page.getByRole('heading',{name:'You’re offline.'})).toBeVisible();
   await expect(page.locator('body')).not.toContainText('PRIVATE_OFFLINE_CANARY');
-  await context.setOffline(false); await expect(page.locator('#shell-prompt')).toBeEnabled();
+  await network.restore(page); await expect(page.locator('#shell-prompt')).toBeEnabled();
   await expect(page.locator('[data-role="user"]')).toContainText('PRIVATE_OFFLINE_CANARY');
   await expect(page.locator('[data-role="user"]')).toHaveCount(1);
+  } finally { await page.goto('about:blank'); await network.close(); }
 });
 
 test('install settings are accessible and checking for updates preserves an unsent draft', async ({page},info) => {
