@@ -1,0 +1,61 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="900" viewBox="0 0 1440 900" role="img" aria-labelledby="title desc">
+  <title id="title">HermesUI NG desktop conversation preview</title>
+  <desc id="desc">Dark HermesUI NG interface with sidebar, conversation, native tool activity and composer.</desc>
+  <defs>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" dy="16" stdDeviation="20" flood-color="#000" flood-opacity=".22"/></filter>
+  </defs>
+  <rect width="1440" height="900" rx="18" fill="#141719"/>
+  <rect x="0" y="0" width="1440" height="36" rx="18" fill="#101315"/>
+  <circle cx="20" cy="18" r="4" fill="#b96161"/><circle cx="34" cy="18" r="4" fill="#c8a25f"/><circle cx="48" cy="18" r="4" fill="#78ae95"/>
+  <rect x="574" y="9" width="292" height="18" rx="9" fill="#1d2224"/><text x="720" y="22" text-anchor="middle" fill="#6f7a74" font-size="9" font-family="Inter,Segoe UI,Arial">https://hermes.local</text>
+
+  <rect x="0" y="36" width="255" height="864" fill="#1b1e20"/>
+  <line x1="255" y1="36" x2="255" y2="900" stroke="#303638"/>
+  <rect x="19" y="58" width="31" height="31" rx="8" fill="#addac5"/><text x="34.5" y="79" text-anchor="middle" fill="#183329" font-size="15" font-weight="800" font-family="Inter,Segoe UI,Arial">H</text>
+  <text x="61" y="78" fill="#e9edeb" font-size="17" font-weight="650" font-family="Inter,Segoe UI,Arial">HermesUI</text>
+  <rect x="136" y="65" width="27" height="15" rx="4" fill="#2a2f31" stroke="#303638"/><text x="149.5" y="75.5" text-anchor="middle" fill="#a0aaa5" font-size="7" font-weight="700" font-family="Inter,Segoe UI,Arial">NG</text>
+  <rect x="19" y="115" width="217" height="40" rx="8" fill="#addac5"/><text x="36" y="139" fill="#183329" font-size="11" font-weight="700" font-family="Inter,Segoe UI,Arial">＋  New conversation</text><text x="217" y="139" text-anchor="end" fill="#4c6e60" font-size="8" font-family="Inter,Segoe UI,Arial">⌘⇧O</text>
+  <rect x="19" y="169" width="217" height="37" rx="8" fill="#141719" stroke="#303638"/><text x="33" y="192" fill="#7f8b85" font-size="10" font-family="Inter,Segoe UI,Arial">⌕  Search conversations</text>
+  <text x="27" y="236" fill="#6d7973" font-size="8" font-weight="700" letter-spacing="1.1" font-family="Inter,Segoe UI,Arial">TODAY</text>
+  <rect x="12" y="247" width="231" height="54" rx="8" fill="#263c32"/><text x="29" y="269" fill="#addac5" font-size="11" font-family="Inter,Segoe UI,Arial">◌</text><text x="48" y="269" fill="#e9edeb" font-size="11" font-weight="600" font-family="Inter,Segoe UI,Arial">Release readiness</text><text x="48" y="287" fill="#85918a" font-size="8" font-family="Inter,Segoe UI,Arial">default · just now</text>
+  <rect x="12" y="304" width="231" height="54" rx="8" fill="transparent"/><text x="29" y="326" fill="#6d7973" font-size="11" font-family="Inter,Segoe UI,Arial">◌</text><text x="48" y="326" fill="#a0aaa5" font-size="11" font-family="Inter,Segoe UI,Arial">Home Assistant wiring</text><text x="48" y="344" fill="#6d7973" font-size="8" font-family="Inter,Segoe UI,Arial">default · 24m</text>
+  <rect x="12" y="361" width="231" height="54" rx="8" fill="transparent"/><text x="29" y="383" fill="#6d7973" font-size="11" font-family="Inter,Segoe UI,Arial">◌</text><text x="48" y="383" fill="#a0aaa5" font-size="11" font-family="Inter,Segoe UI,Arial">Refactor auth flow</text><text x="48" y="401" fill="#6d7973" font-size="8" font-family="Inter,Segoe UI,Arial">default · 1h</text>
+  <text x="27" y="443" fill="#6d7973" font-size="8" font-weight="700" letter-spacing="1.1" font-family="Inter,Segoe UI,Arial">YESTERDAY</text>
+  <text x="48" y="479" fill="#8f9b95" font-size="11" font-family="Inter,Segoe UI,Arial">PWA update policy</text><text x="48" y="497" fill="#6d7973" font-size="8" font-family="Inter,Segoe UI,Arial">default · yesterday</text>
+  <line x1="18" y1="824" x2="237" y2="824" stroke="#303638"/>
+  <circle cx="37" cy="856" r="15" fill="#202427" stroke="#303638"/><text x="37" y="860" text-anchor="middle" fill="#a0aaa5" font-size="9" font-family="Inter,Segoe UI,Arial">A</text><text x="60" y="852" fill="#e9edeb" font-size="9" font-weight="600" font-family="Inter,Segoe UI,Arial">fixture</text><text x="60" y="867" fill="#6d7973" font-size="8" font-family="Inter,Segoe UI,Arial">basic</text>
+
+  <rect x="255" y="36" width="1185" height="64" fill="#141719"/>
+  <line x1="255" y1="100" x2="1440" y2="100" stroke="#303638"/>
+  <text x="282" y="74" fill="#85918a" font-size="13" font-family="Inter,Segoe UI,Arial">◻</text><text x="305" y="75" fill="#e9edeb" font-size="11" font-weight="600" font-family="Inter,Segoe UI,Arial">Release readiness</text>
+  <rect x="407" y="62" width="46" height="20" rx="5" fill="none" stroke="#303638"/><text x="430" y="75" text-anchor="middle" fill="#a0aaa5" font-size="7" font-family="Inter,Segoe UI,Arial">default</text>
+  <rect x="1240" y="56" width="91" height="28" rx="7" fill="#1d2224"/><circle cx="1254" cy="70" r="3.5" fill="#addac5"/><text x="1270" y="73" fill="#a0aaa5" font-size="9" font-family="Inter,Segoe UI,Arial">Connected</text><text x="1357" y="75" fill="#a0aaa5" font-size="16" font-family="Inter,Segoe UI,Arial">⋯</text>
+
+  <text x="408" y="165" fill="#85918a" font-size="9" font-weight="700" letter-spacing="1.1" font-family="Inter,Segoe UI,Arial">YOU</text>
+  <rect x="408" y="178" width="790" height="68" rx="13" fill="#28312d"/>
+  <text x="428" y="204" fill="#e9edeb" font-size="12" font-family="Inter,Segoe UI,Arial">Review the release branch and tell me what still blocks the next build.</text>
+  <text x="428" y="226" fill="#a0aaa5" font-size="10" font-family="Inter,Segoe UI,Arial">Check the CI gates and focus on anything that could break deployment.</text>
+
+  <rect x="408" y="279" width="22" height="22" rx="7" fill="#addac5"/><text x="419" y="294" text-anchor="middle" fill="#183329" font-size="10" font-weight="800" font-family="Inter,Segoe UI,Arial">H</text><text x="439" y="294" fill="#e9edeb" font-size="10" font-weight="700" font-family="Inter,Segoe UI,Arial">Hermes</text>
+  <text x="408" y="327" fill="#e9edeb" font-size="12" font-family="Inter,Segoe UI,Arial">I’ve compared the release branch with main and checked the current verification gates.</text>
+  <text x="408" y="351" fill="#e9edeb" font-size="12" font-family="Inter,Segoe UI,Arial">Two items still need attention before I’d call it release-ready:</text>
+  <text x="427" y="385" fill="#a0aaa5" font-size="11" font-family="Inter,Segoe UI,Arial">1.</text><text x="450" y="385" fill="#e9edeb" font-size="11" font-family="Inter,Segoe UI,Arial">One browser acceptance path has not been re-run after the latest merge.</text>
+  <text x="427" y="410" fill="#a0aaa5" font-size="11" font-family="Inter,Segoe UI,Arial">2.</text><text x="450" y="410" fill="#e9edeb" font-size="11" font-family="Inter,Segoe UI,Arial">The deployment notes need the new HTTPS migration step called out explicitly.</text>
+
+  <text x="408" y="463" fill="#a0aaa5" font-size="9" font-weight="600" font-family="Inter,Segoe UI,Arial">Agent activity</text>
+  <rect x="408" y="477" width="790" height="108" rx="12" fill="#202427" stroke="#303638"/>
+  <circle cx="432" cy="507" r="11" fill="#263c32"/><text x="432" y="511" text-anchor="middle" fill="#addac5" font-size="10" font-family="Inter,Segoe UI,Arial">◇</text>
+  <text x="453" y="507" fill="#e9edeb" font-size="11" font-weight="650" font-family="Inter,Segoe UI,Arial">github.compare_commits</text><rect x="1080" y="494" width="91" height="24" rx="12" fill="#263c32"/><text x="1125" y="509" text-anchor="middle" fill="#addac5" font-size="8" font-weight="700" font-family="Inter,Segoe UI,Arial">COMPLETED</text>
+  <text x="432" y="541" fill="#a0aaa5" font-size="9" font-family="Inter,Segoe UI,Arial">Compared main → release/next and inspected changed paths</text>
+  <rect x="432" y="553" width="715" height="1" fill="#303638"/><text x="432" y="574" fill="#7f8a84" font-size="8" font-family="Inter,Segoe UI,Arial">4 files changed · 0.4s</text>
+
+  <text x="408" y="632" fill="#e9edeb" font-size="12" font-family="Inter,Segoe UI,Arial">The runtime boundary itself still looks clean: Hermes owns the session and tool state; this UI is only presenting it.</text>
+
+  <rect x="354" y="708" width="946" height="129" rx="16" fill="#202427" stroke="#303638" filter="url(#shadow)"/>
+  <text x="378" y="745" fill="#7f8a84" font-size="11" font-family="Inter,Segoe UI,Arial">Message Hermes…</text>
+  <rect x="377" y="785" width="76" height="29" rx="8" fill="#1a1f21" stroke="#303638"/><text x="415" y="803" text-anchor="middle" fill="#a0aaa5" font-size="8" font-family="Inter,Segoe UI,Arial">default ▾</text>
+  <rect x="460" y="785" width="68" height="29" rx="8" fill="#1a1f21" stroke="#303638"/><text x="494" y="803" text-anchor="middle" fill="#a0aaa5" font-size="8" font-family="Inter,Segoe UI,Arial">High ▾</text>
+  <rect x="535" y="785" width="74" height="29" rx="8" fill="#1a1f21" stroke="#303638"/><text x="572" y="803" text-anchor="middle" fill="#a0aaa5" font-size="8" font-family="Inter,Segoe UI,Arial">Tools</text>
+  <circle cx="1260" cy="799" r="17" fill="#addac5"/><text x="1260" y="804" text-anchor="middle" fill="#183329" font-size="16" font-family="Inter,Segoe UI,Arial">↑</text>
+  <text x="354" y="861" fill="#69746e" font-size="8" font-family="Inter,Segoe UI,Arial">Your conversations stay in Hermes.</text><text x="1300" y="861" text-anchor="end" fill="#69746e" font-size="8" font-family="Inter,Segoe UI,Arial">Enter to send · Shift + Enter for a new line</text>
+</svg>
