@@ -1,0 +1,42 @@
+name: Declare locked workspace editor dependencies
+on:
+  push:
+    paths: ['.github/workflows/workspace-editor-dependencies.yml']
+permissions:
+  contents: write
+jobs:
+  declare:
+    if: github.ref == 'refs/heads/phase5-readonly-workspace'
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref_name }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Declare existing audited modules without resolving or downloading anything
+        run: |
+          node --input-type=module <<'JS'
+          import fs from 'node:fs';
+          import assert from 'node:assert/strict';
+          const manifest = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+          const lock = JSON.parse(fs.readFileSync('package-lock.json', 'utf8'));
+          for (const name of ['@codemirror/language', '@lezer/highlight']) {
+            const existing = lock.packages[`node_modules/${name}`];
+            assert.ok(existing?.integrity);
+            assert.match(existing.version, /^\d+\.\d+\.\d+$/);
+            manifest.dependencies[name] = existing.version;
+          }
+          manifest.dependencies = Object.fromEntries(Object.entries(manifest.dependencies).sort(([a], [b]) => a.localeCompare(b, 'en')));
+          lock.packages[''].dependencies = manifest.dependencies;
+          fs.writeFileSync('package.json', JSON.stringify(manifest, null, 2) + '\n');
+          fs.writeFileSync('package-lock.json', JSON.stringify(lock, null, 2) + '\n');
+          JS
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add package.json package-lock.json
+          git diff --cached --quiet && exit 0
+          git commit -m 'build(editor): pin direct highlighting imports to existing lock versions'
+          git push origin HEAD:phase5-readonly-workspace
