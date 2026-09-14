@@ -70,6 +70,13 @@ try {
   assert.ok(session.activity.state.tools.some(tool => tool.name === 'terminal' && /(?:\\n|\n|\s|\")0(?:\\n|\n|\s|\")/.test(tool.output)), 'Real sudo command must return root UID');
   pass('native-sudo-password-runs-restricted-id-command');
   await fresh('M3_SUDO_SKIP'); await approveIfPresent(); await until(() => !!pending('sudo'), stage);
+  const lostSudo = pending('sudo')!.key;
+  await gateway.reconnect(); await until(() => session.state.phase === 'waiting', 'sudo reconnect');
+  assert.equal(session.activity.state.inputs.find(input => input.key === lostSudo)?.status, 'unknown');
+  await assert.rejects(session.respond(lostSudo, password));
+  await session.interrupt(); await settled();
+  pass('lost-sudo-request-cannot-replay-and-can-be-interrupted-in-webui');
+  await fresh('M3_SUDO_SKIP'); await approveIfPresent(); await until(() => !!pending('sudo'), stage);
   await session.respond(pending('sudo')!.key, ''); await settled(); pass('native-sudo-skip-settles-without-password');
   await fresh('M3_SECRET'); await until(() => !!pending('secret'), stage);
   const capture = pending('secret')!; assert.equal(capture.envVar, 'HERMES_M3_CAPTURE_KEY');
@@ -82,13 +89,20 @@ try {
   assert.ok(session.activity.state.tools.some(tool => tool.name === 'skill_view' && /available/.test(tool.output)));
   pass('fresh-native-session-observes-stored-secret-without-webui-filesystem-access');
   await fresh('M3_SECRET_SKIP'); await until(() => !!pending('secret'), stage);
+  const lostSecret = pending('secret')!.key;
+  await gateway.reconnect(); await until(() => session.state.phase === 'waiting', 'secret reconnect');
+  assert.equal(session.activity.state.inputs.find(input => input.key === lostSecret)?.status, 'unknown');
+  await assert.rejects(session.respond(lostSecret, secret));
+  await session.interrupt(); await settled();
+  pass('lost-secret-request-cannot-replay-and-can-be-interrupted-in-webui');
+  await fresh('M3_SECRET_SKIP'); await until(() => !!pending('secret'), stage);
   await session.respond(pending('secret')!.key, ''); await settled();
   assert.ok(session.activity.state.tools.some(tool => tool.name === 'skill_view' && /setup_skipped/.test(tool.output)));
   pass('native-secret-skip-is-explicit-and-settles');
   const beforeTurns = session.state.messages.filter(message => message.role === 'user').length;
   await session.submit('A normal turn after native interactive workflows.'); await settled();
   assert.equal(session.state.messages.filter(message => message.role === 'user').length, beforeTurns + 1);
-  const observable = JSON.stringify([session.state, session.activity.state, connection.report(), attention.items]);
+  const observable = JSON.stringify([session.state, session.activity.state, session.activity.archive, connection.report(), attention.items]);
   assert.ok(!observable.includes(password)); assert.ok(!observable.includes(secret));
   pass('subsequent-turn-and-no-credential-values-in-client-state-or-report'); success = true;
 } catch (error) {
