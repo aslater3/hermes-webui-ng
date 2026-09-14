@@ -9,13 +9,14 @@ test('composer YOLO switch is session scoped and survives authoritative reload',
   await expect(yolo).toBeEnabled();
   await expect(yolo).not.toBeChecked();
 
-  await yolo.check();
+  await yolo.click();
   await expect(yolo).toBeChecked();
   await page.reload();
-  await expect(page.getByRole('switch', { name: 'YOLO mode for this conversation', exact: true })).toBeChecked();
+  const reloadedYolo = page.getByRole('switch', { name: 'YOLO mode for this conversation', exact: true });
+  await expect(reloadedYolo).toBeChecked();
 
-  await page.getByRole('switch', { name: 'YOLO mode for this conversation', exact: true }).uncheck();
-  await expect(page.getByRole('switch', { name: 'YOLO mode for this conversation', exact: true })).not.toBeChecked();
+  await reloadedYolo.click();
+  await expect(reloadedYolo).not.toBeChecked();
   await page.reload();
   await expect(page.getByRole('switch', { name: 'YOLO mode for this conversation', exact: true })).not.toBeChecked();
 });
@@ -40,6 +41,6 @@ test('approval YOLO enables the session switch then resolves only the pending re
   await expect(yolo).toBeChecked();
   await expect(page.locator('[data-role="assistant"]').last()).toContainText('SYNTHETIC_AGENT_COMPLETE');
 
-  await yolo.uncheck();
+  await yolo.click();
   await expect(yolo).not.toBeChecked();
 });
