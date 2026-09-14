@@ -1,0 +1,31 @@
+name: Workspace dependency capture
+on:
+  push:
+    paths: ['.github/workflows/workspace-tooling.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  capture:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Resolve exact versions for review, without publishing or running dependency scripts
+        run: |
+          npm install --save-exact --ignore-scripts isomorphic-git@1.42.2 diff@8 codemirror@6 @codemirror/state@6 @codemirror/view@6 @codemirror/lang-javascript@6 @codemirror/lang-json@6 @codemirror/lang-python@6 @codemirror/lang-yaml@6
+          npm ci --prefix pwa --ignore-scripts
+          npm audit --omit=dev --json > /tmp/workspace-audit.json || test "$?" = 1
+          tar -czf /tmp/workspace-tooling.tgz package.json package-lock.json node_modules pwa/node_modules
+      - uses: actions/upload-artifact@v4
+        with:
+          name: workspace-tooling
+          path: |
+            /tmp/workspace-tooling.tgz
+            /tmp/workspace-audit.json
+          retention-days: 7

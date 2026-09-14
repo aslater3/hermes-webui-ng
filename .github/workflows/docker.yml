@@ -34,7 +34,8 @@ jobs:
           curl --fail --silent http://127.0.0.1:8787/ | grep 'Your agent workspace'
           test "$(curl --silent -o /dev/null -w '%{http_code}' http://127.0.0.1:8787/readyz)" = 503
           test "$(docker exec webui id -u)" = 10001
-          docker exec webui sh -c 'test ! -d node_modules && test ! -d build/tests && ! command -v python3 && ! command -v git'
+          # npm prune can retain empty scope directories; inspect actual package directories.
+          docker exec webui sh -c 'test -d node_modules/isomorphic-git && test -d node_modules/diff && test ! -d node_modules/typescript && test ! -d node_modules/vite && test ! -d node_modules/@playwright/test && test ! -d node_modules/playwright && test ! -d node_modules/playwright-core && test ! -d node_modules/esbuild && test ! -d pwa && test ! -d build/tests && ! command -v python3 && ! command -v git'
           docker stop --time 10 webui
           test "$(docker inspect -f '{{.State.ExitCode}}' webui)" = 0
       - name: Container diagnostics and cleanup

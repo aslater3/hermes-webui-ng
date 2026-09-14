@@ -1,0 +1,42 @@
+{
+  "milestone": "M5 Read-only Workspace Beta",
+  "dateUtc": "2026-09-14",
+  "status": "software-exit-gate-passed",
+  "featureCommit": "b67c8d00039cd19b46195616495e95d8fa7de79c",
+  "testedMergeCommit": "e6c14fb414d9af42e97cd738cf07ee9a790a8fc2",
+  "testedMainParent": "f5ff2ad3e4d6603619b5f4c534149ddeb96f2b3d",
+  "verifiedSourceTree": "ebf6bd71e955bb9fa85a8b26393cc0d9081f0fc9",
+  "upstreamRef": "b6b53c69a6ed49cb099cf1bfe76b5e6edd718e5a",
+  "ci": {
+    "checkpoint": { "runId": 34854030120, "conclusion": "success" },
+    "browsers": { "runId": 34854030445, "conclusion": "success", "passed": 348, "failed": 0, "skipped": 0, "flaky": 0 },
+    "image": { "runId": 34854030409, "conclusion": "success" },
+    "https": { "runId": 34854030295, "conclusion": "success", "passed": 8, "webkitRepeatPassed": 10, "failed": 0, "skipped": 0, "flaky": 0 },
+    "nativeHermes": { "runId": 34854030374, "conclusion": "success", "modes": ["dashboard", "trusted-local"] }
+  },
+  "localVerificationOfTestedMerge": {
+    "node": "22.16.0", "typecheck": "pass", "lint": "pass", "productionBuild": "pass",
+    "unitPassed": 191, "wirePassed": 34, "failed": 0, "skipped": 0,
+    "sourceTreeMatchesGitHub": true, "dockerExecutedLocally": false
+  },
+  "verifiedArtifacts": [
+    { "name": "source-checkpoint", "id": 10351817376, "sha256": "720b3eeee1f35c0c10f18d4b238e25543da28662a66263abd467352f50ffc079" },
+    { "name": "diagnostic-browser-results", "id": 10351838386, "sha256": "5251f6459d8de1fb6da5b0e51ee3941c1c009e64fe03bdd6fd3f5080c86b8014" },
+    { "name": "trusted-https-browser-results", "id": 10352247584, "sha256": "c311e33e8722a95727f9a68e916bd0a993717df24808decbdd617c15df9506f3" },
+    { "name": "vanilla-hermes-acceptance", "id": 10352231551, "sha256": "78a4cd69fad910716ea9c2985feb2e040e5651664c6394e7d963d133da72f4db" }
+  ],
+  "workspaceNativeReports": {
+    "dashboard": { "success": true, "gates": ["native-admission-protects-dedicated-readonly-mount", "files-preview-and-attachment-download-over-verified-tls", "production-git-reader-discovers-and-compares-staged-working-content", "traversal-metadata-secrets-links-and-write-requests-rejected", "logout-revokes-local-workspace-admission"] },
+    "trusted-local": { "success": true, "gates": ["native-admission-protects-dedicated-readonly-mount", "files-preview-and-attachment-download-over-verified-tls", "production-git-reader-discovers-and-compares-staged-working-content", "traversal-metadata-secrets-links-and-write-requests-rejected"] }
+  },
+  "additionalHarnessAssertions": ["OS read-only mount rejects writes", "index and working-file SHA-256 unchanged", "non-root container", "normal TLS verification", "upstream tracked source unchanged"],
+  "screenshotsInspected": ["desktop Workspace CodeMirror preview", "iPhone WebKit full-screen Git diff"],
+  "limits": [
+    "Browser tests use synthetic Hermes fixtures and emulated mobile browsers, not physical devices.",
+    "Native acceptance uses unmodified pinned Hermes and a production WebUI image; the model endpoint and isolated project contents are controlled fixtures.",
+    "All admitted users can read all configured roots; use dedicated read-only project mounts. Filename exclusions are not a general secret scanner.",
+    "Unsupported repository layouts and bounded reads are documented in ADRs 022-024 and phase5-workspace.md.",
+    "No file/Git writes or arbitrary commands/revisions. Phase 6, physical Phase 4 and release-wide gates remain open.",
+    "Historical progress notes and earlier failed runs are not final evidence; this record supersedes pending Phase 5 statements."
+  ]
+}

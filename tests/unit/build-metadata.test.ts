@@ -11,7 +11,7 @@ test('browser and BFF reports identify the same current milestone without operat
   const store = new ConnectionStore(new DashboardClient('http://localhost:8787'), gateway);
   t.after(() => store.dispose());
   assert.deepEqual(store.report().webui, PUBLIC_BUILD);
-  assert.equal(PUBLIC_BUILD.phase, 4); assert.equal(PUBLIC_BUILD.milestone, '4C');
+  assert.equal(PUBLIC_BUILD.phase, 5); assert.equal(PUBLIC_BUILD.milestone, '5');
 });
 
 test('settings diagnostics retain method labels, never models, values or command arguments', () => {

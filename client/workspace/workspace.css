@@ -1,0 +1,62 @@
+.workspace.with-files { grid-template-columns: 268px minmax(300px, 1fr) minmax(370px, 34%); }
+.workspace.rail-collapsed.with-files { grid-template-columns: 76px minmax(300px, 1fr) minmax(370px, 34%); }
+.workspace.with-files:has(.workspace-size-wide) { grid-template-columns: 268px minmax(300px, 1fr) minmax(450px, 48%); }
+.file-workspace { min-width: 0; min-height: 0; display: flex; flex-direction: column; border-left: 1px solid var(--border); background: var(--surface); overflow: hidden; }
+.workspace-heading { display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--border); padding: 8px 14px; flex-shrink: 0; }
+.workspace-heading h2, .workspace-heading > div { display: flex; align-items: center; gap: 8px; margin: 0; font-size: 14px; }
+.file-workspace button, .file-workspace .icon-button, .workspace-preview-tools a { min-height: 44px; min-width: 44px; border-radius: 8px; }
+.file-workspace button:hover:not(:disabled), .workspace-preview-tools a:hover { background: var(--surface-hover); }
+.file-workspace .icon-button { width: 44px; height: 44px; }
+.workspace-controls { display: flex; gap: 8px; padding: 12px 14px 6px; flex-shrink: 0; }
+.workspace-controls select { flex: 1; width: 0; min-height: 44px; padding: 8px 10px; font-size: 16px; }
+.workspace-tabs { display: flex; padding: 4px 14px 8px; gap: 5px; flex-shrink: 0; border-bottom: 1px solid var(--border); }
+.workspace-tabs button { flex: 1; font-size: 12px; color: var(--muted); }
+.workspace-tabs button[aria-selected=true] { color: var(--accent); background: var(--accent-soft); font-weight: 600; }
+.workspace-view { flex: 1; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
+.workspace-browser { min-height: 0; flex: 1; overflow: auto; overscroll-behavior: contain; padding: 0 10px 16px; }
+.workspace-breadcrumb { display: flex; gap: 2px; overflow-x: auto; padding: 6px 0; white-space: nowrap; font-size: 12px; }
+.workspace-breadcrumb button { flex-shrink: 0; padding-inline: 8px; }
+.workspace-filter { display: flex; align-items: center; gap: 8px; margin: 0 4px 8px; padding: 0 10px; background: var(--bg); border: 1px solid var(--border); border-radius: 9px; }
+.workspace-filter input { width: 100%; background: transparent; border: none; padding: 10px 0; border-radius: 0; min-height: 44px; }
+.workspace-list, .workspace-changes { list-style: none; padding: 0; margin: 0; }
+.workspace-list button { width: 100%; justify-content: start; text-align: left; gap: 10px; padding: 10px; min-height: 48px; }
+.workspace-list button > span { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.workspace-list small { font-size: 11px; color: var(--muted); }
+.workspace-list span small { display: block; margin-top: 4px; }
+.workspace-list svg { color: var(--muted); }
+.workspace-pagination { display: flex; justify-content: space-between; gap: 8px; margin-top: 12px; font-size: 12px; }
+.workspace-progress { margin: 0; padding: 8px 16px; color: var(--muted); font-size: 12px; }
+.workspace-empty { display: flex; flex-direction: column; align-items: center; text-align: center; padding: 30px 24px; color: var(--muted); gap: 14px; }
+.workspace-empty h3 { font-size: 15px; color: var(--text); margin: 0; }
+.workspace-empty p { max-width: 34ch; margin: 0; font-size: 13px; }
+.workspace-empty code { font-size: 12px; color: var(--text); }
+.workspace-message { padding: 12px 8px; margin: 0; font-size: 12px; color: var(--muted); overflow-wrap: anywhere; }
+.workspace-repo { display: flex; align-items: center; gap: 12px; padding: 18px 8px 4px; }
+.workspace-repo > div { min-width: 0; }
+.workspace-repo strong, .workspace-repo span { display: block; overflow-wrap: anywhere; }
+.workspace-repo span { color: var(--muted); font-size: 12px; margin-top: 4px; }
+.workspace-changes li { padding: 12px 8px; border-bottom: 1px solid var(--border); }
+.workspace-changes li > span { display: flex; gap: 10px; justify-content: space-between; align-items: start; }
+.workspace-changes strong { font-weight: 550; overflow-wrap: anywhere; min-width: 0; font-size: 12px; }
+.workspace-changes small { color: var(--muted); font-size: 11px; }
+.workspace-changes li > div { display: flex; gap: 8px; margin-top: 7px; }
+.workspace-changes button { border: 1px solid var(--border); font-size: 12px; padding-inline: 10px; }
+.workspace-footer { flex-shrink: 0; padding: 9px 14px max(10px, var(--safe-bottom)); display: flex; gap: 5px; align-items: center; color: var(--muted); font-size: 11px; border-top: 1px solid var(--border); flex-wrap: wrap; }
+.workspace-preview { display: flex; flex-direction: column; min-height: 0; flex: 1; overflow: hidden; }
+.workspace-preview > header { display: flex; gap: 8px; align-items: center; padding: 4px 10px; border-bottom: 1px solid var(--border); flex-shrink: 0; }
+.workspace-preview header strong { font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.workspace-back { flex-shrink: 0; font-size: 12px; }
+.workspace-preview-tools { padding: 4px 10px; display: flex; align-items: center; flex-shrink: 0; gap: 4px; border-bottom: 1px solid var(--border); }
+.workspace-preview-tools > span { flex: 1; color: var(--muted); font-size: 11px; }
+.workspace-preview-tools a { display: inline-flex; justify-content: center; align-items: center; color: var(--muted); }
+.workspace-code { flex: 1; min-height: 0; overflow: hidden; }
+.workspace-plain { flex: 1; min-height: 0; margin: 0; overflow: auto; padding: 16px; font: 13px/1.65 var(--mono); white-space: pre-wrap; overflow-wrap: anywhere; }
+.file-workspace .notice { margin: 8px; font-size: 12px; flex-shrink: 0; }
+.modal-workspace { width: 100%; height: min(var(--app-height), 100dvh); max-height: min(var(--app-height), 100dvh); margin: var(--app-top) 0 0; border-radius: 0; max-width: 100%; padding: 0; }
+.modal-workspace .modal-inner { height: 100%; }
+.modal-workspace .modal-header { display: none; }
+.modal-workspace .workspace-heading { padding-top: max(10px, var(--safe-top)); }
+.modal-workspace .file-workspace { flex: 1; border: none; padding-left: var(--safe-left); padding-right: var(--safe-right); }
+@media (max-width: 430px) { .workspace-heading, .workspace-controls { padding-inline: 10px; }.workspace-tabs { padding-inline: 8px; }.workspace-list button { padding-inline: 6px; }.workspace-preview-tools { padding-inline: 6px; } }
+
+.workspace.rail-collapsed.with-files:has(.workspace-size-wide) { grid-template-columns: 76px minmax(300px, 1fr) minmax(450px, 48%); }

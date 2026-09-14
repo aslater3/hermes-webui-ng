@@ -1,9 +1,10 @@
+import { workspaceRoutes } from './routes/workspace.js';
 import { pwaAsset } from './pwa.js';
 import { transportServer } from './tls.js';
 import { foundationRoutes } from './routes/foundation.js';
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { randomUUID } from 'node:crypto';
+import { randomBytes, randomUUID } from 'node:crypto';
 import type { Duplex } from 'node:stream';
 import type { Config } from './config.js';
 import { PROXY_PREFIX } from './config.js';
@@ -14,6 +15,7 @@ import { json, proxyHttp, proxyUpgrade, refuseUpgrade, type Log } from './proxy/
 export function createApp(config: Config, log: Log = (event) => console.log(JSON.stringify(event))) {
   const sockets = new Set<Duplex>();
   const foundation = foundationRoutes(config);
+  const workspace = workspaceRoutes(config);
   const server = transportServer(config,
     (req, res) => {
       const raw = req.url ?? '/';
@@ -26,6 +28,7 @@ export function createApp(config: Config, log: Log = (event) => console.log(JSON
         json(res, 403, { error: { code: 'ORIGIN_REJECTED', requestId } });
         return;
       }
+      if (workspace(req, res)) return;
       if (raw === '/api/webui/access' && req.method === 'GET') {
         void localAccess(config).then(data => json(res, 200, data)).catch(() => json(res, 503, { error: { code: 'LOCAL_ACCESS_UNAVAILABLE' } }));
         return;
@@ -86,6 +89,8 @@ export function createApp(config: Config, log: Log = (event) => console.log(JSON
       if (!asset) { json(res, 404, { error: { code: 'NOT_FOUND' } }); return; }
       void readFile(join(config.staticDir, asset))
         .then((content) => {
+          const nonce = asset.endsWith('.html') ? randomBytes(18).toString('base64') : '';
+          if (nonce) content = Buffer.from(content.toString('utf8').replace('</head>', `<meta name="webui-style-nonce" content="${nonce}"></head>`));
           const mime = asset.endsWith('.html') ? 'text/html' : asset.endsWith('.css') ? 'text/css' : asset.endsWith('.svg') ? 'image/svg+xml' : asset.endsWith('.png') ? 'image/png' : asset.endsWith('.webmanifest') ? 'application/manifest+json' : 'text/javascript';
           res.writeHead(200, {
             'Content-Type': `${mime}; charset=utf-8`,
@@ -94,7 +99,7 @@ export function createApp(config: Config, log: Log = (event) => console.log(JSON
             'X-Content-Type-Options': 'nosniff',
             'Referrer-Policy': 'no-referrer',
             'Permissions-Policy': 'camera=(), microphone=(), geolocation=()',
-            'Content-Security-Policy': "default-src 'self'; worker-src 'self'; manifest-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self' data:; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'",
+            'Content-Security-Policy': `default-src 'self'; worker-src 'self'; manifest-src 'self'; script-src 'self'; style-src 'self'${nonce ? ` 'nonce-${nonce}'` : ''}; connect-src 'self'; img-src 'self' data:; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'`,
           });
           res.end(req.method === 'HEAD' ? undefined : content);
         })
@@ -113,6 +118,7 @@ export function createApp(config: Config, log: Log = (event) => console.log(JSON
   return {
     server,
     close: async () => {
+      await workspace.close();
       for (const socket of sockets) socket.destroy();
       server.closeAllConnections();
       await new Promise<void>((resolve) => server.close(() => resolve()));

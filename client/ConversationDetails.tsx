@@ -22,6 +22,6 @@ export function ConversationDetails({ runtime: rt, onClose, pane = false }: { ru
     <button className="secondary" disabled={!rt.ready || rt.chat.busy || !state.runtimeId || rt.pwa.state.updating} onClick={() => rt.run(() => rt.chat.latest())}><RefreshCw size={16}/>Refresh native state</button>
     <p className="small muted">These values are reported by Hermes. Use the composer controls to request a model or reasoning change.</p>
     {!rt.ready && <p className="small muted" role="status">Disconnected. Previously displayed values may be stale.</p>}
-    <div className="settings-divider"/><p className="small muted">Workspace files and Git are a later phase. No filesystem is mounted or exposed by this pane.</p></div>
+    <div className="settings-divider"/><p className="small muted">These are conversation details, not filesystem state. Use Workspace to inspect an optional read-only project mount and its Git changes.</p></div>
   </aside>;
 }

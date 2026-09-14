@@ -9,6 +9,6 @@ test('PWA capability describes shipped app support, not successful installation 
     store.applyWebui(store.begin(), { schemaVersion: 1, workspace: { available: false }, features: { pwa: flag } });
     assert.equal(store.snapshot().pwa.state, state);
     assert.equal(store.snapshot().pwa.evidence, 'webui');
-    assert.equal(store.snapshot().workspace.implemented, false);
+    assert.equal(store.snapshot().workspace.implemented, true);
   }
 });
