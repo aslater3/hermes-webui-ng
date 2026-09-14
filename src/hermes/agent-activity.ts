@@ -13,6 +13,7 @@ export interface ToolActivity {
   id: string; name: string; state: 'running' | 'complete' | 'error' | 'unknown';
   input: string; output: string; context: string; duration?: number; truncated: boolean;
 }
+export interface ActivityTurn { id: number; reasoning: string; thinking: string; tools: ToolActivity[]; truncated: boolean; }
 export interface ActivityState {
   reasoning: string; thinking: string; tools: ToolActivity[]; inputs: AgentInput[];
   truncated: boolean; droppedTools: number; recoveryGap: boolean; malformed: boolean;
@@ -38,7 +39,6 @@ export function displayValue(value: unknown, max: number = ACTIVITY_LIMITS.text)
     if (typeof item === 'object' && item !== null) {
       return Object.fromEntries(Object.entries(item).slice(0, 64).map(([key, v]) => {
         budget -= key.length;
-        // Defence in depth for conventional structured secret keys in tool arguments/results.
         return [text(key, 128), /password|secret|token|api.?key|authorization|cookie/i.test(key) ? '[redacted]' : visit(v, depth + 1)];
       }));
     }
@@ -79,7 +79,6 @@ export function parseInput(kind: InputKind, raw: unknown): AgentInput {
     prompt: bounded(p.prompt ?? p.description ?? p.reason),
     command: kind === 'approval' ? bounded(p.command) : undefined,
     envVar: kind === 'secret' ? bounded(p.env_var) : undefined,
-    // Grant only the low-risk, explicit per-operation choice; never broaden approval policy.
     choices: kind === 'approval' ? (p.choices === undefined ? ['once', 'deny'] : approvalChoices.filter((c) => ['once', 'deny'].includes(c))) : [],
     questions,
     answered: p.answers && typeof p.answers === 'object' ? questions.flatMap((q) => q.id && Object.hasOwn(p.answers as object, q.id) ? [q.id] : []) : [],
@@ -96,6 +95,7 @@ export function inputRpc(input: AgentInput, reply: InputReply, runtimeId: string
     params.choice = reply.value;
   } else if (input.kind === 'clarify') {
     const batch = input.questions.some((q) => q.id);
+    if (reply.questionId && input.answered.includes(reply.questionId)) throw new ClientError('protocol', 'This answer was already confirmed');
     if (batch && reply.questionId) {
       if (!input.questions.some((q) => q.id === reply.questionId)) throw new ClientError('protocol', 'Unknown clarify question');
       params.question_id = reply.questionId;
@@ -106,8 +106,25 @@ export function inputRpc(input: AgentInput, reply: InputReply, runtimeId: string
 }
 export class AgentActivity {
   state: ActivityState = this.empty();
+  archive: ActivityTurn[] = [];
+  private turn = 0;
+  private terminal = new Set<string>();
+  private archiveTurn(): void {
+    const s = this.state;
+    if (s.tools.length || s.reasoning || s.thinking) this.archive = [...this.archive, {
+      id: ++this.turn, reasoning: s.reasoning.slice(-8192), thinking: s.thinking.slice(-2048),
+      tools: s.tools.slice(-10).map(tool => ({ ...tool, input: tool.input.slice(0, 8192), output: tool.output.slice(0, 8192),
+        state: tool.state === 'running' ? 'unknown' as const : tool.state,
+        truncated: tool.truncated || tool.input.length > 8192 || tool.output.length > 8192 })),
+      truncated: s.truncated || s.droppedTools > 0 || s.tools.length > 10 || s.reasoning.length > 8192 || s.thinking.length > 2048,
+    }].slice(-6);
+  }
+  private remember(key: string): void {
+    this.terminal.add(key);
+    if (this.terminal.size > 256) this.terminal.delete(this.terminal.values().next().value!);
+  }
   private empty(): ActivityState { return { reasoning: '', thinking: '', tools: [], inputs: [], truncated: false, droppedTools: 0, recoveryGap: false, malformed: false }; }
-  reset(): void { this.state = this.empty(); }
+  reset(): void { this.state = this.empty(); this.archive = []; this.terminal.clear(); this.turn = 0; }
   disconnect(): void {
     this.state = { ...this.state, recoveryGap: this.state.inputs.some((p) => ['pending','sending','unknown'].includes(p.status) && ['sudo','secret'].includes(p.kind)),
       inputs: this.state.inputs.map((p) => ['pending','sending'].includes(p.status) ? {...p, status:'unknown'} : p),
@@ -115,7 +132,18 @@ export class AgentActivity {
   }
   private put(input: AgentInput): void {
     const old = this.state.inputs.find((p) => p.key === input.key);
-    if (old && ['answered','expired','sending','unsupported'].includes(old.status)) return;
+    if (this.terminal.has(input.key) || (old && ['answered','expired','sending','unsupported'].includes(old.status))) return;
+    if (old) {
+      const identity = (p: AgentInput) => JSON.stringify([p.kind, p.prompt, p.command, p.envVar, p.choices, p.questions]);
+      if (identity(old) !== identity(input)) {
+        this.remember(old.key);
+        this.state = { ...this.state, malformed: true, inputs: this.state.inputs.map(p => p.key === old.key ? { ...p, blocked: true, status: 'unknown' } : p) };
+        return;
+      }
+      if (old.status === 'unknown' && ['sudo','secret'].includes(old.kind)) return;
+      input.answered = [...new Set([...old.answered, ...input.answered])];
+      input.blocked ||= old.blocked;
+    }
     if (!old && this.state.inputs.length >= ACTIVITY_LIMITS.inputs) {
       const terminal = this.state.inputs.findIndex((p) => ['answered','expired'].includes(p.status));
       if (terminal < 0) { this.state = {...this.state, malformed:true}; return; }
@@ -132,7 +160,11 @@ export class AgentActivity {
         else this.status(`${kind}:${id(payload.request_id)}`, 'expired');
         return true;
       }
-      if (event.type === 'message.start') { this.state = {...this.empty(), recoveryGap:this.state.recoveryGap}; return true; }
+      if (event.type === 'message.start') {
+        this.archiveTurn();
+        this.state.inputs.forEach(input => this.remember(input.key));
+        this.state = this.empty(); return true;
+      }
       if (['reasoning.delta','reasoning.available','thinking.delta'].includes(event.type)) {
         const p = record(event.payload), field = event.type === 'thinking.delta' ? 'thinking' : 'reasoning';
         const next = event.type === 'reasoning.available' ? text(p.text) : this.state[field] + text(p.text);
@@ -144,7 +176,11 @@ export class AgentActivity {
         if (old && ['complete','error'].includes(old.state) && event.type !== 'tool.complete') return true;
         const input = displayValue(p.args ?? p.args_text ?? old?.input ?? '', ACTIVITY_LIMITS.input);
         const output = event.type === 'tool.complete' ? displayValue(p.result ?? p.result_text ?? p.summary ?? '') : text(p.text ?? p.preview ?? old?.output);
-        const result = typeof p.result === 'object' && p.result !== null && !Array.isArray(p.result) ? record(p.result) : {};
+        let value: unknown = p.result;
+        if (typeof value === 'string' && value.length <= ACTIVITY_LIMITS.text && value.trimStart().startsWith('{')) {
+          try { value = JSON.parse(value); } catch { /* unstructured tool output stays plain text */ }
+        }
+        const result = typeof value === 'object' && value !== null && !Array.isArray(value) ? record(value) : {};
         const failed = result.success === false || !!result.error || (typeof result.exit_code === 'number' && result.exit_code !== 0);
         const tool: ToolActivity = { id:toolId, name:text(p.name ?? old?.name ?? 'Tool',128), input, output,
           context:text(p.context ?? p.preview ?? old?.context,2048), state:event.type === 'tool.complete' ? failed?'error':'complete' : 'running',
@@ -167,15 +203,22 @@ export class AgentActivity {
       this.state = {...this.state, inputs:this.state.inputs.map((p) => ['pending','unknown'].includes(p.status)?{...p,status:'expired'}:p),
         tools:this.state.tools.map((t)=>t.state==='running'?{...t,state:'unknown'}:t)};
     }
+    this.state.inputs.filter(input => ['answered','expired','unsupported'].includes(input.status)).forEach(input => this.remember(input.key));
   }
-  status(key: string, status: InputStatus): void { this.state = {...this.state, inputs:this.state.inputs.map((p) => p.key === key ? {...p,status} : p)}; }
+  status(key: string, status: InputStatus): void {
+    if (['answered','expired','unsupported'].includes(status)) this.remember(key);
+    this.state = {...this.state, inputs:this.state.inputs.map((p) => p.key === key ? {...p,status} : p)}; }
   result(key: string, raw: unknown, questionId?: string): void {
     const input = this.state.inputs.find((p) => p.key === key);
     if (!input || input.status !== 'sending') return;
-    const result = record(raw);
+    let result: Record<string, unknown>;
+    try { result = record(raw); } catch { this.status(key, 'unknown'); throw new ClientError('protocol', 'Invalid interaction acknowledgement'); }
     if (result.status === 'expired' || (input.kind === 'approval' && (result.resolved === false || result.resolved === 0))) {this.status(key,'expired'); return;}
     if (input.kind === 'approval' ? result.resolved !== true && !(typeof result.resolved==='number' && result.resolved>0) : result.status !== 'ok') {
       this.status(key,'unknown'); throw new ClientError('protocol','Hermes did not confirm the interaction response');
+    }
+    if (input.kind === 'clarify' && questionId && result.remaining !== undefined && (!Array.isArray(result.remaining) || new Set(result.remaining).size !== result.remaining.length || result.remaining.includes(questionId) || input.answered.some(qid => (result.remaining as unknown[]).includes(qid)))) {
+      this.status(key, 'unknown'); throw new ClientError('protocol', 'Invalid clarify acknowledgement');
     }
     if (input.kind === 'clarify' && questionId && Array.isArray(result.remaining) && result.remaining.length) {
       if (!result.remaining.every((v)=>typeof v==='string' && input.questions.some((q)=>q.id===v))) {
