@@ -35,6 +35,7 @@ jobs:
       - name: Install pinned upstream with its frozen dependency lock
         run: uv sync --project upstream --frozen --no-dev --extra web --python 3.11
       - run: npm ci
+      - run: npm ci --prefix pwa --ignore-scripts
       - run: npm run build
       - name: Build actual WebUI runtime image
         run: docker build -t hermes-webui-ng:phase0 .

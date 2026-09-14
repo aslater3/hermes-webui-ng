@@ -14,3 +14,4 @@ upstream/
 .local/
 *.key
 *.pem
+pwa/node_modules/
