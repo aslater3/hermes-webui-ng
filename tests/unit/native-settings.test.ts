@@ -5,7 +5,7 @@ import { ClientError } from '../../src/hermes/protocol.js';
 const choice = { model: 'model-b', provider: 'custom', providerName: 'Lab', reasoning: true };
 function fixture() {
   const calls: { method: string; params?: Record<string, unknown> }[] = [];
-  const target = { runtimeId: 'live-a', profile: 'work', idle: true, agent: { model: 'model-a', provider: 'custom', reasoningEffort: 'medium' } };
+  const target = { runtimeId: 'live-a', profile: 'work', idle: true, starting: false, agent: { model: 'model-a', provider: 'custom', reasoningEffort: 'medium' } };
   let refreshes = 0;
   const f = { target, calls, confirmation: false, deferred: false, fail: false, hook: undefined as (() => Promise<void>) | undefined,
     refreshHook: undefined as (() => void) | undefined,
@@ -103,4 +103,28 @@ test('a model changed by another client during the capability check blocks reaso
   h.f.refreshHook = () => { if (h.f.refreshes() === 2) h.target.agent.model = 'other-model'; };
   await assert.rejects(h.settings.changeReasoning('high'));
   assert.equal(h.calls.filter(call => call.method === 'config.set').length, 0);
+});
+
+
+test('settings wait for lazy native construction using reads before dispatching once', async () => {
+  const h = fixture(); h.target.starting = true;
+  const changing = h.settings.changeModel(choice);
+  await new Promise(resolve => setTimeout(resolve, 10));
+  assert.equal(h.settings.state.busy, true);
+  assert.equal(h.calls.filter(call => call.method === 'config.set').length, 0);
+  h.target.starting = false;
+  await changing;
+  assert.equal(h.settings.state.outcome, 'applied');
+  assert.equal(h.calls.filter(call => call.method === 'config.set').length, 1);
+  assert.equal(h.f.refreshes(), 3);
+});
+
+test('selection changes while waiting for agent construction cancel without a setter', async () => {
+  const h = fixture(); h.target.starting = true;
+  const changing = h.settings.changeModel(choice); const rejected = assert.rejects(changing);
+  await new Promise(resolve => setTimeout(resolve, 10));
+  h.settings.reset(); h.target.runtimeId = 'other';
+  await rejected;
+  assert.equal(h.calls.filter(call => call.method === 'config.set').length, 0);
+  assert.deepEqual(h.settings.state, { busy: false, outcome: 'idle' });
 });

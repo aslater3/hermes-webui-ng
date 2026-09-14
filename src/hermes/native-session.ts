@@ -20,6 +20,7 @@ export interface SessionState {
   totalMessages?: number;
   error?: ClientError;
   agent?: AgentMetadata;
+  agentStarting?: boolean;
 }
 
 /** Disposable view of upstream state. Nothing is written to browser or server storage. */
@@ -39,7 +40,7 @@ export class NativeSession {
 
   constructor(private readonly gateway: Transport) {
     this.settings = new NativeSettings(gateway, {
-      read: () => ({ runtimeId: this.state.runtimeId, profile: this.state.profile,
+      read: () => ({ runtimeId: this.state.runtimeId, profile: this.state.profile, starting: this.state.agentStarting,
         idle: !this.disposed && gateway.state.phase === 'ready' && this.state.phase === 'idle' && !this.submission, agent: this.state.agent }),
       refresh: () => this.refresh(), notify: () => this.publish({}),
     });
@@ -70,7 +71,7 @@ export class NativeSession {
       this.activity.disconnect();
       ++this.epoch;
       this.flight = undefined;
-      if (this.state.storedId) this.publish({ phase: 'unknown', runtimeId: undefined,
+      if (this.state.storedId) this.publish({ phase: 'unknown', runtimeId: undefined, agentStarting: undefined,
         deliveryUnknown: this.state.deliveryUnknown || !!this.submission, submitting: false, interrupting: false });
       this.submission = undefined; this.interruption = undefined;
     } else if (this.state.storedId) {
@@ -92,7 +93,7 @@ export class NativeSession {
     this.submission = undefined; this.interruption = undefined;
     this.publish({
       phase: 'attaching',
-      agent: undefined,
+      agent: undefined, agentStarting: undefined,
       storedId,
       profile,
       runtimeId: undefined,
@@ -118,7 +119,7 @@ export class NativeSession {
       if (typeof key !== 'string' || !key)
         throw new ClientError('protocol', 'Hermes omitted the durable session key');
       const info = typeof result.info === 'object' && result.info !== null ? record(result.info) : {};
-      this.publish({ runtimeId, storedId: key, agent: agentMetadata(info), profile: typeof info.profile_name === 'string' ? info.profile_name : profile });
+      this.publish({ runtimeId, storedId: key, agent: agentMetadata(info), agentStarting: info.lazy === true, profile: typeof info.profile_name === 'string' ? info.profile_name : profile });
       await this.refresh();
     } catch (error) {
       this.failure(epoch, error);
@@ -181,6 +182,7 @@ export class NativeSession {
         messages,
         totalMessages: history.messages.length,
         agent: { ...this.state.agent, ...agentMetadata(live.info) },
+        agentStarting: live.status === 'starting' || (live.info !== null && typeof live.info === 'object' && !Array.isArray(live.info) && record(live.info).lazy === true),
         streaming,
         error: undefined,
         phase: live.status === 'waiting' ? 'waiting' : live.running || this.submission ? 'running' : 'idle',

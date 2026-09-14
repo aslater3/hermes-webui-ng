@@ -3,7 +3,7 @@ import { modelCatalogue, modelChangeResult, modelSetParams, reasoningSetParams, 
   type AgentMetadata, type ModelChoice, type Effort } from './model-catalog.js';
 
 interface Target {
-  read(): { runtimeId?: string; profile?: string; idle: boolean; agent?: AgentMetadata };
+  read(): { runtimeId?: string; profile?: string; idle: boolean; starting?: boolean; agent?: AgentMetadata };
   refresh(): Promise<void>;
   notify(): void;
 }
@@ -29,6 +29,19 @@ export class NativeSettings {
     if (epoch !== this.epoch || this.target.read().runtimeId !== id)
       throw new ClientError('disconnected', 'The conversation or connection changed; no setting was replayed');
   }
+  /** A session can be idle before its lazy agent has been constructed. Only reads wait here. */
+  private async waitForAgent(epoch: number, id: string): Promise<void> {
+    const deadline = Date.now() + 10_000;
+    for (let attempt = 0; attempt < 100 && Date.now() < deadline; attempt++) {
+      await this.target.refresh(); this.assertCurrent(epoch, id);
+      const target = this.target.read();
+      if (!target.idle) throw new ClientError('protocol', 'The agent started working; settings were not changed');
+      if (!target.starting) return;
+      await new Promise<void>(resolve => setTimeout(resolve, 100));
+      this.assertCurrent(epoch, id);
+    }
+    throw new ClientError('protocol', 'Hermes is still preparing this agent. No setting was sent; try again after it finishes.');
+  }
   private async transaction(action: (id: string, profile: string | undefined, epoch: number, send: (params: Record<string, unknown>) => Promise<unknown>) => Promise<void>): Promise<void> {
     const target = this.target.read(), id = target.runtimeId;
     if (!id || !target.idle || this.state.busy || this.state.outcome === 'unknown')
@@ -38,8 +51,7 @@ export class NativeSettings {
     this.publish({ busy: true, note: undefined, outcome: 'idle' });
     try {
       // Refresh validates the runtime still exists; never send a sessionless config setter.
-      await this.target.refresh(); this.assertCurrent(epoch, id);
-      if (!this.target.read().idle) throw new ClientError('protocol', 'The agent started working; settings were not changed');
+      await this.waitForAgent(epoch, id);
       await action(id, target.profile, epoch, params => {
         this.assertCurrent(epoch, id);
         dispatched = true;
