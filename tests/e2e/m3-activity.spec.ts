@@ -30,7 +30,7 @@ test('lost credential admission supports stop and a fresh request without the or
   await login(page); await send(page, '[agent-test] secret lost connection');
   await page.getByLabel('Secret value', { exact: true }).fill('DO_NOT_REPLAY');
   await settings(page); await page.getByRole('button', { name: 'Disconnect', exact: true }).click();
-  await page.getByRole('button', { name: 'Reconnect', exact: true }).click();
+  await page.getByRole('dialog', { name: 'Settings', exact: true }).getByRole('button', { name: 'Reconnect', exact: true }).click();
   await page.getByRole('button', { name: 'Close settings', exact: true }).click();
   await expect(page.locator('.agent-warning')).toContainText('Use Stop response');
   await expect(page.getByLabel('Secret value', { exact: true })).toHaveValue('');

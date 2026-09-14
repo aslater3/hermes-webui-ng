@@ -40,10 +40,11 @@ export class AgentView {
   private pagehide = () => this.clearCredentials();
   dispose(): void { this.clear(); document.removeEventListener('visibilitychange', this.visibility); window.removeEventListener('pagehide', this.pagehide); }
   constructor(private readonly root: HTMLElement) {
-    const heading = node('h3', 'Agent activity and input'); heading.id = 'agent-title';
+    const heading = node('h2', 'Agent activity and input'); heading.id = 'agent-title';
     this.root.setAttribute('aria-labelledby', heading.id);
     this.summary.setAttribute('role', 'status'); this.warning.setAttribute('role', 'status');
     this.reasoning.append(node('summary', 'Reasoning supplied by Hermes'), this.reasoningText);
+    this.requests.setAttribute('role', 'group');
     this.requests.setAttribute('aria-label', 'Agent requests');
     this.earlier.append(this.earlierLabel, this.earlierBody);
     this.earlier.addEventListener('toggle', () => this.renderArchive());
@@ -102,7 +103,7 @@ export class AgentView {
         if (turn.reasoning) { const detail = node('details'); detail.append(node('summary', 'Reasoning supplied by Hermes'), node('pre', turn.reasoning)); root.append(detail); }
         for (const tool of turn.tools) {
           const detail = node('details', '', 'agent-tool');
-          detail.append(node('summary', `${tool.name} · ${tool.state}${tool.duration !== undefined ? ` · ${tool.duration.toFixed(2)}s` : ''}`), node('h4', 'Arguments'), node('pre', tool.input || 'No arguments supplied'), node('h4', 'Output'), node('pre', tool.output || 'No output supplied'), node('p', tool.truncated ? 'Archived display truncated.' : 'Observed output only; never executed.', 'hint'));
+          detail.append(node('summary', `${tool.name} · ${tool.state}${tool.duration !== undefined ? ` · ${tool.duration.toFixed(2)}s` : ''}`), node('p', 'Arguments', 'agent-field-label'), node('pre', tool.input || 'No arguments supplied'), node('p', 'Output', 'agent-field-label'), node('pre', tool.output || 'No output supplied'), node('p', tool.truncated ? 'Archived display truncated.' : 'Observed output only; never executed.', 'hint'));
           root.append(detail);
         }
       });
@@ -135,7 +136,7 @@ export class AgentView {
     root.setAttribute('aria-label',names[input.kind]);
     const status=node('p','','agent-input-status'), error=node('p','','agent-input-error'); status.setAttribute('role','status'); error.setAttribute('role','alert'); error.hidden=true;
     const controls=node('div','','agent-input-controls'); const questions=new Map<string,HTMLFieldSetElement>();
-    root.append(node('h4',names[input.kind]),status);
+    root.append(node('h3',names[input.kind]),status);
     if(input.prompt) root.append(node('p',input.prompt));
     const respond = (value: string, questionId?: string) => {
       error.hidden=true;
@@ -185,7 +186,7 @@ export class AgentView {
     let card=this.toolCards.get(tool.id);
     if(!card){
       const root=node('details','','agent-tool'),summary=node('summary'),input=node('pre'),output=node('pre'),note=node('p','','hint');
-      root.dataset.toolId=tool.id;root.append(summary,node('h4','Arguments'),input,node('h4','Output'),output,note);card={root,summary,input,output,note};this.toolCards.set(tool.id,card);this.tools.append(root);
+      root.dataset.toolId=tool.id;root.append(summary,node('p','Arguments','agent-field-label'),input,node('p','Output','agent-field-label'),output,note);card={root,summary,input,output,note};this.toolCards.set(tool.id,card);this.tools.append(root);
     }
     card.root.dataset.state=tool.state;
     card.summary.textContent=`${tool.name} · ${tool.state}${tool.duration!==undefined?` · ${tool.duration.toFixed(2)}s`:''}${tool.context?` · ${tool.context}`:''}`;
