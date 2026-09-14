@@ -49,6 +49,14 @@ test('slash completion is accessible, preserves IME input, and never executes un
   await prompt(page).press('Tab'); await expect(prompt(page)).toHaveValue('/status ');
   expect(rpc.count('slash.exec')).toBe(0); expect(rpc.count('prompt.submit')).toBe(prompts);
   await prompt(page).fill('/us'); await expect(option).toBeVisible();
+  // The scroll region is independently focusable, including Safari and hardware keyboards on mobile.
+  await expect(suggestions).toHaveAttribute('tabindex', '0');
+  await suggestions.focus(); await suggestions.press('ArrowDown');
+  await expect(suggestions.getByRole('option', { name: /^\/status/ })).toHaveAttribute('aria-selected', 'true');
+  await suggestions.press('ArrowUp'); await expect(option).toHaveAttribute('aria-selected', 'true');
+  await suggestions.press('Enter'); await expect(prompt(page)).toHaveValue('/usage ');
+  await expect(prompt(page)).toBeFocused(); expect(rpc.count('slash.exec')).toBe(0);
+  await prompt(page).fill('/us'); await expect(option).toBeVisible();
   expect((await option.boundingBox())!.height).toBeGreaterThanOrEqual(44);
   expect((await new AxeBuilder({ page }).include('#shell-composer').analyze()).violations).toEqual([]);
   await page.screenshot({ path: info.outputPath('slash-completion.png') });

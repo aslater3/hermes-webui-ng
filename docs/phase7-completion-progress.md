@@ -19,3 +19,10 @@ Local Node 22.16.0 production build (both typechecks), lint, **229 unit tests an
 Baseline `27dcce5` failed browser run `34874908195`: 360 passed, eight failed. The two failures each occurred in all four projects. Chronological activity used an accessible name on an unnamed generic element; it now has an explicit group role. A clarify screenshot selector matched both the actual question and a reasoning card; the selector now addresses the exact labelled question article. Existing identity, geometry, interaction and accessibility assertions are retained, not skipped or weakened. A later passing run must supersede this failed evidence.
 
 Rewind/edit/regenerate remain absent under the phase plan's conditional clause. Global commands, shell/plugin/skill execution and compression are not enabled by discovery alone. This does not certify physical-phone installation/keyboards, general current-upstream compatibility, Phase 6 writes or deployment. The accepted runtime pin remains `b6b53c69a6ed49cb099cf1bfe76b5e6edd718e5a`; newer upstream inspection is source comparison only.
+
+
+## Browser accessibility correction after `649e050`
+
+The integrated run `34885765118` passed **402/404** browser cases with no skips or retries. The only failures were the completion scenario in iPhone WebKit and the 320px project: the overflowing suggestion list had no independently keyboard-focusable region. All existing timeline regressions and the other 34 command cases passed. Build/unit/wire, image, HTTPS/PWA (8 plus 10 repeated WebKit) and native-Hermes gates passed on this checkpoint; both native authentication modes confirmed actual catalogue/read-only dispatch, unchanged history/defaults and session isolation.
+
+The suggestion list now has its own tab stop and active-descendant reference, with arrow navigation, Enter selection and Escape-to-composer focus handling. The regression explicitly focuses the list and exercises those keys in every browser project, while retaining the unchanged axe assertion. This is a control fix, not an accessibility exception. Full final-checkpoint CI remains required.

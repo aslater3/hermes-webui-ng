@@ -51,13 +51,13 @@ export function useCommands(rt: AppRuntime, draft: string, setDraft: (text: stri
     setDraft(`${row.name} `); setDismissed(undefined);
     composer.current?.focus({ preventScroll: true });
   };
-  const keyDown = (event: KeyboardEvent<HTMLTextAreaElement>): boolean => {
+  const keyDown = (event: KeyboardEvent<HTMLElement>): boolean => {
     if (!suggesting || event.nativeEvent.isComposing || event.keyCode === 229 || event.altKey || event.metaKey || event.ctrlKey) return false;
-    if (event.key === 'Escape') { event.preventDefault(); setDismissed(draft); return true; }
+    if (event.key === 'Escape') { event.preventDefault(); setDismissed(draft); composer.current?.focus({ preventScroll: true }); return true; }
     if (selections.length && ['ArrowDown', 'ArrowUp'].includes(event.key)) {
       event.preventDefault(); setActive((active + (event.key === 'ArrowDown' ? 1 : selections.length - 1)) % selections.length); return true;
     }
-    if (choice && !event.shiftKey && (event.key === 'Tab' || (event.key === 'Enter' && navigator.maxTouchPoints === 0 && matchMedia('(pointer:fine)').matches))) {
+    if (choice && !event.shiftKey && (event.key === 'Tab' || (event.key === 'Enter' && (event.currentTarget === list.current || (navigator.maxTouchPoints === 0 && matchMedia('(pointer:fine)').matches))))) {
       event.preventDefault(); complete(choice); return true;
     }
     return false;
@@ -80,7 +80,7 @@ export function useCommands(rt: AppRuntime, draft: string, setDraft: (text: stri
     {state.loading && <p role="status">Reading commands…</p>}
     {state.error && <p role="status">{state.error}</p>}
     {!state.loading && !state.error && !matches.length && <p>No matching command. Use // to send literal slash text.</p>}
-    {!!matches.length && <div ref={list} id={id} role="listbox" aria-label="Slash command suggestions" className="command-suggestion-list">
+    {!!matches.length && <div ref={list} id={id} role="listbox" tabIndex={0} aria-activedescendant={choice ? `${id}-${choice.name.slice(1)}` : undefined} onKeyDown={keyDown} aria-label="Slash command suggestions" className="command-suggestion-list">
       {matches.map(row => <button type="button" role="option" key={row.name} id={`${id}-${row.name.slice(1)}`} aria-selected={choice?.name === row.name}
         aria-disabled={!enabled(row)} disabled={!enabled(row)} tabIndex={-1} className="command-suggestion" onMouseDown={event => event.preventDefault()} onClick={() => complete(row)}>
         <strong>{row.name}</strong><span>{commandHint(row)}</span>
