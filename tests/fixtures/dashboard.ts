@@ -6,7 +6,7 @@ import { ModelScenarios } from './model-scenarios.js';
 import { AgentScenarios } from './agent-scenarios.js';
 import { WS_PROTOCOL } from '../../src/hermes/dashboard-client.js';
 
-export async function startFixture(port = 0, options: { sessionToken?: string; beforeWsTicket?: () => Promise<void> } = {}) {
+export async function startFixture(port = 0, options: { sessionToken?: string; beforeWsTicket?: () => Promise<void>; beforePromptComplete?: (text: string) => Promise<void> } = {}) {
   const cookie = `fixture_auth=${randomBytes(24).toString('hex')}`;
   const tickets = new Set<string>();
   const interactions = new AgentScenarios();
@@ -15,6 +15,7 @@ export async function startFixture(port = 0, options: { sessionToken?: string; b
   const sessions = new Map<string, { key: string; messages: {role:string; text:string}[]; running: boolean; profile: string; updated: number; turn: number; inflight: string }>();
   const metrics = { tickets: 0, creates: 0, submits: 0, upgrades: 0 };
   const timers = new Set<ReturnType<typeof setTimeout>>();
+  let closed = false;
   const ws = new WebSocketServer({ noServer: true, handleProtocols: () => options.sessionToken ? false : WS_PROTOCOL });
   const server = createServer((req, res) => {
     const send = (status: number, data: unknown) => { res.writeHead(status, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(data)); };
@@ -145,7 +146,8 @@ export async function startFixture(port = 0, options: { sessionToken?: string; b
         const delta = (text: string) => { session.inflight += text; if (client.readyState === 1) event('message.delta', params.session_id, {text}); };
         if (slow) delta('Controlled turn is running…');
         if (streaming) for (let i=0; i<30; i++) later(() => delta(`Streaming line ${i} ${'text '.repeat(20)}\n`), i*100);
-        later(() => {
+        const complete = () => {
+          if (closed || session.turn !== turn) return;
           const text = streaming ? session.inflight + 'SYNTHETIC_RESPONSE' : 'SYNTHETIC_RESPONSE';
           session.messages.push({ role: 'assistant', text }); session.updated = Date.now()/1000;
           if (client.readyState === 1) {
@@ -155,6 +157,15 @@ export async function startFixture(port = 0, options: { sessionToken?: string; b
           later(() => { session.running = false; session.inflight = '';
             if (client.readyState === 1) event('session.info', params.session_id, { running: false });
           }, 20);
+        };
+        later(() => {
+          // Test-only completion barrier: real snapshots stay working until released.
+          if (options.beforePromptComplete) void options.beforePromptComplete(String(params.text)).then(complete, () => {
+            if (closed || session.turn !== turn) return;
+            session.running = false; session.inflight = '';
+            if (client.readyState === 1) event('error', params.session_id, { code: 'FIXTURE_COMPLETION_REJECTED' });
+          });
+          else complete();
         }, slow || streaming ? 3100 : 40); return;
       }
       error();
@@ -170,6 +181,7 @@ export async function startFixture(port = 0, options: { sessionToken?: string; b
     },
     disconnect: () => { for (const client of ws.clients) client.terminate(); },
     close: async () => {
+      closed = true;
       interactions.close();timers.forEach(clearTimeout); ws.clients.forEach((client) => client.terminate()); ws.close();
       server.closeAllConnections(); await new Promise<void>((resolve) => server.close(() => resolve()));
     },
