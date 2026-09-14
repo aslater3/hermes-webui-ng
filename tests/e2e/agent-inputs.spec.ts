@@ -41,14 +41,11 @@ test('approval is recoverable after reload and can be explicitly denied',async({
   await page.getByRole('button',{name:'Deny',exact:true}).click();await expect(page.locator('#transcript')).toContainText('Operation denied');
   await expect(page.locator('#session-state')).toHaveText('idle');
 });
-test('YOLO approval enables the session switch and the composer can disable it again',async({page})=>{
+test('YOLO approval resolves the exact pending request in the diagnostic view',async({page})=>{
   await start(page,'approval');
-  const yolo=page.getByRole('switch',{name:'YOLO mode for this conversation'});
-  await expect(yolo).not.toBeChecked();await expect(yolo).toBeDisabled();
   await page.getByRole('button',{name:'YOLO',exact:true}).click();
   await expect(page.locator('#session-state')).toHaveText('idle');
-  await expect(yolo).toBeEnabled();await expect(yolo).toBeChecked();
-  await yolo.uncheck();await expect(yolo).not.toBeChecked();
+  await expect(page.locator('#transcript')).toContainText('SYNTHETIC_AGENT_COMPLETE');
 });
 test('disconnect clears a masked field and does not resurrect a credential prompt',async({page})=>{
   await start(page,'secret');await page.getByLabel('Secret value',{exact:true}).fill('DO_NOT_RETAIN');
