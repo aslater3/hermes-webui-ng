@@ -6,7 +6,7 @@ import { ModelScenarios } from './model-scenarios.js';
 import { AgentScenarios } from './agent-scenarios.js';
 import { WS_PROTOCOL } from '../../src/hermes/dashboard-client.js';
 
-export async function startFixture(port = 0, options: { sessionToken?: string } = {}) {
+export async function startFixture(port = 0, options: { sessionToken?: string; beforeWsTicket?: () => Promise<void> } = {}) {
   const cookie = `fixture_auth=${randomBytes(24).toString('hex')}`;
   const tickets = new Set<string>();
   const interactions = new AgentScenarios();
@@ -47,8 +47,15 @@ export async function startFixture(port = 0, options: { sessionToken?: string } 
     }
     if (req.url === '/api/auth/me') { send(200, { user_id: 'fixture', provider: 'basic' }); return; }
     if (req.url === '/api/auth/ws-ticket' && req.method === 'POST') {
-      const ticket = randomBytes(24).toString('base64url'); tickets.add(ticket); metrics.tickets++;
-      send(200, { ticket, ttl_seconds: 30 }); return;
+      const issue = () => {
+        if (res.destroyed) return;
+        const ticket = randomBytes(24).toString('base64url'); tickets.add(ticket); metrics.tickets++;
+        send(200, { ticket, ttl_seconds: 30 });
+      };
+      // Test-only gate: delay real HTTP admission without route/WS/service-worker mocks.
+      if (options.beforeWsTicket) void options.beforeWsTicket().then(issue, () => { if (!res.destroyed) send(503, {}); });
+      else issue();
+      return;
     }
     if (req.url === '/redirect') { res.writeHead(302, { Location: '/login' }); res.end(); return; }
     if (req.url === '/slow') return;
@@ -121,7 +128,7 @@ export async function startFixture(port = 0, options: { sessionToken?: string } 
       if(interactions.respond(params.session_id,method,params,reply))return;
       if (method === 'session.history') { reply({ messages: session.messages }); return; }
       if (method === 'session.activate') { reply({ info: models.info(String(params.session_id)), running: session.running, status: session.running ? 'working' : 'idle', inflight: { assistant: session.inflight },...interactions.snapshot(params.session_id,emitAgent) }); return; }
-      if (method === 'session.interrupt') { interactions.interrupt(params.session_id); session.turn++; session.running = false; session.inflight = ''; reply({ ok: true }); event('session.info', params.session_id, { running:false }); return; }
+      if (method === 'session.interrupt') { interactions.interrupt(params.session_id); session.turn++; session.running = false; session.inflight = ''; reply({ ok: true }); event('session.info', params.session_id, { running: false }); return; }
       if (method === 'prompt.submit') {
         if (session.running) { error(); return; }
         metrics.submits++; session.running = true; session.messages.push({ role: 'user', text: params.text });

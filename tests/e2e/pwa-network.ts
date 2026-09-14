@@ -1,13 +1,13 @@
 import assert from 'node:assert/strict';
 import { resolve } from 'node:path';
-import type { Page } from '@playwright/test';
+import { expect, type Page } from '@playwright/test';
 import { createApp } from '../../server/app.js';
 import { loadConfig } from '../../server/config.js';
 import { startFixture } from '../fixtures/dashboard.js';
 
 /** Actual listener loss (not routed HTTP mocks); browser connectivity signal is controlled separately. */
-export async function pwaNetwork(tls = false) {
-  const upstream = await startFixture();
+export async function pwaNetwork(tls = false, fixtureOptions: Parameters<typeof startFixture>[1] = {}) {
+  const upstream = await startFixture(0, fixtureOptions);
   const config = loadConfig({ HERMES_DASHBOARD_URL: upstream.origin, PUBLIC_ORIGIN: `${tls ? 'https' : 'http'}://127.0.0.1:1`,
     ...(tls ? { WEBUI_TLS_CERT: resolve('.local/tls/server/server.crt'), WEBUI_TLS_KEY: resolve('.local/tls/server/server.key') } : {}) });
   let app = createApp(config, () => {}), stopped = false;
@@ -16,6 +16,7 @@ export async function pwaNetwork(tls = false) {
   config.publicOrigin = new URL(`${tls ? 'https' : 'http'}://127.0.0.1:${addr.port}`);
   return {
     origin: config.publicOrigin.origin,
+    metrics: upstream.metrics,
     async stop(page: Page) {
       await app.close(); stopped = true;
       await assert.rejects(fetch(`${config.publicOrigin.origin}/healthz`, { signal: AbortSignal.timeout(2000) }));
@@ -37,4 +38,8 @@ export async function loginPwa(page: Page, origin: string) {
   await page.getByLabel('Username', { exact: true }).fill('fixture');
   await page.getByLabel('Password', { exact: true }).fill('fixture-password');
   await page.getByRole('button', { name: 'Sign in', exact: true }).click();
+  // A click only dispatches login. The public service worker may already control the
+  // page while identity verification/ticket minting/native admission are still pending.
+  await expect(page.getByRole('button', { name: 'Connection status: Connected', exact: true })).toBeVisible();
+  await expect(page.locator('#shell-prompt')).toBeEnabled();
 }

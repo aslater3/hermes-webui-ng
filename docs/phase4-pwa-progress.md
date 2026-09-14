@@ -7,3 +7,9 @@ The work was pushed incrementally: native TLS and certificate setup; pinned icon
 Failures were not relabelled as passes. An initial retained-input unit fixture falsely reported idle after a pending request and was corrected. A session fragment was initially rejected by the static cache routing and gained a regression. Route-mocked WebKit auth tests were separated from service-worker suites, with real cookie-expiry coverage added for worker-controlled pages. Browser-driven offline navigation in WebKit continued to return internal errors/timeouts; final coverage uses actual listener shutdown with a controlled browser network signal, plus Chromium's browser-wide offline tests. Physical airplane-mode behaviour remains to be tested on devices.
 
 No phase was declared physically tested from browser emulation. Each completed implementation increment was committed and pushed, with the remote ref checked before proceeding.
+
+## Reopened HTTPS gate after operator failure report
+
+The operator reported an iPhone-WebKit failure at the immediate `websocketUrls.length` assertion. The test helper returned after clicking Sign in; it did not await native Gateway readiness. Public service-worker activation is independent of authentication/ticket/Upgrade completion, so waiting for its controller was not an admission barrier.
+
+The recovery patch waits for the connected indicator and enabled composer, then awaits the Playwright socket observation. A deterministic regression holds the real fixture ticket HTTP response until the service worker controls the page, proves login is still pending with no minted ticket/Upgrade, releases admission and proves exactly one ticket, Upgrade and prompt. No TLS bypass, skipped WebKit project, test retries or weakened WSS/no-query assertions. Current-code CI must pass before merge; prior green runs do not override the reported failure.
