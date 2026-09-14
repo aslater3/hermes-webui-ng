@@ -1,4 +1,4 @@
-import type { AgentInput, Question, ToolActivity, ActivityTurn } from './agent-activity.js';
+import type { AgentInput, Question, ToolActivity, ActivityTurn, ReasoningActivity } from './agent-activity.js';
 import { ApprovalAttentionTone } from './attention-tone.js';
 import type { NativeSession } from './native-session.js';
 
@@ -11,11 +11,17 @@ function node<K extends keyof HTMLElementTagNameMap>(tag: K, text?: string, clas
 function button(label: string, action: () => void): HTMLButtonElement {
   const control = node('button', label); control.type = 'button'; control.addEventListener('click', action); return control;
 }
+function reasoningSummary(value: string, truncated = false): string {
+  const compact = value.replace(/[*_`#]+/g, '').replace(/\s+/g, ' ').trim();
+  const preview = compact.length > 100 ? `${compact.slice(0, 97)}…` : compact;
+  return `Reasoning supplied by Hermes${preview ? ` · ${preview}` : ''}${truncated ? ' · truncated' : ''}`;
+}
 interface InputCard {
   root: HTMLElement; status: HTMLElement; error: HTMLElement;
   controls: HTMLElement; questions: Map<string, HTMLFieldSetElement>; signature: string;
 }
 interface ToolCard { root: HTMLDetailsElement; summary: HTMLElement; input: HTMLElement; output: HTMLElement; note: HTMLElement; }
+interface ReasoningCard { root: HTMLDetailsElement; summary: HTMLElement; text: HTMLElement; }
 const names = { approval:'Operation approval', clarify:'Question from Hermes', sudo:'Sudo password request', secret:'Secret requested by Hermes' };
 const labels = { pending:'Needs your input', sending:'Sending — awaiting Hermes', answered:'Response confirmed', expired:'No longer pending',
   unknown:'Delivery or pending status unknown — not resent', unsupported:'Not supported by this Hermes version' };
@@ -26,16 +32,15 @@ export class AgentView {
   private readonly summary = node('p', '', 'hint');
   private readonly warning = node('p', '', 'agent-warning');
   private readonly requests = node('div', '', 'agent-requests');
-  private readonly reasoning = node('details', '', 'agent-reasoning');
-  private readonly reasoningText = node('pre');
   private readonly thinking = node('p', '', 'hint');
+  private readonly timeline = node('div', '', 'agent-timeline');
   private readonly earlier = node('details', '', 'agent-earlier');
   private readonly earlierLabel = node('summary', 'Earlier activity in this tab');
   private readonly earlierBody = node('div', '', 'agent-archive');
   private archiveSource?: ActivityTurn[];
-  private readonly tools = node('div', '', 'agent-tools');
   private readonly inputs = new Map<string, InputCard>();
   private readonly toolCards = new Map<string, ToolCard>();
+  private readonly reasoningCards = new Map<string, ReasoningCard>();
   private readonly approvalTone = new ApprovalAttentionTone();
   private readonly announcedApprovals = new WeakMap<NativeSession, Set<string>>();
   private unlisten?: () => void;
@@ -46,12 +51,12 @@ export class AgentView {
     const heading = node('h2', 'Agent activity and input'); heading.id = 'agent-title';
     this.root.setAttribute('aria-labelledby', heading.id);
     this.summary.setAttribute('role', 'status'); this.warning.setAttribute('role', 'status');
-    this.reasoning.append(node('summary', 'Reasoning supplied by Hermes'), this.reasoningText);
     this.requests.setAttribute('role', 'group');
     this.requests.setAttribute('aria-label', 'Agent requests');
+    this.timeline.setAttribute('aria-label', 'Chronological Hermes activity');
     this.earlier.append(this.earlierLabel, this.earlierBody);
     this.earlier.addEventListener('toggle', () => this.renderArchive());
-    this.root.append(heading, this.summary, this.warning, this.requests, this.thinking, this.tools, this.reasoning, this.earlier);
+    this.root.append(heading, this.summary, this.warning, this.requests, this.thinking, this.timeline, this.earlier);
     document.addEventListener('visibilitychange', this.visibility);
     window.addEventListener('pagehide', this.pagehide);
   }
@@ -59,8 +64,8 @@ export class AgentView {
   clear(): void {
     this.clearCredentials(); this.unlisten?.(); this.unlisten = undefined; this.owner = undefined;
     this.earlier.open = false; this.earlierBody.replaceChildren(); this.archiveSource = undefined;
-    this.inputs.clear(); this.toolCards.clear(); this.requests.replaceChildren(); this.tools.replaceChildren();
-    this.reasoningText.textContent = ''; this.thinking.textContent = ''; this.reasoning.open = false; this.root.hidden = true;
+    this.inputs.clear(); this.toolCards.clear(); this.reasoningCards.clear(); this.requests.replaceChildren(); this.timeline.replaceChildren();
+    this.thinking.textContent = ''; this.root.hidden = true;
   }
   update(owner: NativeSession, enabled: boolean, historical: boolean): void {
     if (this.owner !== owner) {
@@ -79,25 +84,41 @@ export class AgentView {
       for (const input of fresh) announced.add(input.key);
       if (fresh.length) this.approvalTone.notify();
     }
-    this.root.hidden = historical || !(owner.activity.archive.length || activity.inputs.length || activity.tools.length || activity.reasoning || activity.thinking || activity.recoveryGap || activity.malformed);
+    this.root.hidden = historical || !(owner.activity.archive.length || activity.inputs.length || activity.timeline.length || activity.tools.length || activity.reasoning || activity.thinking || activity.recoveryGap || activity.malformed);
     if (!enabled || historical) this.clearCredentials();
-    this.summary.textContent = `${count ? `${count} request${count === 1 ? '' : 's'} awaiting confirmation. ` : ''}Current turn with bounded earlier activity. Saved history stays in Hermes.`;
+    this.summary.textContent = `${count ? `${count} request${count === 1 ? '' : 's'} awaiting confirmation. ` : ''}Current turn activity is shown chronologically. Saved history stays in Hermes.`;
     this.warning.hidden = !activity.recoveryGap && !activity.malformed && !activity.droppedTools && !activity.truncated;
     this.warning.textContent = [activity.recoveryGap ? 'A credential request lost its connection. This Hermes version cannot recover a pending sudo/secret form. Use Stop response to cancel the pending turn, then ask again for a fresh request; nothing is resent.' : '',
       activity.malformed ? 'Some agent data could not be displayed safely. Do not approve an operation with incomplete details.' : '',
       activity.droppedTools ? `${activity.droppedTools} earlier tool cards omitted from this bounded view.` : '',
-      activity.truncated ? 'Reasoning output reached the display limit.' : ''].filter(Boolean).join(' ');
+      activity.truncated ? 'Some activity or reasoning output reached the display limit.' : ''].filter(Boolean).join(' ');
     const liveKeys = new Set(activity.inputs.map(p => p.key));
     for (const [key, card] of this.inputs) if (!liveKeys.has(key)) { this.erase(card); card.root.remove(); this.inputs.delete(key); }
     for (const input of activity.inputs) this.input(owner, input, enabled && !historical && !owner.state.interrupting);
-    const hadReasoning = !!this.reasoningText.textContent;
-    this.reasoning.hidden = !activity.reasoning; this.reasoningText.textContent = activity.reasoning;
-    if (!activity.reasoning) this.reasoning.open = false;
-    else if (!hadReasoning) this.reasoning.open = true;
     this.thinking.hidden = !activity.thinking; this.thinking.textContent = activity.thinking;
+
     const toolIds = new Set(activity.tools.map(t => t.id));
-    for (const [id, card] of this.toolCards) if (!toolIds.has(id)) {card.root.remove();this.toolCards.delete(id);}
-    for (const tool of activity.tools) this.tool(tool);
+    for (const [id, card] of this.toolCards) if (!toolIds.has(id)) { card.root.remove(); this.toolCards.delete(id); }
+    const hasTimelineReasoning = activity.timeline.some(entry => entry.kind === 'reasoning');
+    const fallback = activity.reasoning && !hasTimelineReasoning ? {
+      kind:'reasoning' as const, id:'reasoning-fallback', text:activity.reasoning, truncated:activity.truncated,
+    } : undefined;
+    const reasoningIds = new Set(activity.timeline.flatMap(entry => entry.kind === 'reasoning' ? [entry.id] : []));
+    if (fallback) reasoningIds.add(fallback.id);
+    for (const [id, card] of this.reasoningCards) if (!reasoningIds.has(id)) { card.root.remove(); this.reasoningCards.delete(id); }
+
+    const tools = new Map(activity.tools.map(tool => [tool.id, tool]));
+    const renderedTools = new Set<string>();
+    for (const entry of activity.timeline) {
+      if (entry.kind === 'reasoning') this.timeline.append(this.reasoning(entry).root);
+      else {
+        const tool = tools.get(entry.id);
+        if (tool) { this.timeline.append(this.tool(tool).root); renderedTools.add(tool.id); }
+      }
+    }
+    for (const tool of activity.tools) if (!renderedTools.has(tool.id)) this.timeline.append(this.tool(tool).root);
+    if (fallback) this.timeline.append(this.reasoning(fallback).root);
+
     this.earlier.hidden = owner.activity.archive.length === 0;
     this.earlierLabel.textContent = `Earlier activity in this tab (${owner.activity.archive.length} turns)`;
     if (this.archiveSource !== owner.activity.archive) { this.archiveSource = owner.activity.archive; this.renderArchive(); }
@@ -113,15 +134,42 @@ export class AgentView {
         for (const child of [...root.children].slice(1)) child.remove();
         if (!root.open) return;
         if (turn.thinking) root.append(node('p', turn.thinking, 'hint'));
-        if (turn.reasoning) { const detail = node('details'); detail.append(node('summary', 'Reasoning supplied by Hermes'), node('pre', turn.reasoning)); root.append(detail); }
-        for (const tool of turn.tools) {
-          const detail = node('details', '', 'agent-tool');
-          detail.append(node('summary', `${tool.name} · ${tool.state}${tool.duration !== undefined ? ` · ${tool.duration.toFixed(2)}s` : ''}`), node('p', 'Arguments', 'agent-field-label'), node('pre', tool.input || 'No arguments supplied'), node('p', 'Output', 'agent-field-label'), node('pre', tool.output || 'No output supplied'), node('p', tool.truncated ? 'Archived display truncated.' : 'Observed output only; never executed.', 'hint'));
-          root.append(detail);
+        const tools = new Map(turn.tools.map(tool => [tool.id, tool]));
+        for (const entry of turn.timeline) {
+          if (entry.kind === 'reasoning') root.append(this.archivedReasoning(entry));
+          else {
+            const tool = tools.get(entry.id);
+            if (tool) root.append(this.archivedTool(tool));
+          }
         }
       });
       this.earlierBody.append(root);
     }
+  }
+  private archivedReasoning(entry: ReasoningActivity): HTMLDetailsElement {
+    const root = node('details', '', 'agent-card agent-reasoning-card');
+    root.dataset.reasoningId = entry.id;
+    root.append(node('summary', reasoningSummary(entry.text, entry.truncated)), node('pre', entry.text || 'No reasoning text supplied'));
+    return root;
+  }
+  private archivedTool(tool: ToolActivity): HTMLDetailsElement {
+    const detail = node('details', '', 'agent-tool');
+    detail.append(node('summary', `${tool.name} · ${tool.state}${tool.duration !== undefined ? ` · ${tool.duration.toFixed(2)}s` : ''}`),
+      node('p', 'Arguments', 'agent-field-label'), node('pre', tool.input || 'No arguments supplied'),
+      node('p', 'Output', 'agent-field-label'), node('pre', tool.output || 'No output supplied'),
+      node('p', tool.truncated ? 'Archived display truncated.' : 'Observed output only; never executed.', 'hint'));
+    return detail;
+  }
+  private reasoning(entry: ReasoningActivity): ReasoningCard {
+    let card = this.reasoningCards.get(entry.id);
+    if (!card) {
+      const root = node('details', '', 'agent-card agent-reasoning-card'), summary = node('summary'), text = node('pre');
+      root.dataset.reasoningId = entry.id; root.append(summary, text); card = { root, summary, text }; this.reasoningCards.set(entry.id, card);
+    }
+    card.root.dataset.truncated = String(entry.truncated);
+    card.summary.textContent = reasoningSummary(entry.text, entry.truncated);
+    card.text.textContent = entry.text || 'No reasoning text supplied';
+    return card;
   }
   private erase(card: InputCard): void {
     for (const input of card.controls.querySelectorAll<HTMLInputElement | HTMLTextAreaElement>('input,textarea')) { if(input instanceof HTMLInputElement && ['radio','checkbox'].includes(input.type)) input.checked=false; else input.value=''; }
@@ -207,15 +255,16 @@ export class AgentView {
       return value||(q.multiple?JSON.stringify(chosen):chosen[0]);
     };
   }
-  private tool(tool: ToolActivity): void {
+  private tool(tool: ToolActivity): ToolCard {
     let card=this.toolCards.get(tool.id);
     if(!card){
       const root=node('details','','agent-tool'),summary=node('summary'),input=node('pre'),output=node('pre'),note=node('p','','hint');
-      root.dataset.toolId=tool.id;root.append(summary,node('p','Arguments','agent-field-label'),input,node('p','Output','agent-field-label'),output,note);card={root,summary,input,output,note};this.toolCards.set(tool.id,card);this.tools.append(root);
+      root.dataset.toolId=tool.id;root.append(summary,node('p','Arguments','agent-field-label'),input,node('p','Output','agent-field-label'),output,note);card={root,summary,input,output,note};this.toolCards.set(tool.id,card);
     }
     card.root.dataset.state=tool.state;
     card.summary.textContent=`${tool.name} · ${tool.state}${tool.duration!==undefined?` · ${tool.duration.toFixed(2)}s`:''}${tool.context?` · ${tool.context}`:''}`;
     card.input.textContent=tool.input||'No arguments provided';card.output.textContent=tool.output||'No output supplied yet';
     card.note.textContent=tool.truncated?'Display truncated. This is not the full tool output.':'Untrusted tool output is shown as text, never executed.';
+    return card;
   }
 }
