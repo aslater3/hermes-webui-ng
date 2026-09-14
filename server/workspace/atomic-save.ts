@@ -1,3 +1,4 @@
+import { lockedRoot, plainMetadata } from './native-boundary.js';
 import { constants } from 'node:fs';
 import { open, rename, unlink, type FileHandle } from 'node:fs/promises';
 import { randomBytes } from 'node:crypto';
@@ -44,7 +45,7 @@ export class WorkspaceWriter {
       await previous;
       const signal = checks.signal ? AbortSignal.any([checks.signal, this.lifetime.signal]) : this.lifetime.signal;
       current(signal);
-      return await this.replace(root, parts, data.text, data.expectedVersion, { ...checks, signal });
+      return await lockedRoot(root, () => this.replace(root, parts, data.text, data.expectedVersion, { ...checks, signal }));
     } finally {
       release(); --this.count;
       if (this.lanes.get(key) === lane) this.lanes.delete(key);
@@ -56,10 +57,11 @@ export class WorkspaceWriter {
     let committed = false;
     try {
       parent = await openChecked(root, parents, true);
+      await plainMetadata(parent, true);
       const parentStat = await parent.stat();
       const inspect = async () => {
         const handle = await openChecked(root, parts, false);
-        try { return await fileSnapshot(handle, root); } finally { await handle.close(); }
+        try { await plainMetadata(handle); return await fileSnapshot(handle, root); } finally { await handle.close(); }
       };
       const source = await inspect();
       if (source.version !== expected) throw new WorkspaceError('WORKSPACE_VERSION_CONFLICT', 409);
@@ -79,6 +81,7 @@ export class WorkspaceWriter {
       const created = await temporary.stat();
       if (created.gid !== source.stat.gid) await temporary.chown(source.stat.uid, source.stat.gid);
       await temporary.chmod(source.stat.mode & 0o777);
+      await plainMetadata(temporary);
       await temporary.sync();
       current(checks.signal);
       await checks.beforeCommit?.();
@@ -88,6 +91,7 @@ export class WorkspaceWriter {
       if (latest.version !== expected) throw new WorkspaceError('WORKSPACE_VERSION_CONFLICT', 409);
       const freshParent = await openChecked(root, parents, true);
       try {
+        await plainMetadata(freshParent, true);
         const stat = await freshParent.stat();
         if (stat.dev !== parentStat.dev || stat.ino !== parentStat.ino) throw new WorkspaceError('WORKSPACE_CHANGED_RETRY', 409);
       } finally { await freshParent.close(); }
