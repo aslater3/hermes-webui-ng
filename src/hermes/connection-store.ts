@@ -231,7 +231,7 @@ export class ConnectionStore {
     if (valid()) this.diagnostics.add({ event: 'capabilities.updated', generation });
   }
   report() {
-    return { schemaVersion: 1, webui: { version: '0.0.1', phase: 4, milestone: '4C', protocol: 'hermes-gateway-v1' },
+    return { schemaVersion: 1, webui: { version: '0.0.1', phase: 5, milestone: '5', protocol: 'hermes-gateway-v1' },
       connection: { rest: this.state.rest, auth: this.state.auth, offline: this.state.offline,
         checkedAt: this.state.checkedAt, gateway: this.gateway.state.phase,
         generation: this.gateway.state.generation, attempt: this.gateway.state.attempt,

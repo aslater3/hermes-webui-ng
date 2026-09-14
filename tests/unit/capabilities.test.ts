@@ -47,3 +47,11 @@ test('stale capability responses cannot restore old account or connection capabi
   const external = store.snapshot(); external.gateway.state = 'available';
   assert.equal(store.snapshot().gateway.state, 'unknown');
 });
+
+test('workspace support reflects the configured BFF feature, not a guessed successful file permission', () => {
+  const store = new CapabilitiesStore(); assert.equal(store.snapshot().workspace.implemented, true);
+  for (const [flag, expected] of [[true, 'available'], [false, 'unavailable'], [undefined, 'unknown']] as const) {
+    store.applyWebui(store.begin(), { schemaVersion: 1, workspace: { available: flag }, features: { pwa: true } });
+    assert.equal(store.snapshot().workspace.state, expected); assert.equal(store.snapshot().workspace.evidence, 'webui');
+  }
+});
