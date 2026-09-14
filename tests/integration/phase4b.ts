@@ -10,14 +10,24 @@ import { modelCatalogue, profileCatalogue } from '../../src/hermes/model-catalog
 import { record, ClientError } from '../../src/hermes/protocol.js';
 import { browserAuth } from '../helpers/browser-auth.js';
 import { EXPECTED_RESPONSE } from './provider.js';
+import { rpcFailureKind } from '../helpers/rpc-failure-kind.js';
 const pin = 'b6b53c69a6ed49cb099cf1bfe76b5e6edd718e5a';
 const local = process.env.PHASE4B_LOCAL === 'true';
 const origin = local ? 'http://127.0.0.1:8789' : 'http://127.0.0.1:8787';
 const auth = browserAuth(origin), gates: string[] = [];
+const failures: { stage: string; code: number; kinds: string[] }[] = [];
+let stage = 'connect';
 function client() {
   const dashboard = new DashboardClient(origin, auth.fetcher);
   const gateway = new GatewayClient(new WsAuthClient(dashboard, signal => connection.verifyAdmission(signal)), {
-    socketFactory: auth.socketFactory, heartbeatMs: 0, requestTimeoutMs: 45_000,
+    socketFactory: (url, protocols) => {
+      const socket = auth.socketFactory(url, protocols);
+      socket.addEventListener('message', event => {
+        const failure = rpcFailureKind(event.data);
+        if (failure) { failures.push({ stage, ...failure }); if (failures.length > 16) failures.shift(); }
+      });
+      return socket;
+    }, heartbeatMs: 0, requestTimeoutMs: 45_000,
   });
   const connection: ConnectionStore = new ConnectionStore(dashboard, gateway);
   const session = new NativeSession(gateway);
@@ -61,13 +71,17 @@ try {
   const alternate = inventory.choices.find(row => row.model === 'phase0-fixture-alternate');
   assert.ok(alternate, 'Controlled alternate model must be advertised by vanilla Hermes');
   pass('native-profiles-and-configured-model-inventory');
+  stage = 'change-model';
   await current.session.settings.changeModel(alternate);
   assert.equal(current.session.settings.state.outcome, 'applied');
   assert.equal(current.session.state.agent?.model, alternate.model);
+  pass('native-model-change-confirmed');
+  stage = 'change-reasoning';
   await current.session.settings.changeReasoning('high');
   assert.equal(current.session.settings.state.outcome, 'applied');
   assert.equal(current.session.state.agent?.reasoningEffort, 'high');
   pass('confirmed-session-model-and-reasoning-effort');
+  stage = 'isolation-and-recovery';
   const after = modelCatalogue(await current.gateway.call('model.options', {}));
   assert.equal(after.model, defaults.model); assert.equal(after.provider, defaults.provider);
   assert.deepEqual(record(await current.gateway.call('config.get', { key: 'reasoning' })), reasoningDefault);
@@ -100,11 +114,12 @@ try {
   success = true;
 } catch (error) {
   console.error(error instanceof ClientError ? `${error.kind}: ${error.message}` : error instanceof Error ? error.message : 'Settings acceptance failed');
+  console.error(JSON.stringify({ stage, failures }));
   process.exitCode = 1;
 } finally {
   await mkdir('test-results/live', { recursive: true });
   await writeFile(`test-results/live/phase4b-${local ? 'local' : 'gated'}.json`, JSON.stringify({
-    upstream: pin, commit: process.env.GITHUB_SHA, success, gates,
+    upstream: pin, commit: process.env.GITHUB_SHA, success, gates, stage, failures,
     mode: local ? 'trusted-local' : 'dashboard',
     scope: 'Unmodified Hermes, production WebUI image, deterministic model endpoint; session settings, not global mutations.',
   }, null, 2));
