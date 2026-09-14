@@ -22,6 +22,7 @@ self.addEventListener('install', event => {
 });
 self.addEventListener('activate', event => {
   event.waitUntil((async () => {
+    // Retain one previous static build; it is never a conversation history cache.
     const old = (await caches.keys()).filter(name => name.startsWith(PREFIX) && name !== CACHE);
     const clients = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
     if (clients.length <= 1) for (const name of (clients.length ? old.slice(0, -1) : old)) await caches.delete(name);
@@ -33,7 +34,8 @@ self.addEventListener('fetch', event => {
   const request = event.request, url = new URL(request.url);
   if (request.method !== 'GET' || url.origin !== self.location.origin || url.search || (url.hash && request.mode !== 'navigate') || !allowed.has(url.pathname)) return;
   if (request.mode === 'navigate' && url.pathname === '/') {
-    event.respondWith(fetch(request).then(response => response.ok ? response : caches.match('/' , {cacheName:CACHE}).then(cached => cached || response)).catch(async () => await caches.match('/', {cacheName:CACHE}) || offline()));
+    // Keep HTML and hashed assets on the same build until activation is approved.
+    event.respondWith(caches.match('/', { cacheName: CACHE }).then(cached => cached || fetch(request).catch(offline)));
   } else {
     event.respondWith(caches.match(url.pathname, {cacheName:CACHE}).then(cached => cached || fetch(request)));
   }
