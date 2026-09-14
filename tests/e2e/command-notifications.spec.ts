@@ -10,10 +10,10 @@ test('first-message catalogue settles even while shell animation-frame notificat
   // Delay only rendering notifications, not network replies or React's control-store subscription.
   await page.addInitScript(() => {
     const request = window.requestAnimationFrame.bind(window), cancel = window.cancelAnimationFrame.bind(window);
-    const pending = new Map<number, FrameRequestCallback>(); let paused = false, held = 0;
+    const pending = new Map<number, FrameRequestCallback>(); let paused = false;
     window.requestAnimationFrame = callback => {
       const id = request(time => {
-        if (paused) { held++; return; }
+        if (paused) return;
         if (pending.delete(id)) callback(time);
       });
       pending.set(id, callback); return id;
@@ -21,7 +21,8 @@ test('first-message catalogue settles even while shell animation-frame notificat
     window.cancelAnimationFrame = id => { pending.delete(id); cancel(id); };
     Reflect.set(window, '__commandTestFrames', {
       pause: () => { paused = true; },
-      held: () => held,
+      // Count queued callbacks: WebKit may not invoke a throttled native frame at all.
+      held: () => paused ? pending.size : 0,
       resume: () => {
         paused = false;
         for (const [id, callback] of [...pending]) {
