@@ -1,18 +1,20 @@
 # Implementation Status
 
-Updated: 14 September 2026. **Phase 4C HTTPS/PWA software and automated acceptance passed at `31a2ec4`.** Delivery is PR #7, preserving every implementation checkpoint and the concurrent branded landing page. Phases 0–3 remain accepted. **The original Phase 4 physical iPhone/Android exit gate is still OPEN: no physical-device result is claimed.**
+Updated: 14 September 2026. **Phase 4C HTTPS/PWA software and automated acceptance passed at `31a2ec4`.** Delivery is PR #7, preserving every implementation checkpoint and the concurrent branded landing page. Phases 0–3 remain accepted. **The original Phase 4 physical iPhone/Android exit gate is still OPEN: no physical-device result is claimed.** A follow-up approval-attention slice is in progress on `permission-attention`: visual prominence is pushed at `27dfd52` and the one-shot browser chime at `05c9b9d`; final CI/merge is pending.
 
 ## Current delivered application
 
 The modern HermesUI NG shell, native chat/history, tool and reasoning activity, approval/clarify/sudo/secret controls, active-session attention and native model/profile/reasoning selectors remain available. Phase 4C adds native HTTPS/WSS, operator-owned private-CA certificate setup, both TLS-enabled Compose topologies, install guidance, a static-only offline shell, guarded service-worker updates and a functional conversation-details right pane with an equivalent mobile sheet.
 
+Pending permission requests are being made more obvious without changing Hermes' security policy: the follow-up branch adds a warning-emphasised **Permission required** card, stronger composer attention state and a single short Web Audio chime for each newly observed approval when browser audio has been unlocked by user interaction. Visual controls remain authoritative when a browser is muted or autoplay policy prevents sound.
+
 Only public shell assets are cached. API/auth responses, transcripts, credentials, workspace files and offline mutations are not persisted. Reload/reconnect verifies access and obtains native history. Updates require a deliberate action and remain blocked by drafts, active/uncertain runs, pending agent inputs/settings/auth work or other open app windows. Another tab is not force-reloaded. The details pane is native metadata, not a claimed workspace/Git implementation.
 
 ## Exact current verification
 
-Application/test commit: **`31a2ec4a712340feb395bb2d007752e1f3888d1f`**. Tested PR merge: **`33066e9680edfa47802b2ee7f009ad7ff6e5e80d`**. GitHub comparison reports no changed files. The exact CI source archive was downloaded and checked. Subsequent evidence/status/checklist changes are documentation only.
+Phase 4C application/test commit: **`31a2ec4a712340feb395bb2d007752e1f3888d1f`**. Tested PR merge: **`33066e9680edfa47802b2ee7f009ad7ff6e5e80d`**. GitHub comparison reports no changed files. The exact CI source archive was downloaded and checked. Subsequent evidence/status/checklist changes are documentation only. The newer approval-attention branch is intentionally not folded into this accepted evidence until its own CI passes.
 
-Permanent current evidence: **`evidence/phase4c-final-acceptance.json`**. The earlier `phase4c-acceptance.json` is historical, not a substitute for current verification.
+Permanent Phase 4C evidence: **`evidence/phase4c-final-acceptance.json`**. The earlier `phase4c-acceptance.json` is historical, not a substitute for current verification.
 
 | Gate | Result | Actions run |
 |---|---|---|
@@ -30,6 +32,8 @@ The general projects cover desktop Chromium, iPhone WebKit emulation, Android Ch
 ## Native runtime evidence
 
 Baseline remains **`NousResearch/hermes-agent@b6b53c69a6ed49cb099cf1bfe76b5e6edd718e5a`**. The actual production WebUI container talks to unmodified Hermes; only the model endpoint is deterministic. Both gated Dashboard and trusted-local suites pass verified HTTPS REST/WSS admission, native prompt completion, secure reconnect without replay and public PWA assets. Existing M0–M3 and model/reasoning regressions pass, including real approval allow/deny/expiry, restricted sudo execution/skip and secret capture/skip in isolated CI environments.
+
+Approval expiry is owned by Hermes, not by a hidden WebUI timer. At the tested pin, `approvals.timeout` defaults to **300 seconds** and the native wait is explicitly bounded. `0` is immediate timeout, not an infinite sentinel. Hermes clamps very large values to a platform-safe maximum (approximately one year), so the WebUI does not pretend a true indefinite wait exists. Operators can deliberately raise the native setting through supported Hermes configuration, for example `hermes config set approvals.timeout 3600` for one hour. The WebUI never renews or replays a timed-out permission request.
 
 Prior M3 evidence: `evidence/phase3-completion-acceptance.json`. Prior composer evidence: `evidence/phase4b-combined-acceptance.json`. No production Hermes imports, direct state/config access, Relay or second durable conversation runtime were added.
 
@@ -49,6 +53,7 @@ Browser traffic becomes HTTPS/WSS. The existing Hermes hop remains HTTP on priva
 
 - Phases 0–3: accepted for the supported baseline.
 - Phase 4 software: implemented and automated acceptance passed. Actual physical iPhone/Android scenarios 1–5, Home Screen installation, keyboards and OS background/resume remain unrun in `phase4-device-smoke.md`.
+- Approval attention follow-up: implementation pushed; CI/merge pending. Native indefinite approval waiting is not supported by the tested Hermes pin; a longer bounded `approvals.timeout` is the supported operator control.
 - Phases 5–6: constrained read-only workspace/Git, then opt-in writes remain.
 - Phase 7: native composer controls delivered; slash commands, usage/context and contract-tested rewind/edit/regenerate remain.
 - Phases 8–10: management, attachments/voice, multi-architecture publication and release-wide accessibility/performance/security work remain.
