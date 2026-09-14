@@ -1,8 +1,10 @@
+import { tlsFiles, type TlsFiles } from './tls.js';
 import { resolve } from 'node:path';
 import { configureAccess } from './trusted-local.js';
 
 export const PROXY_PREFIX = '/__hermes';
 export interface Config {
+  tls?: TlsFiles;
   authMode?: 'dashboard' | 'trusted-local';
   readonly sessionToken?: string;
   upstream: URL;
@@ -56,6 +58,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     requestTimeoutMs: 15_000,
     maxBodyBytes: 1_048_576,
   };
+  config.tls = tlsFiles(env, config.publicOrigin);
   configureAccess(config, env);
   return config;
 }

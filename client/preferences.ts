@@ -4,6 +4,7 @@ export function themeValue(value: unknown): Theme { return value === 'dark' || v
 export function readTheme(): Theme { try { return themeValue(localStorage.getItem(THEME_KEY)); } catch { return 'system'; } }
 export function applyTheme(theme: Theme, save = false): void {
   document.documentElement.dataset.theme = theme === 'system' ? (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme;
+  document.querySelector('meta[name="theme-color"]')?.setAttribute('content', document.documentElement.dataset.theme === 'dark' ? '#101216' : '#ffffff');
   if (save) { try { localStorage.setItem(THEME_KEY, theme); } catch { /* Private mode: appearance still works for this tab. */ } }
 }
 export function dateGroup(timestamp: number, now = Date.now()): string {

@@ -2,8 +2,14 @@ services:
   webui:
     build: .
     init: true
+    user: "${WEBUI_UID:-10001}:${WEBUI_GID:-10001}"
     image: hermes-webui-ng:phase0
+    volumes:
+      - ${WEBUI_TLS_DIR:-./.local/tls/server}:/run/webui-tls:ro
     environment:
+      WEBUI_TLS_CERT: /run/webui-tls/server.crt
+      WEBUI_TLS_KEY: /run/webui-tls/server.key
+      WEBUI_TLS_CA: /run/webui-tls/ca.crt
       HERMES_DASHBOARD_URL: ${HERMES_DASHBOARD_URL:?Set an authenticated Dashboard origin}
       PUBLIC_ORIGIN: ${PUBLIC_ORIGIN:?Set the exact browser-facing origin}
     extra_hosts:

@@ -1,0 +1,18 @@
+.workspace.with-details { grid-template-columns: 268px minmax(0, 1fr) 290px; }
+.workspace.rail-collapsed.with-details { grid-template-columns: 76px minmax(0, 1fr) 290px; }
+.conversation-details { min-width: 0; min-height: 0; background: var(--surface); color: var(--text); border-left: 1px solid var(--border); display: flex; flex-direction: column; }
+.conversation-details > header { display: flex; align-items: center; justify-content: space-between; padding: 12px 14px; border-bottom: 1px solid var(--border); }
+.conversation-details h2 { margin: 0; font-size: 14px; font-weight: 600; }
+.details-content { min-height: 0; overflow: auto; padding: 24px 18px max(24px, var(--safe-bottom)); }
+.conversation-details .connection-facts > div { align-items: start; gap: 12px; }
+.conversation-details dd { max-width: 65%; text-align: right; overflow-wrap: anywhere; }
+.conversation-details .secondary { min-height: 44px; margin-bottom: 18px; }
+.modal-details .conversation-details { border-left: none; overflow: auto; }
+.pwa-settings h3 { display: flex; align-items: center; gap: 8px; }
+.pwa-settings .primary, .pwa-settings .secondary { min-height: 44px; }
+@media (max-width: 850px) {
+  .modal-details { width: 100%; }
+  .details-content { padding: 20px max(18px, var(--safe-right)) max(24px, var(--safe-bottom)) max(18px, var(--safe-left)); }
+  .settings-tabs { overflow-x: auto; flex-shrink: 0; }
+  .settings-tabs button { min-height: 44px; }
+}

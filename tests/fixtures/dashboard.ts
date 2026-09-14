@@ -6,7 +6,7 @@ import { ModelScenarios } from './model-scenarios.js';
 import { AgentScenarios } from './agent-scenarios.js';
 import { WS_PROTOCOL } from '../../src/hermes/dashboard-client.js';
 
-export async function startFixture(port = 0, options: { sessionToken?: string } = {}) {
+export async function startFixture(port = 0, options: { sessionToken?: string; beforeWsTicket?: () => Promise<void>; beforePromptComplete?: (text: string) => Promise<void> } = {}) {
   const cookie = `fixture_auth=${randomBytes(24).toString('hex')}`;
   const tickets = new Set<string>();
   const interactions = new AgentScenarios();
@@ -15,6 +15,7 @@ export async function startFixture(port = 0, options: { sessionToken?: string } 
   const sessions = new Map<string, { key: string; messages: {role:string; text:string}[]; running: boolean; profile: string; updated: number; turn: number; inflight: string }>();
   const metrics = { tickets: 0, creates: 0, submits: 0, upgrades: 0 };
   const timers = new Set<ReturnType<typeof setTimeout>>();
+  let closed = false;
   const ws = new WebSocketServer({ noServer: true, handleProtocols: () => options.sessionToken ? false : WS_PROTOCOL });
   const server = createServer((req, res) => {
     const send = (status: number, data: unknown) => { res.writeHead(status, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(data)); };
@@ -47,8 +48,15 @@ export async function startFixture(port = 0, options: { sessionToken?: string } 
     }
     if (req.url === '/api/auth/me') { send(200, { user_id: 'fixture', provider: 'basic' }); return; }
     if (req.url === '/api/auth/ws-ticket' && req.method === 'POST') {
-      const ticket = randomBytes(24).toString('base64url'); tickets.add(ticket); metrics.tickets++;
-      send(200, { ticket, ttl_seconds: 30 }); return;
+      const issue = () => {
+        if (res.destroyed) return;
+        const ticket = randomBytes(24).toString('base64url'); tickets.add(ticket); metrics.tickets++;
+        send(200, { ticket, ttl_seconds: 30 });
+      };
+      // Test-only gate: delay real HTTP admission without route/WS/service-worker mocks.
+      if (options.beforeWsTicket) void options.beforeWsTicket().then(issue, () => { if (!res.destroyed) send(503, {}); });
+      else issue();
+      return;
     }
     if (req.url === '/redirect') { res.writeHead(302, { Location: '/login' }); res.end(); return; }
     if (req.url === '/slow') return;
@@ -121,7 +129,7 @@ export async function startFixture(port = 0, options: { sessionToken?: string } 
       if(interactions.respond(params.session_id,method,params,reply))return;
       if (method === 'session.history') { reply({ messages: session.messages }); return; }
       if (method === 'session.activate') { reply({ info: models.info(String(params.session_id)), running: session.running, status: session.running ? 'working' : 'idle', inflight: { assistant: session.inflight },...interactions.snapshot(params.session_id,emitAgent) }); return; }
-      if (method === 'session.interrupt') { interactions.interrupt(params.session_id); session.turn++; session.running = false; session.inflight = ''; reply({ ok: true }); event('session.info', params.session_id, { running:false }); return; }
+      if (method === 'session.interrupt') { interactions.interrupt(params.session_id); session.turn++; session.running = false; session.inflight = ''; reply({ ok: true }); event('session.info', params.session_id, { running: false }); return; }
       if (method === 'prompt.submit') {
         if (session.running) { error(); return; }
         metrics.submits++; session.running = true; session.messages.push({ role: 'user', text: params.text });
@@ -138,7 +146,8 @@ export async function startFixture(port = 0, options: { sessionToken?: string } 
         const delta = (text: string) => { session.inflight += text; if (client.readyState === 1) event('message.delta', params.session_id, {text}); };
         if (slow) delta('Controlled turn is running…');
         if (streaming) for (let i=0; i<30; i++) later(() => delta(`Streaming line ${i} ${'text '.repeat(20)}\n`), i*100);
-        later(() => {
+        const complete = () => {
+          if (closed || session.turn !== turn) return;
           const text = streaming ? session.inflight + 'SYNTHETIC_RESPONSE' : 'SYNTHETIC_RESPONSE';
           session.messages.push({ role: 'assistant', text }); session.updated = Date.now()/1000;
           if (client.readyState === 1) {
@@ -148,6 +157,15 @@ export async function startFixture(port = 0, options: { sessionToken?: string } 
           later(() => { session.running = false; session.inflight = '';
             if (client.readyState === 1) event('session.info', params.session_id, { running: false });
           }, 20);
+        };
+        later(() => {
+          // Test-only completion barrier: real snapshots stay working until released.
+          if (options.beforePromptComplete) void options.beforePromptComplete(String(params.text)).then(complete, () => {
+            if (closed || session.turn !== turn) return;
+            session.running = false; session.inflight = '';
+            if (client.readyState === 1) event('error', params.session_id, { code: 'FIXTURE_COMPLETION_REJECTED' });
+          });
+          else complete();
         }, slow || streaming ? 3100 : 40); return;
       }
       error();
@@ -163,6 +181,7 @@ export async function startFixture(port = 0, options: { sessionToken?: string } 
     },
     disconnect: () => { for (const client of ws.clients) client.terminate(); },
     close: async () => {
+      closed = true;
       interactions.close();timers.forEach(clearTimeout); ws.clients.forEach((client) => client.terminate()); ws.close();
       server.closeAllConnections(); await new Promise<void>((resolve) => server.close(() => resolve()));
     },

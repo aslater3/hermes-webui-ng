@@ -31,6 +31,7 @@ jobs:
           node-version: '22'
           cache: npm
       - run: npm ci
+      - run: npm ci --prefix pwa --ignore-scripts
       - name: Compile application and legacy regression sources
         run: npm run build
       - name: Retain reproducible tooling for an explicitly requested recovery

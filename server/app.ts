@@ -1,4 +1,5 @@
-import { createServer } from 'node:http';
+import { pwaAsset } from './pwa.js';
+import { transportServer } from './tls.js';
 import { foundationRoutes } from './routes/foundation.js';
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -13,8 +14,7 @@ import { json, proxyHttp, proxyUpgrade, refuseUpgrade, type Log } from './proxy/
 export function createApp(config: Config, log: Log = (event) => console.log(JSON.stringify(event))) {
   const sockets = new Set<Duplex>();
   const foundation = foundationRoutes(config);
-  const server = createServer(
-    { maxHeaderSize: 16384, requestTimeout: 20_000, headersTimeout: 15_000 },
+  const server = transportServer(config,
     (req, res) => {
       const raw = req.url ?? '/';
       const requestId = randomUUID();
@@ -81,19 +81,20 @@ export function createApp(config: Config, log: Log = (event) => console.log(JSON
         return;
       }
       const path = raw.split('?')[0] ?? '';
-      const asset = path === '/' ? 'index.html' : path === '/diagnostic' ? 'diagnostic.html'
-        : /^\/(?:app\.js|styles\.css|hermes\/[a-z-]+\.js|assets\/[A-Za-z0-9_-]+\.(?:js|css|svg))$/.test(path) ? path.slice(1) : undefined;
+      const asset = pwaAsset(path) ?? (path === '/' ? 'index.html' : path === '/diagnostic' ? 'diagnostic.html'
+        : /^\/(?:app\.js|styles\.css|hermes\/[a-z-]+\.js|assets\/[A-Za-z0-9_-]+\.(?:js|css|svg))$/.test(path) ? path.slice(1) : undefined);
       if (!asset) { json(res, 404, { error: { code: 'NOT_FOUND' } }); return; }
       void readFile(join(config.staticDir, asset))
         .then((content) => {
-          const mime = asset.endsWith('.html') ? 'text/html' : asset.endsWith('.css') ? 'text/css' : asset.endsWith('.svg') ? 'image/svg+xml' : 'text/javascript';
+          const mime = asset.endsWith('.html') ? 'text/html' : asset.endsWith('.css') ? 'text/css' : asset.endsWith('.svg') ? 'image/svg+xml' : asset.endsWith('.png') ? 'image/png' : asset.endsWith('.webmanifest') ? 'application/manifest+json' : 'text/javascript';
           res.writeHead(200, {
             'Content-Type': `${mime}; charset=utf-8`,
             'Cache-Control': asset.startsWith('assets/') ? 'public, max-age=31536000, immutable' : 'no-store',
+            'X-WebUI-Static': '1',
             'X-Content-Type-Options': 'nosniff',
             'Referrer-Policy': 'no-referrer',
             'Permissions-Policy': 'camera=(), microphone=(), geolocation=()',
-            'Content-Security-Policy': "default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self' data:; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'",
+            'Content-Security-Policy': "default-src 'self'; worker-src 'self'; manifest-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self' data:; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'",
           });
           res.end(req.method === 'HEAD' ? undefined : content);
         })

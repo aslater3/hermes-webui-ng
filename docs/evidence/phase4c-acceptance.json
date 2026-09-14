@@ -1,0 +1,92 @@
+{
+  "milestone": "Phase 4C HTTPS, PWA software and automated mobile acceptance",
+  "dateUtc": "2026-09-14",
+  "softwareAcceptance": "passed",
+  "physicalDeviceExitGate": "not-run-open",
+  "applicationCommit": "93f2ff0360ff504d711e4cf49de3ff18f951b517",
+  "testedMergeCommit": "a18e6b1e20101e7c3e6bb0df457fae7d073954d9",
+  "applicationTree": "a3d5f13cf4c5454051d690443f04cd18257b66f8",
+  "mergeComparison": "GitHub compare returned no changed files",
+  "upstreamRef": "b6b53c69a6ed49cb099cf1bfe76b5e6edd718e5a",
+  "local": {
+    "node": "22.16.0",
+    "build": "passed",
+    "serverAndFrontendTypecheck": "passed",
+    "lint": "passed",
+    "unitPassed": 166,
+    "wirePassed": 22,
+    "source": "Fresh extraction of the exact CI source archive, not an uncommitted development mirror",
+    "localBrowserOrDockerExecutionClaimed": false
+  },
+  "ci": {
+    "checkpoint": { "runId": 34820438982, "conclusion": "success" },
+    "image": { "runId": 34820438961, "conclusion": "success" },
+    "browsers": {
+      "runId": 34820439018,
+      "conclusion": "success",
+      "passed": 296,
+      "failed": 0,
+      "skipped": 0,
+      "flaky": 0,
+      "projects": ["desktop-chromium", "iphone-webkit", "android-chromium", "narrow-320"],
+      "screenshots": 72
+    },
+    "trustedHttpsBrowsers": {
+      "runId": 34820438893,
+      "conclusion": "success",
+      "passed": 5,
+      "failed": 0,
+      "skipped": 0,
+      "flaky": 0,
+      "projects": ["https-chromium", "https-iphone-webkit", "https-android"],
+      "screenshots": 3,
+      "ignoreHTTPSErrors": false,
+      "trust": "Disposable private CA enrolled in normal OS and browser trust stores"
+    },
+    "vanillaHermes": {
+      "runId": 34820439220,
+      "conclusion": "success",
+      "modes": ["dashboard", "trusted-local"],
+      "existingRegressions": "M0-M3 native interactions, auth, model/reasoning settings and no-replay recovery",
+      "httpsGatesInBothModes": [
+        "verified-https-rest-and-wss-admission",
+        "native-prompt-completion",
+        "secure-reconnect-without-replay",
+        "public-pwa-assets-over-https"
+      ],
+      "certificateVerification": true,
+      "webui": "Actual production non-root read-only Docker image",
+      "hermes": "Unmodified pinned official runtime, isolated homes configured through its supported CLI",
+      "modelEndpoint": "Deterministic test fixture"
+    }
+  },
+  "artifacts": [
+    { "name": "source-checkpoint", "id": 10338415923, "sha256": "d111fcd3f530ed4c1ea901f618155f5b5d839713ef55fe4bc7b505be9763848a" },
+    { "name": "diagnostic-browser-results", "id": 10337843651, "sha256": "f1d94fea2e8b17050cc087af9ae818d861d31ff3ccad490e427b9fac0808d9ac" },
+    { "name": "trusted-https-browser-results", "id": 10337843103, "sha256": "bf7ecf93148a112f8b778640cd9a094fb12178163a32c0eba57a69a982fd51b9" },
+    { "name": "vanilla-hermes-acceptance", "id": 10338595196, "sha256": "b8d90e3376420c0810bb400e1f38213e899fc7a814df860f956e62f420b5e809" }
+  ],
+  "artifactHashesVerified": true,
+  "screenshotsInspected": ["desktop conversation-details pane", "trusted HTTPS iPhone install/update settings"],
+  "networkTestMethods": [
+    "Actual WebUI listener shutdown and restoration, with browser onLine/offline/online signals explicitly controlled; all browser projects including WebKit",
+    "Browser-wide offline emulation through Playwright in Chromium desktop and Android projects",
+    "Actual service-worker version replacement, draft protection, refusal with other open windows, explicit activation/reload and native recovery",
+    "Real cookie expiry while a service worker controls the page; private view clears"
+  ],
+  "failedAttemptDisclosure": [
+    "Initial retained-input unit fixture incorrectly returned idle after a pending request; fixture was corrected, not its assertion removed.",
+    "Session-fragment navigation was initially excluded by the cache filter; fixed with a root-cache-key regression.",
+    "Route-mocked protocol tests are separated from real service-worker suites; actual worker auth-expiry coverage remains mandatory.",
+    "WebKit automated offline navigation returned internal errors/timeouts. Those runs remain failures; final listener-loss tests use the distinct method stated above. No physical airplane-mode pass is claimed."
+  ],
+  "limits": [
+    "Physical iPhone and Android scenarios 1-5 are NOT RUN. The original M4 physical exit gate remains OPEN.",
+    "Actual Home Screen installation, OS background suspension, physical keyboards and physical airplane mode require the separate device-smoke report.",
+    "Only public shell assets are cached. No runtime API, auth, transcript, workspace, credential or offline mutation queue is persisted.",
+    "Browser traffic is HTTPS/WSS; the existing private host-loopback HTTP connection to Hermes is unchanged.",
+    "Trusted-local remains unauthenticated despite TLS. Devices must explicitly trust the operator CA.",
+    "No operator host deployment, Docker storage changes or changes to the unrelated legacy service were performed.",
+    "The independent upstream reasoning-scope deletion race, M3 missing credential-request snapshots, future workspace and release hardening remain documented."
+  ]
+}

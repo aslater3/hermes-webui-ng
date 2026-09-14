@@ -10,3 +10,9 @@ coverage
 upstream
 hermes-upstream
 *.log
+
+# Operator TLS material and private WebUI environment backups
+.local/
+*.key
+*.pem
+pwa/node_modules/

@@ -1,6 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { AxeBuilder } from '@axe-core/playwright';
 import { login, send, idle, newChat, conversations } from './shell-fixture.js';
+import { pwaNetwork, loginPwa } from './pwa-network.js';
 test.use({ baseURL: 'http://127.0.0.1:8787' });
 
 test('an unselected pending credential stays discoverable without keeping the entered value', async ({ page }, info) => {
@@ -24,13 +25,33 @@ test('an unselected pending credential stays discoverable without keeping the en
 });
 
 test('native completion in another conversation produces a review badge without interrupting current chat', async ({ page }, info) => {
-  const prompt = `[slow-test] background response ${info.project.name}`;
-  await login(page); await send(page, prompt);
-  await newChat(page); await send(page, 'Current foreground response'); await idle(page);
-  await conversations(page);
-  const button = page.getByRole('button', { name: `Open active session: ${prompt}`, exact: true });
-  await expect(button).toContainText('New activity');
-  await button.click(); await idle(page);
-  await expect(page.locator('[data-role="user"]').last()).toContainText('[slow-test] background response');
-  await expect(page.locator('[data-role="user"]')).not.toContainText('Current foreground response');
+  const prompt = `Held background response ${info.project.name}`;
+  let release!: () => void;
+  const permit = new Promise<void>(resolve => { release = resolve; });
+  const network = await pwaNetwork(false, {
+    beforePromptComplete: text => text === prompt ? permit : Promise.resolve(),
+  });
+  // Compare the exact content, not its article wrapper which also contains "You".
+  const userMessages = page.locator('[data-role="user"] .user-text');
+  try {
+    await loginPwa(page, network.origin); await send(page, prompt);
+    await newChat(page); await send(page, 'Current foreground response'); await idle(page);
+    await conversations(page);
+    const button = page.getByRole('button', { name: `Open active session: ${prompt}`, exact: true });
+    // Prove the prerequisite: this native session is still working AND unselected.
+    // A fixed 3.1s fixture timer can finish before a slower mobile UI switches away.
+    await expect(button).toContainText('Working');
+    await expect(button).not.toContainText('New activity');
+    await expect(userMessages).toHaveText(['Current foreground response']);
+    release();
+    await expect(button).toContainText('New activity');
+    await expect(userMessages).toHaveText(['Current foreground response']);
+    await button.click(); await idle(page);
+    await expect(userMessages).toHaveText([prompt]);
+    await expect(userMessages).not.toContainText('Current foreground response');
+    expect(network.metrics.submits).toBe(2);
+    expect(network.metrics.creates).toBe(2);
+  } finally {
+    release(); await page.goto('about:blank'); await network.close();
+  }
 });

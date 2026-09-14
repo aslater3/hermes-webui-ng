@@ -4,8 +4,14 @@ services:
     build: .
     image: hermes-webui-ng:phase0
     init: true
+    user: "${WEBUI_UID:-10001}:${WEBUI_GID:-10001}"
     network_mode: host
+    volumes:
+      - ${WEBUI_TLS_DIR:-./.local/tls/server}:/run/webui-tls:ro
     environment:
+      WEBUI_TLS_CERT: /run/webui-tls/server.crt
+      WEBUI_TLS_KEY: /run/webui-tls/server.key
+      WEBUI_TLS_CA: /run/webui-tls/ca.crt
       HERMES_DASHBOARD_URL: ${HERMES_DASHBOARD_URL:-http://127.0.0.1:9119}
       PUBLIC_ORIGIN: ${PUBLIC_ORIGIN:?Set the exact browser-facing origin}
       HOST: ${WEBUI_HOST:-127.0.0.1}

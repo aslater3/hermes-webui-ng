@@ -1,3 +1,4 @@
+import { buildPwa } from './build-pwa.mjs';
 import { cp, rm, rename } from 'node:fs/promises';
 import { execFileSync } from 'node:child_process';
 await Promise.all([rm('build', { recursive: true, force: true }), rm('dist', { recursive: true, force: true })]);
@@ -8,3 +9,5 @@ await cp('public', 'dist', { recursive: true });
 await rename('dist/index.html', 'dist/diagnostic.html');
 await cp('build/src', 'dist', { recursive: true });
 execFileSync(process.execPath, ['node_modules/vite/bin/vite.js', 'build'], { stdio: 'inherit' });
+
+await buildPwa();

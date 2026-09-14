@@ -32,12 +32,13 @@ test('public capability/diagnostic API exposes only allowlisted metadata, never 
   assert.deepEqual(data.hermes, { reachable: true, status: 'healthy', authRequired: true });
   assert.equal(data.gateway.status, 'browser-not-probed');
   assert.deepEqual(data.workspace, { available: false, writable: false, git: false });
-  assert.equal(data.features.pwa, false);
-  assert.equal(data.webui.phase, 4); assert.equal(data.webui.milestone, '4B');
+  assert.equal(data.features.pwa, true);
+  assert.equal(data.webui.phase, 4); assert.equal(data.webui.milestone, '4C');
   await Promise.all([read('/api/webui/capabilities'), read('/api/webui/capabilities')]);
   assert.equal(requests, 1, 'public probes are coalesced and briefly cached');
   assert.equal(JSON.stringify([data, await read('/api/webui/diagnostics')]).includes('private'), false);
   assert.equal((await read('/api/webui/health')).ok, true);
+  assert.equal((await fetch(origin + '/api/webui/health')).status, 200);
   assert.equal((await fetch(origin + '/api/webui/capabilities?url=https://evil.example')).status, 404);
   assert.equal((await fetch(origin + '/api/webui/diagnostics', { headers: { Origin: 'https://evil.example' } })).status, 403);
   assert.equal((await fetch(origin + '/api/webui/capabilities', { method: 'POST', headers: { Origin: origin } })).status, 405);

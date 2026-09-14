@@ -24,7 +24,7 @@
 </p>
 
 > [!IMPORTANT]
-> **HermesUI NG is under active development.** Phase 3 / M3 native interaction acceptance is complete for the supported baseline and the modern shell plus Phase 4B composer controls are integrated. PWA/device certification and broader management features are still in progress. See [`docs/implementation-status.md`](docs/implementation-status.md) for the exact verified state.
+> **HermesUI NG is under active development.** Phases 0–3 are accepted for the supported baseline. Phase 4C adds self-signed HTTPS/WSS, an installable static-only PWA, guarded updates and a conversation-details pane. Physical iPhone/Android acceptance and production-release certification remain open. See [`docs/implementation-status.md`](docs/implementation-status.md) for the exact verified state.
 
 ## What is HermesUI NG?
 
@@ -51,25 +51,28 @@ It is deliberately **not** a forked agent runtime, a second conversation databas
 - **Rich message rendering** — safe GFM Markdown, tables, highlighted code, copy/wrap controls and bounded plain-text fallback for unusually large messages.
 - **Responsive shell** — desktop sidebar, mobile conversation drawer, session attention indicators and keyboard/touch command palette.
 - **Appearance** — light, dark and system themes.
+- **HTTPS and PWA** — operator-owned local CA, HTTPS/WSS, public offline shell, installation guidance and deliberate updates protected by draft/run/input/settings guards.
+- **Conversation details** — optional native-metadata right pane on desktop and equivalent mobile sheet; not the future file/Git workspace.
 - **Authentication modes** — normal Hermes Dashboard authentication, plus an explicit trusted-LAN mode for intentionally ungated loopback Hermes deployments.
 - **Diagnostics** — the modern application is served at `/`; the retained troubleshooting interface is at `/diagnostic`.
 
 ### Not yet delivered or certified
 
-Installed PWA/service worker, physical-phone keyboard certification, workspace/Git features, global provider/profile management, slash-command polish, voice/attachments, OAuth, broader management surfaces, multi-architecture publication and public-internet release hardening are still future work.
+Physical Home Screen/standalone installation, keyboard and OS-background certification, workspace/Git features, global provider/profile management, slash-command polish, voice/attachments, OAuth, broader management surfaces, multi-architecture publication and public-internet release hardening are still future work.
 
 ## Quick start
 
 ### Default: authenticated Hermes Dashboard
 
-Requirements: **Docker Compose** and a reachable Hermes Dashboard.
+Requirements: **Docker Compose**, **OpenSSL on the deployment host** and a reachable Hermes Dashboard. The supplied Compose files require TLS certificates; prepare them before recreating a service.
 
 ```sh
 git clone https://github.com/aslater3/hermes-webui-ng.git
 cd hermes-webui-ng
 
 cp .env.example .env
-# Set HERMES_DASHBOARD_URL and the exact browser-facing PUBLIC_ORIGIN.
+# Set HERMES_DASHBOARD_URL and configure Hermes authentication.
+bash scripts/setup-https.sh localhost 8787
 
 docker compose up --build -d
 ```
@@ -81,10 +84,14 @@ The default Compose topology publishes the WebUI on host loopback. The browser a
 Use the standalone host-network Compose file rather than merging it with the bridge-network configuration:
 
 ```sh
-docker compose -f compose.host.yaml up --build -d
+# Preserve the existing .env/token first; run as your normal deployment user.
+bash scripts/setup-https.sh 192.168.0.63 8788
+# Replace EXISTING_NG_PROJECT with the current NG Compose project label.
+docker compose -p EXISTING_NG_PROJECT -f compose.host.yaml up --build -d
+curl --fail --cacert .local/tls/ca/ca.crt https://192.168.0.63:8788/healthz
 ```
 
-`compose.host.yaml` defaults to a WebUI loopback bind on port `8788`. Set `WEBUI_HOST`, `WEBUI_PORT` and `PUBLIC_ORIGIN` deliberately for your environment.
+`compose.host.yaml` defaults to loopback; the setup command above deliberately selects the LAN bind and HTTPS port `8788`. It privately backs up `.env`, preserves Hermes authentication/token/upstream settings and records TLS mount and non-root key ownership. Use the new HTTPS URL; HTTP no longer works on that port. Reuse the existing NG project and leave the separate legacy service on 8787 and Docker storage untouched.
 
 <details>
 <summary><strong>Trusted-LAN mode for an intentionally ungated local Hermes instance</strong></summary>
@@ -107,6 +114,18 @@ See [`docs/adr-018-trusted-local-access.md`](docs/adr-018-trusted-local-access.m
 ### Upgrading an existing locally modified deployment
 
 Do not reset a working checkout or overwrite its `.env`. Follow [`docs/local-testing-upgrade.md`](docs/local-testing-upgrade.md) to preserve local patches and deployment-specific credentials while moving to the NG stack.
+
+## Self-signed HTTPS, installation and updates
+
+The setup helper generates a reusable self-signed root CA and a SAN-bearing server certificate for your chosen address plus localhost. **Install only `.local/tls/ca/ca.crt` on your own devices**, verifying its printed fingerprint. Never distribute `ca.key` or `server.key`. Only the server certificate directory is mounted read-only; the CA signing key stays outside the container. The public certificate must be trusted rather than merely bypassing a browser warning.
+
+On iPhone/iPad, enable SSL trust for the installed root under **Settings → General → About → Certificate Trust Settings**, then open the exact HTTPS address without a warning before using Add to Home Screen. Android/desktop trust guidance, renewal and safe deployment steps are in [`docs/phase4-https-pwa.md`](docs/phase4-https-pwa.md).
+
+Browser traffic uses HTTPS/WSS. The existing connection to Hermes at **HTTP on private host loopback** is unchanged; it is not described as encrypted LAN traffic. TLS does not authenticate trusted-local access or make it suitable for public exposure. There is still one WebUI image, with no runtime apt layer or certificate-verification bypass.
+
+Settings → App provides installation guidance, update checks and **Update and reload**. A fixed build-generated allowlist caches public HTML, manifest, icons and hashed JS/CSS/SVG only. No API/auth response, transcript, credential, workspace file or offline send queue is persisted. A fresh offline launch shows the public shell; reconnect verifies access and reads native history.
+
+Updates wait for drafts in all retained conversations, active/uncertain runs, inputs, settings/auth work and other open app windows to clear. Another tab is never force-reloaded. Browser/OS termination and manual reload remain separate user/platform actions. Original physical iPhone/Android testing is still open in [`docs/phase4-device-smoke.md`](docs/phase4-device-smoke.md); automated WebKit is not a physical-device sign-off.
 
 ## Architecture
 
@@ -145,6 +164,7 @@ Use **Node 22**:
 
 ```sh
 npm ci
+npm ci --prefix pwa --ignore-scripts
 npm run build
 npm run typecheck
 npm run lint
@@ -161,7 +181,15 @@ For browser development with deterministic fixtures:
 npm run dev:fixture
 ```
 
-The fixture is explicitly test-only and is not copied into the production runtime image.
+The fixture and isolated PWA icon renderer are test/build-only and are not copied into the production runtime image. PWA suites run real service workers separately from route-mocked protocol tests.
+
+After preparing and trusting a disposable CA as shown in `.github/workflows/https-pwa.yml`, run:
+
+```sh
+npx playwright test -c playwright.https.config.ts
+```
+
+The HTTPS gate waits for native Gateway admission, not merely service-worker control. A regression deliberately delays the real ticket response; CI also repeats both iPhone WebKit HTTPS cases five times without test retries. The original and repeated reports are retained separately, with `ignoreHTTPSErrors:false`.
 
 ### Verification layers
 
@@ -171,7 +199,9 @@ The repository exercises:
 - HTTP/WebSocket contract tests;
 - Chromium and WebKit critical-path browser coverage;
 - production-container smoke tests;
-- pinned vanilla-Hermes interaction acceptance for approval, sudo and secret flows.
+- pinned vanilla-Hermes interaction acceptance for approval, sudo and secret flows;
+- trusted-private-CA browser HTTPS/WSS, service-worker/offline/update and delayed-admission tests;
+- production-container HTTPS prompts and reconnect against unmodified Hermes in both auth modes.
 
 Browser emulation and automated accessibility checks are useful evidence, but they are not substitutes for physical-device or full WCAG certification.
 
@@ -181,11 +211,14 @@ The production image runs non-root and supports a read-only root filesystem. Bro
 
 Credentials and prompt drafts are not treated as durable application data. Drafts are bounded to tab memory; submitted credential values are cleared at lifecycle/account boundaries; unacknowledged prompts and credential responses are never automatically replayed.
 
+The independent pinned-Hermes reasoning setter can still fall back to profile defaults if another client deletes the live runtime during an effort change. Avoid deleting/closing that runtime elsewhere while applying effort; client preflight is not an atomic upstream fix. Lost sudo/secret request snapshots likewise remain non-actionable, with Stop response and an explicitly requested fresh turn as the tested recovery. These limits are documented, not concealed by the PWA.
+
 For security and authentication design, start with:
 
 - [`docs/07-security-auth.md`](docs/07-security-auth.md)
 - [`docs/adr-018-trusted-local-access.md`](docs/adr-018-trusted-local-access.md)
 - [`docs/05-hermes-protocol.md`](docs/05-hermes-protocol.md)
+- [`docs/adr-021-static-pwa-and-local-tls.md`](docs/adr-021-static-pwa-and-local-tls.md)
 
 ## Project documentation
 

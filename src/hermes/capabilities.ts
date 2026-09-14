@@ -13,7 +13,7 @@ export type CapabilityMap = Record<Feature, Capability>;
 function initial(): CapabilityMap {
   return Object.fromEntries(
     ['gateway', 'heartbeat', 'changeEvents', ...Object.keys(REST), 'workspace', 'pwa', 'reasoning'].map((name) => [name, {
-      state: 'unknown', evidence: 'unverified', implemented: ['gateway', 'heartbeat', 'changeEvents', 'sessionsList', 'sessionsSearch', 'models', 'profiles', 'reasoning'].includes(name),
+      state: 'unknown', evidence: 'unverified', implemented: ['gateway', 'heartbeat', 'changeEvents', 'sessionsList', 'sessionsSearch', 'models', 'profiles', 'reasoning', 'pwa'].includes(name),
     }]),
   ) as CapabilityMap;
 }
@@ -65,7 +65,7 @@ export class CapabilitiesStore {
     if (data.schemaVersion !== 1) throw new ClientError('protocol', 'Unsupported WebUI capability schema');
     const workspace = record(data.workspace); const features = record(data.features);
     this.set('workspace', workspace.available === true ? 'requires-configuration' : 'unavailable', 'webui');
-    this.set('pwa', features.pwa === true ? 'available' : 'unavailable', 'webui');
+    this.set('pwa', features.pwa === true ? 'available' : features.pwa === false ? 'unavailable' : 'unknown', 'webui');
     this.publish();
   }
   observeNative(name: 'models' | 'profiles' | 'reasoning', state: Availability): void {

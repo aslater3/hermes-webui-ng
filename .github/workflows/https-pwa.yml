@@ -1,0 +1,47 @@
+name: Trusted HTTPS PWA browsers
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  https-browsers:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci && npm ci --prefix pwa --ignore-scripts
+      - run: npm run build
+      - run: npx playwright install --with-deps chromium webkit
+      - name: Trust the disposable private CA without disabling certificate verification
+        run: |
+          bash scripts/setup-https.sh 127.0.0.1 8791 "$RUNNER_TEMP/webui-test.env"
+          sudo apt-get update
+          sudo apt-get install -y libnss3-tools
+          sudo install -m 644 .local/tls/ca/ca.crt /usr/local/share/ca-certificates/hermes-test.crt
+          sudo update-ca-certificates
+          mkdir -p "$HOME/.pki/nssdb"
+          certutil -N -d "sql:$HOME/.pki/nssdb" --empty-password
+          certutil -A -d "sql:$HOME/.pki/nssdb" -n hermes-test -t 'C,,' -i .local/tls/ca/ca.crt
+      - run: npx playwright test -c playwright.https.config.ts
+        env:
+          NODE_EXTRA_CA_CERTS: .local/tls/ca/ca.crt
+      - name: Repeat both iPhone WebKit HTTPS scenarios without retries
+        # Isolate output: Playwright cleans its output directory at the start of a run.
+        run: npx playwright test -c playwright.https.config.ts --project=https-iphone-webkit --repeat-each=5 --output=test-results/webkit-reliability
+        env:
+          NODE_EXTRA_CA_CERTS: .local/tls/ca/ca.crt
+          PWA_HTTPS_REPORT_PATH: test-results/https-webkit-reliability.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: trusted-https-browser-results
+          path: test-results/
+          retention-days: 7

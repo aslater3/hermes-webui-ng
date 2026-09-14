@@ -1,3 +1,4 @@
+import { PwaController } from './pwa.js';
 import { SessionAttention } from '../src/hermes/session-attention.js';
 import { profileIdentifier, type ModelChoice, type Effort } from '../src/hermes/model-catalog.js';
 import { DocumentRequests } from './document-requests.js';
@@ -12,6 +13,8 @@ import type { SessionRef } from '../src/hermes/session-rest.js';
 
 /** One disposable client lifetime; React never builds RPC envelopes or owns durable sessions. */
 export class AppRuntime {
+  readonly pwa = new PwaController(() => this.reloadBlocker());
+  reloadBlocker = () => this.connection?.state.busy ? 'Wait for authentication to finish.' : this.chat?.reloadBlocker() ?? '';
   readonly diagnostics = new DiagnosticsRing();
   private readonly requests = new DocumentRequests(window);
   readonly dashboard: DashboardClient;
@@ -50,6 +53,7 @@ export class AppRuntime {
     });
   };
   run = (operation: () => Promise<unknown>) => {
+    if (this.pwa.state.updating) return;
     const account = this.accountGeneration;
     this.error = ''; this.notify();
     void operation().catch(error => {
@@ -69,6 +73,7 @@ export class AppRuntime {
   start() {
     if (this.started) return;
     this.started = true;
+    this.cleanup.push(this.pwa.subscribe(this.notify)); void this.pwa.start();
     this.cleanup.push(this.attention.subscribe(this.notify), this.chat.subscribe(() => {
       const state = this.chat.native.state;
       if (state.runtimeId && state.storedId) this.attention.bind(state.runtimeId, { id: state.storedId, profile: state.profile });
@@ -99,7 +104,7 @@ export class AppRuntime {
       resume();
       if (this.readable) this.run(() => this.chat.browser.refresh());
     });
-    listen(window, 'online', () => this.run(() => this.connection.setOffline(false)));
+    listen(window, 'online', () => this.run(async () => { await this.connection.setOffline(false); if (!this.connection.hasAccess) await this.connection.start(); }));
     listen(window, 'offline', () => this.run(() => this.connection.setOffline(true)));
     this.connection.poll();
     this.run(() => navigator.onLine ? this.connection.start() : this.connection.setOffline(true));
@@ -165,6 +170,7 @@ export class AppRuntime {
     await this.chat.create(profile);
   }
   dispose() {
+    this.pwa.dispose();
     this.requests.dispose();
     this.cleanup.forEach(fn => fn()); this.cleanup = [];
     cancelAnimationFrame(this.frame); this.attention.dispose(); this.chat.dispose(); this.connection.dispose(); this.listeners.clear();

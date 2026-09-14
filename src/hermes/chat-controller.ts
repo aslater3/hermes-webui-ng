@@ -38,6 +38,19 @@ export class ChatController {
   viewFor(ref: SessionRef): NativeSession | undefined {
     return this.selected && this.viewKey(ref) === this.viewKey(this.selected) ? this.native : this.retained.get(this.viewKey(ref));
   }
+  reloadBlocker(): string {
+    if (this.draft.trim() || [...this.drafts].some(([key, value]) => key !== draftKey(this.selected) && value.trim())) return 'Send or clear your unsent drafts before updating.';
+    if (this.busy) return 'Wait for the conversation operation to finish.';
+    for (const view of [this.native, ...this.retained.values()]) {
+      if (['running', 'waiting', 'attaching', 'unknown'].includes(view.state.phase) || view.state.deliveryUnknown)
+        return 'Finish or reconcile active conversations before updating.';
+      if (view.settings.state.busy || view.settings.state.confirmation || view.settings.state.outcome === 'unknown')
+        return 'Resolve the pending settings change before updating.';
+      if (view.activity.state.inputs.some(input => ['pending', 'sending', 'unknown'].includes(input.status)))
+        return 'Resolve pending agent input before updating.';
+    }
+    return '';
+  }
   private listeners = new Set<() => void>();
   private refreshTimer?: ReturnType<typeof setTimeout>;
   private unlisten: () => void;

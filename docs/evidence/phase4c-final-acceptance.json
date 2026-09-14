@@ -1,0 +1,63 @@
+{
+  "milestone": "Phase 4C HTTPS/PWA software acceptance after reported regressions",
+  "dateUtc": "2026-09-14",
+  "softwareAcceptance": "passed",
+  "physicalDeviceExitGate": "not-run-open",
+  "applicationCommit": "31a2ec4a712340feb395bb2d007752e1f3888d1f",
+  "applicationTree": "e3a4ba2cf0d5dca70f75ceaad2167f9943c1bce8",
+  "testedMergeCommit": "33066e9680edfa47802b2ee7f009ad7ff6e5e80d",
+  "mergeComparison": "GitHub compare returned no changed files",
+  "upstreamRef": "b6b53c69a6ed49cb099cf1bfe76b5e6edd718e5a",
+  "ci": {
+    "checkpoint": { "runId": 34826686023, "conclusion": "success", "unitPassed": 166, "wirePassed": 22 },
+    "image": { "runId": 34826686184, "conclusion": "success" },
+    "browsers": { "runId": 34826686221, "conclusion": "success", "passed": 296, "failed": 0, "skipped": 0, "flaky": 0 },
+    "trustedHttpsBrowsers": {
+      "runId": 34826685982, "conclusion": "success",
+      "initial": { "passed": 8, "failed": 0, "skipped": 0, "flaky": 0 },
+      "webkitRepeated": { "passed": 10, "failed": 0, "skipped": 0, "flaky": 0, "repeatEach": 5 },
+      "ignoreHTTPSErrors": false,
+      "trust": "Disposable private CA enrolled in normal OS and browser trust stores; no test retries"
+    },
+    "vanillaHermes": {
+      "runId": 34826686054, "conclusion": "success",
+      "modes": ["dashboard", "trusted-local"],
+      "httpsGatesInBothModes": ["verified-https-rest-and-wss-admission", "native-prompt-completion", "secure-reconnect-without-replay", "public-pwa-assets-over-https"],
+      "existingRegressions": "M0-M3, native model/reasoning settings and local admission passed",
+      "certificateVerification": true,
+      "webui": "Actual production Docker image",
+      "hermes": "Unmodified pinned official runtime",
+      "modelEndpoint": "Deterministic test fixture"
+    }
+  },
+  "localRecoveryChecks": {
+    "source": "Exact downloaded CI source archive",
+    "typecheck": "passed",
+    "lint": "passed",
+    "typescriptEmit": "passed",
+    "unitPassed": 166,
+    "wirePassed": 22,
+    "localBrowserOrDockerExecutionClaimed": false
+  },
+  "artifacts": [
+    { "name": "source-checkpoint", "id": 10339743249, "sha256": "97a914af9269e93b415b17e7dc1e9ff5da8a53ca6c9b2526b292f719a2bc3cfb" },
+    { "name": "diagnostic-browser-results", "id": 10340905123, "sha256": "098531135dea7a8ecb5c070bfe4986aa8cccf68709f153f9445e85b5c8630b4d" },
+    { "name": "trusted-https-browser-results", "id": 10340018123, "sha256": "8ab83b2a912ba8c936420af57ca1c32250f1894d04eacecdcd2cabdbdbd3d4c5" },
+    { "name": "vanilla-hermes-acceptance", "id": 10340643173, "sha256": "1b100ad2481b969fc4c57f32c0576218f09ae44cc5f28b80d19cffe9e661fc58" }
+  ],
+  "artifactHashesVerified": true,
+  "failureHistory": [
+    "Operator-reported WebKit zero-WebSocket assertion: the old login helper returned before native admission. Fixed in 66a523f with explicit readiness and a deterministic delayed-ticket regression.",
+    "Background-attention timer race: completion could precede the test establishing an unselected session. The fixture now holds completion until working/background prerequisites are asserted.",
+    "Run 34825842841 at bdadb5a failed that scenario in all four projects: 292 passed, 4 failed. The exact message assertion incorrectly included the You speaker label. 31a2ec4 scopes exact list assertions to message bodies; all foreground-isolation and badge assertions remain.",
+    "Earlier failed runs remain failures. No browser is skipped, no certificate check is disabled, and no failed test is hidden by retries."
+  ],
+  "limits": [
+    "Physical iPhone and Android scenarios 1-5, Home Screen installation, OS suspension and physical keyboards have NOT been run; original M4 physical exit gate stays OPEN.",
+    "Public static shell assets only are cached; no API/auth responses, transcripts, credentials, workspace files or offline mutation queue.",
+    "Browser transport is HTTPS/WSS; the existing private host-loopback HTTP hop to Hermes is unchanged.",
+    "Trusted-local still has no browser authentication. Devices must explicitly trust the public operator CA certificate.",
+    "No operator host, private env, Docker storage or unrelated legacy service was changed.",
+    "Pinned upstream reasoning-scope deletion race and missing credential-request reconnect snapshots remain documented separately."
+  ]
+}
