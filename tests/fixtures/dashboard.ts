@@ -102,6 +102,7 @@ export async function startFixture(port = 0, options: { sessionToken?: string } 
       const reply = (result: unknown) => client.send(JSON.stringify({ jsonrpc: '2.0', id, result }));
       const error = () => client.send(JSON.stringify({ jsonrpc: '2.0', id, error: { code: 4001, message: 'Not found' } }));
       if (models.handle(method, params, reply, error, event)) return;
+      if (method === 'session.active_list') { reply({ sessions: [...sessions].map(([id, row]) => ({ id, session_key: row.key, last_active: row.updated, title: row.messages.find(message => message.role === 'user')?.text.slice(0, 120) || 'New conversation', status: interactions.waiting(id) ? 'waiting' : row.running ? 'working' : 'idle' })) }); return; }
       if (method === 'gateway.ping') { reply({ ok: true }); return; }
       if (method === 'session.create') {
         const sid = randomUUID(); const key = randomUUID(); metrics.creates++;
@@ -109,7 +110,7 @@ export async function startFixture(port = 0, options: { sessionToken?: string } 
         sessions.set(sid, { key, messages: [], running: false, profile: typeof params.profile === 'string' ? params.profile : 'default', updated: Date.now()/1000, turn: 0, inflight: '' }); reply({ session_id: sid, stored_session_id: key, info: models.info(sid) }); return;
       }
       if (method === 'session.resume') {
-        const entry = [...sessions].find(([, session]) => session.key === params.session_id);
+        const entry = [...sessions].find(([sid, session]) => sid === params.session_id || session.key === params.session_id);
         if (!entry || (params.profile && entry[1].profile !== params.profile)) { error(); return; }
         if (!('model' in models.info(entry[0]))) models.create(entry[0], entry[1].profile);
         reply({ session_id: entry[0], session_key: entry[1].key, info: { ...models.info(entry[0]), profile_name: entry[1].profile } }); return;

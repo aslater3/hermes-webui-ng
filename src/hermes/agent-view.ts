@@ -1,4 +1,4 @@
-import type { AgentInput, Question, ToolActivity } from './agent-activity.js';
+import type { AgentInput, Question, ToolActivity, ActivityTurn } from './agent-activity.js';
 import type { NativeSession } from './native-session.js';
 
 function node<K extends keyof HTMLElementTagNameMap>(tag: K, text?: string, className?: string): HTMLElementTagNameMap[K] {
@@ -28,6 +28,10 @@ export class AgentView {
   private readonly reasoning = node('details');
   private readonly reasoningText = node('pre');
   private readonly thinking = node('p', '', 'hint');
+  private readonly earlier = node('details', '', 'agent-earlier');
+  private readonly earlierLabel = node('summary', 'Earlier activity in this tab');
+  private readonly earlierBody = node('div', '', 'agent-archive');
+  private archiveSource?: ActivityTurn[];
   private readonly tools = node('div', '', 'agent-tools');
   private readonly inputs = new Map<string, InputCard>();
   private readonly toolCards = new Map<string, ToolCard>();
@@ -36,18 +40,22 @@ export class AgentView {
   private pagehide = () => this.clearCredentials();
   dispose(): void { this.clear(); document.removeEventListener('visibilitychange', this.visibility); window.removeEventListener('pagehide', this.pagehide); }
   constructor(private readonly root: HTMLElement) {
-    const heading = node('h3', 'Agent activity and input'); heading.id = 'agent-title';
+    const heading = node('h2', 'Agent activity and input'); heading.id = 'agent-title';
     this.root.setAttribute('aria-labelledby', heading.id);
     this.summary.setAttribute('role', 'status'); this.warning.setAttribute('role', 'status');
     this.reasoning.append(node('summary', 'Reasoning supplied by Hermes'), this.reasoningText);
+    this.requests.setAttribute('role', 'group');
     this.requests.setAttribute('aria-label', 'Agent requests');
-    this.root.append(heading, this.summary, this.warning, this.requests, this.thinking, this.reasoning, this.tools);
+    this.earlier.append(this.earlierLabel, this.earlierBody);
+    this.earlier.addEventListener('toggle', () => this.renderArchive());
+    this.root.append(heading, this.summary, this.warning, this.requests, this.thinking, this.reasoning, this.tools, this.earlier);
     document.addEventListener('visibilitychange', this.visibility);
     window.addEventListener('pagehide', this.pagehide);
   }
   private clearCredentials(): void { for (const input of this.root.querySelectorAll<HTMLInputElement>('input[type="password"]')) input.value = ''; }
   clear(): void {
     this.clearCredentials(); this.unlisten?.(); this.unlisten = undefined; this.owner = undefined;
+    this.earlier.open = false; this.earlierBody.replaceChildren(); this.archiveSource = undefined;
     this.inputs.clear(); this.toolCards.clear(); this.requests.replaceChildren(); this.tools.replaceChildren();
     this.reasoningText.textContent = ''; this.thinking.textContent = ''; this.reasoning.open = false; this.root.hidden = true;
   }
@@ -61,11 +69,11 @@ export class AgentView {
     const activity = owner.activity.state;
     const active = activity.inputs.filter(p => ['pending','sending'].includes(p.status));
     const count = active.length;
-    this.root.hidden = historical || !(activity.inputs.length || activity.tools.length || activity.reasoning || activity.thinking || activity.recoveryGap || activity.malformed);
+    this.root.hidden = historical || !(owner.activity.archive.length || activity.inputs.length || activity.tools.length || activity.reasoning || activity.thinking || activity.recoveryGap || activity.malformed);
     if (!enabled || historical) this.clearCredentials();
-    this.summary.textContent = `${count ? `${count} request${count === 1 ? '' : 's'} awaiting confirmation. ` : ''}Current or most recent turn only. Tool output and reasoning are bounded.`;
+    this.summary.textContent = `${count ? `${count} request${count === 1 ? '' : 's'} awaiting confirmation. ` : ''}Current turn with bounded earlier activity. Saved history stays in Hermes.`;
     this.warning.hidden = !activity.recoveryGap && !activity.malformed && !activity.droppedTools && !activity.truncated;
-    this.warning.textContent = [activity.recoveryGap ? 'A credential request lost its connection. This Hermes version cannot recover a pending sudo/secret form. Use the original client or interrupt the turn; nothing is resent.' : '',
+    this.warning.textContent = [activity.recoveryGap ? 'A credential request lost its connection. This Hermes version cannot recover a pending sudo/secret form. Use Stop response to cancel the pending turn, then ask again for a fresh request; nothing is resent.' : '',
       activity.malformed ? 'Some agent data could not be displayed safely. Do not approve an operation with incomplete details.' : '',
       activity.droppedTools ? `${activity.droppedTools} earlier tool cards omitted from this bounded view.` : '',
       activity.truncated ? 'Reasoning output reached the display limit.' : ''].filter(Boolean).join(' ');
@@ -77,6 +85,30 @@ export class AgentView {
     const toolIds = new Set(activity.tools.map(t => t.id));
     for (const [id, card] of this.toolCards) if (!toolIds.has(id)) {card.root.remove();this.toolCards.delete(id);}
     for (const tool of activity.tools) this.tool(tool);
+    this.earlier.hidden = owner.activity.archive.length === 0;
+    this.earlierLabel.textContent = `Earlier activity in this tab (${owner.activity.archive.length} turns)`;
+    if (this.archiveSource !== owner.activity.archive) { this.archiveSource = owner.activity.archive; this.renderArchive(); }
+  }
+  private renderArchive(): void {
+    this.earlierBody.replaceChildren();
+    if (!this.earlier.open) return;
+    this.earlierBody.append(node('p', 'Up to six observed turns; no request answers are stored here. Reload fetches only the history Hermes exposes.', 'hint'));
+    for (const turn of [...this.archiveSource ?? []].reverse()) {
+      const root = node('details', '', 'agent-archived-turn');
+      root.append(node('summary', `Observed turn ${turn.id} · ${turn.tools.length} tools${turn.truncated ? ' · bounded' : ''}`));
+      root.addEventListener('toggle', () => {
+        for (const child of [...root.children].slice(1)) child.remove();
+        if (!root.open) return;
+        if (turn.thinking) root.append(node('p', turn.thinking, 'hint'));
+        if (turn.reasoning) { const detail = node('details'); detail.append(node('summary', 'Reasoning supplied by Hermes'), node('pre', turn.reasoning)); root.append(detail); }
+        for (const tool of turn.tools) {
+          const detail = node('details', '', 'agent-tool');
+          detail.append(node('summary', `${tool.name} · ${tool.state}${tool.duration !== undefined ? ` · ${tool.duration.toFixed(2)}s` : ''}`), node('p', 'Arguments', 'agent-field-label'), node('pre', tool.input || 'No arguments supplied'), node('p', 'Output', 'agent-field-label'), node('pre', tool.output || 'No output supplied'), node('p', tool.truncated ? 'Archived display truncated.' : 'Observed output only; never executed.', 'hint'));
+          root.append(detail);
+        }
+      });
+      this.earlierBody.append(root);
+    }
   }
   private erase(card: InputCard): void {
     for (const input of card.controls.querySelectorAll<HTMLInputElement | HTMLTextAreaElement>('input,textarea')) { if(input instanceof HTMLInputElement && ['radio','checkbox'].includes(input.type)) input.checked=false; else input.value=''; }
@@ -104,7 +136,7 @@ export class AgentView {
     root.setAttribute('aria-label',names[input.kind]);
     const status=node('p','','agent-input-status'), error=node('p','','agent-input-error'); status.setAttribute('role','status'); error.setAttribute('role','alert'); error.hidden=true;
     const controls=node('div','','agent-input-controls'); const questions=new Map<string,HTMLFieldSetElement>();
-    root.append(node('h4',names[input.kind]),status);
+    root.append(node('h3',names[input.kind]),status);
     if(input.prompt) root.append(node('p',input.prompt));
     const respond = (value: string, questionId?: string) => {
       error.hidden=true;
@@ -154,7 +186,7 @@ export class AgentView {
     let card=this.toolCards.get(tool.id);
     if(!card){
       const root=node('details','','agent-tool'),summary=node('summary'),input=node('pre'),output=node('pre'),note=node('p','','hint');
-      root.dataset.toolId=tool.id;root.append(summary,node('h4','Arguments'),input,node('h4','Output'),output,note);card={root,summary,input,output,note};this.toolCards.set(tool.id,card);this.tools.append(root);
+      root.dataset.toolId=tool.id;root.append(summary,node('p','Arguments','agent-field-label'),input,node('p','Output','agent-field-label'),output,note);card={root,summary,input,output,note};this.toolCards.set(tool.id,card);this.tools.append(root);
     }
     card.root.dataset.state=tool.state;
     card.summary.textContent=`${tool.name} · ${tool.state}${tool.duration!==undefined?` · ${tool.duration.toFixed(2)}s`:''}${tool.context?` · ${tool.context}`:''}`;

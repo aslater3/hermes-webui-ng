@@ -33,6 +33,11 @@ export class ChatController {
   private enabled = false;
   private disposed = false;
   private drafts = new Map<string, string>();
+  private retained = new Map<string, NativeSession>();
+  private viewKey(ref: SessionRef) { return JSON.stringify([ref.profile || 'default', ref.id]); }
+  viewFor(ref: SessionRef): NativeSession | undefined {
+    return this.selected && this.viewKey(ref) === this.viewKey(this.selected) ? this.native : this.retained.get(this.viewKey(ref));
+  }
   private listeners = new Set<() => void>();
   private refreshTimer?: ReturnType<typeof setTimeout>;
   private unlisten: () => void;
@@ -48,8 +53,14 @@ export class ChatController {
   private newNative(): NativeSession {
     const native = new NativeSession(this.gateway);
     let previousPhase = native.state.phase;
+    let initial = true;
     native.subscribe((state) => {
-      if (this.native !== native || this.disposed) return;
+      if (initial) { initial = false; return; }
+      if (this.disposed) return;
+      if (this.native !== native) {
+        if (state.phase === 'idle' && previousPhase !== 'idle') this.refreshIndexSoon();
+        previousPhase = state.phase; this.publish(); return;
+      }
       if (state.storedId && state.phase !== 'attaching') this.selected = { id: state.storedId, profile: state.profile };
       if (state.phase === 'idle' && previousPhase !== 'idle') this.refreshIndexSoon();
       previousPhase = state.phase; this.publish();
@@ -76,8 +87,20 @@ export class ChatController {
     while (this.drafts.size > 20) this.drafts.delete(this.drafts.keys().next().value!);
   }
   private reset(ref?: SessionRef): number {
+    const reuse = ref ? this.selected && this.viewKey(ref) === this.viewKey(this.selected) ? this.native : this.retained.get(this.viewKey(ref)) : undefined;
+    if (this.native.state.storedId && !reuse && this.retained.size >= 4) {
+      const eviction = [...this.retained].find(([, view]) => ['idle', 'empty', 'error'].includes(view.state.phase) &&
+        !view.activity.state.inputs.some(input => ['pending', 'sending', 'unknown'].includes(input.status)));
+      if (!eviction) throw new ClientError('protocol', 'Five conversations are still active in this tab. Finish or interrupt one before opening another.');
+      eviction[1].dispose(); this.retained.delete(eviction[0]);
+    }
     this.saveDraft(); ++this.scope;
-    this.native.dispose(); this.native = this.newNative();
+    if (this.native.state.storedId && this.native !== reuse) {
+      this.native.setForeground(false);
+      this.retained.set(this.viewKey({ id: this.native.state.storedId, profile: this.native.state.profile }), this.native);
+    } else if (this.native !== reuse) this.native.dispose();
+    if (ref && reuse) this.retained.delete(this.viewKey(ref));
+    this.native = reuse ?? this.newNative(); this.native.setForeground(true);
     this.browser.clearHistory(); this.selected = ref;
     this.draft = this.drafts.get(draftKey(ref)) ?? '';
     this.historical = false; this.busy = false; this.error = undefined;
@@ -97,12 +120,24 @@ export class ChatController {
       const page = await this.browser.open(ref);
       if (scope !== this.scope || !page) return;
       this.selected = { id:page.id, profile:page.profile };
-      if (this.ready()) await this.native.resume(page.id, page.profile);
+      if (this.ready()) {
+        if (this.native.state.runtimeId && this.native.state.storedId === page.id) await this.native.refresh();
+        else await this.native.resume(page.id, page.profile);
+      }
     } catch (error) { this.fail(error, scope); }
     finally { if (scope === this.scope) { this.busy = false; this.publish(); } }
   }
+  /** Active-list rows have no profile. Resolve the runtime through Hermes instead of guessing one. */
+  async openLive(runtimeId: string): Promise<void> {
+    if (!this.ready() || this.busy) return;
+    sessionId(runtimeId);
+    const known = [this.native, ...this.retained.values()].find(view => view.state.runtimeId === runtimeId);
+    if (known?.state.storedId) return this.open({ id: known.state.storedId, profile: known.state.profile });
+    const scope = this.reset(); this.busy = true; this.publish();
+    try { await this.native.resume(runtimeId); } catch (error) { this.fail(error, scope); }
+    finally { if (scope === this.scope) { this.busy = false; this.publish(); } }
+  }
   async attachIfReady(): Promise<void> {
-    // Run outside the synchronous gateway state dispatch: NativeSession may already be resuming.
     if (!this.ready() || this.busy || !this.selected || this.native.state.storedId || this.browser.history.phase !== 'ready') return;
     const scope = this.scope; this.busy = true; this.publish();
     try { await this.native.resume(this.selected.id, this.selected.profile); }
@@ -150,7 +185,7 @@ export class ChatController {
   }
   clear(): void {
     ++this.scope; clearTimeout(this.refreshTimer); this.enabled = false;
-    this.native.dispose(); this.native = this.newNative();
+    this.native.dispose(); this.retained.forEach(view => view.dispose()); this.retained.clear(); this.native = this.newNative();
     this.selected = undefined; this.draft = ''; this.drafts.clear(); this.busy = false; this.historical = false; this.error = undefined;
     this.browser.clear(); this.publish();
   }

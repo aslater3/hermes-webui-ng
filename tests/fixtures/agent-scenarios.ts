@@ -33,6 +33,7 @@ export class AgentScenarios {
     if(c.kind==='secret')Object.assign(c.payload,{prompt:'Provide a synthetic test value. Do not enter a real credential.',env_var:'FIXTURE_ONLY_KEY'});
     c.emit(`${c.kind}.request`,c.payload);
   }
+  waiting(sid: string): boolean { return this.cases.has(sid); }
   snapshot(sid:string,emit:Emit):Record<string,unknown>{
     const c=this.cases.get(sid);if(!c)return {};
     c.emit=emit;

@@ -42,6 +42,10 @@ jobs:
         run: bash scripts/live-gate.sh
       - name: Explicit loopback-token deployment acceptance
         run: bash scripts/local-live-gate.sh
+      - name: Full Phase 3 native interactive workflows
+        run: bash scripts/m3-live-gate.sh dashboard
+      - name: Full Phase 3 trusted-local workflows
+        run: bash scripts/m3-live-gate.sh trusted-local
       - uses: actions/upload-artifact@v4
         if: always()
         with:

@@ -1,54 +1,68 @@
 # Implementation Status
 
-Updated: 14 September 2026. **Phase 4B combined acceptance passed:** functional model/profile/reasoning controls, typed transcript recovery, and the concurrent HermesUI NG branding are reconciled in PR #5. M0, M1, M2 and Phase 4A retain their earlier sign-offs. Full M3, installed PWA, physical-device and release gates remain open.
+Updated: 14 September 2026. **Phase 3 / M3 Agent Interaction Beta is complete for the supported Hermes baseline.** PR #6 contains the recovered implementation and completion evidence. M0, M1 and M2 remain complete; the modern shell and native composer controls from Phase 4A/4B are preserved. Full Phase 4 physical-mobile/PWA and later release gates remain open.
 
-## Current application
+## Phase 3 delivered
 
-The default React application at `/` has actual Profile, Model and Reasoning controls in its composer. Configured model inventory and confirmed current values come from native Hermes RPC, not browser preferences. Profile selection starts a separate native conversation; old history and unsent drafts keep their original owner. A pre-first-prompt model selection retains the draft while creating the necessary upstream session. Cost confirmation is a separate action, and unknown acknowledgements require read-only reconciliation rather than a repeated setter.
+Native reasoning and tool start/progress/complete cards, bounded output, approval Allow once/Deny, clarification single/multi-select/batch questions, sudo and secret submit/skip, exact request expiry and validated acknowledgements are implemented. Duplicate/changed request IDs and stale/unknown responses fail closed without replay.
 
-Settings now respect native `status:starting` and `info.lazy:true`. The client performs bounded, generation-scoped readiness reads before sending a setting once. It does not equate an allocated idle session with a constructed agent, replay a failed setter, or build an agent itself. Disconnect or selection changes cancel the pending operation. The new browser regression explicitly delays readiness and verifies one setter and no prompt submission.
+The desktop sidebar and mobile Conversations drawer now identify active work, requests needing input and new activity in other conversations. Discovery uses read-only native active-session and approval-pending methods; runtime IDs are not confused with profile-owned durable IDs. Live request descriptors survive same-tab selection changes while entered credentials and hidden transcripts do not. Account replacement clears all projections without transiently exposing a disposed account view.
 
-Saved tool history has its own expandable cards, rather than `[Non-text entry]` assistant bubbles. Known REST/native text parts, public reasoning and assistant sidecar replies survive recovery. Hidden/empty envelopes are omitted without changing raw pagination counts. Missing tool result bodies are not invented, and arbitrary objects, binary data and encrypted reasoning are not dumped into chat. Legitimate SVG words/code are preserved; decorative icons are excluded from accessibility text.
+Earlier observed tool/reasoning activity is bounded, expandable on demand and non-actionable. Reload obtains the history Hermes actually exposes. No durable local conversation database or duplicate agent runtime has been introduced.
 
-The HermesUI NG name and supplied Hermes mark from main are retained in the shell, welcome view, streaming and saved assistant messages, Settings and diagnostic titles. Model and reasoning dialogs share desktop/mobile behaviour with minimum 44px composer targets. The previous diagnostic remains at `/diagnostic`; its new reasoning capability row is regression-tested. Client and BFF reports identify phase 4 / milestone 4B and exclude settings arguments, selected values, credentials and transcripts.
+## Exact M3 acceptance evidence
 
-## Exact combined verification
+Application commit: **`d1aba2263ff1660499f167c9b5faa7b63abda038`**.
+CI PR merge: **`8b4ca4a5de64a54c9942f722d374447b4fdf5c08`**.
+Both use source tree **`a1caac4edc0c7ec4f0edbb6bd12139255d953b6a`**, also reproduced by the fresh local recovery checkout. Later completion-document commits do not alter application code.
 
-Application commit **`d820aa8e15f972735d441bca8653b2905c8b62ed`**. PR CI checked out **`6c413f5b3978804f1f9b209cbabac4c29ecd1855`**; GitHub comparison reports identical files. Subsequent acceptance-document changes do not alter application code. Permanent evidence: **`evidence/phase4b-combined-acceptance.json`**.
+Permanent record: **`evidence/phase3-completion-acceptance.json`**. Earlier Phase 4B evidence remains at `evidence/phase4b-combined-acceptance.json` and is not relabelled as M3 proof.
 
 | Gate | Result | Actions run |
 |---|---|---|
-| Build, server/web typecheck, lint, unit and socket tests | 139 unit + 18 wire tests passed | `34804862113` |
-| Browser acceptance | 248 passed; 0 failed, skipped or flaky | `34804862044` |
-| Non-root/read-only production Docker smoke | Passed | `34804862000` |
-| Unmodified Hermes, gated and trusted-local modes | Passed | `34804862085` |
+| Build, frontend/server typecheck, lint, unit and wire contracts | 158 unit + 20 HTTP/WebSocket tests passed | `34810326460` |
+| Browser acceptance | 268 passed; 0 failed, skipped or flaky | `34810326450` |
+| Non-root/read-only production image smoke | Passed | `34810326447` |
+| Pinned vanilla-Hermes integration, including full native interactions in both auth modes | Passed | `34810326478` |
 
-Fresh local build/typecheck/lint and all 139 unit/18 wire tests also passed on Node 22.16.0. Every code file matches the downloaded CI source archive. Browser and Docker execution occurred in GitHub Actions; local browser navigation was blocked by the execution environment and is not claimed as a pass. Source, browser and native-acceptance ZIP hashes were verified against GitHub metadata.
+Fresh local build/typecheck/lint and all 158 unit/20 contract tests passed on Node 22.16.0. An initial combined local command exceeded the execution time limit during lint; lint was rerun separately and passed. Browser and Docker verification ran in GitHub Actions, not in the local recovery environment. All three downloaded archive digests match GitHub metadata.
 
-The browser suite has 62 cases in each desktop Chromium, iPhone WebKit emulation, Android Chromium emulation and 320px project. It includes model/effort selection, profile and draft isolation, startup readiness, no-replay recovery, saved tools/structured replies, branding, input lifecycle, scrolling and accessibility checks. Fifty-six screenshots are retained; the final desktop model dialog, iPhone reasoning dialog and iPhone recovered conversation were inspected. These are actual fixture-browser captures, not physical-device or installed-PWA certification.
+The browser report contains 67 cases in each of desktop Chromium, iPhone WebKit emulation, Android Chromium emulation and narrow-320, with 64 screenshots. It exercises pending-input retention across conversation switches, cleared credential fields, background completion badges, lazy earlier activity, changed-request rejection and the pre-existing shell/chat/auth/model/diagnostic flows. Actual desktop earlier-activity and iPhone returned-conversation captures were inspected. These are not physical-device keyboard/PWA results.
 
-## Native Hermes evidence
+## Real native interaction proof
 
-Runtime baseline remains **`NousResearch/hermes-agent@b6b53c69a6ed49cb099cf1bfe76b5e6edd718e5a`**. The production WebUI image uses unmodified official Hermes, with isolated homes configured through Hermes' own CLI. Only the model endpoint is a deterministic fixture.
+Runtime pin: **`NousResearch/hermes-agent@b6b53c69a6ed49cb099cf1bfe76b5e6edd718e5a`**. Unmodified Hermes and the actual production WebUI container pass the following in both gated Dashboard and explicit trusted-local modes:
 
-Both authentication modes passed inventory discovery, model change, reasoning-effort readback, unchanged profile defaults and a second session, a real request reaching the selected alternate model, reconnect/fresh-client recovery and no prompt replay. The original M0–M2, initial M3 clarification and trusted-local regression gates also passed. Normal-flow tests do not certify every provider or the cross-client deletion race below.
+- approval recovery after reconnect, Allow once with verified command effect, Deny preserving a canary, and timeout/expiry preventing execution;
+- sudo submission executing the restricted identity command, explicit skip, and blocked stale credential response followed by in-WebUI interruption;
+- secret capture completing a native skill setup, availability verified by a fresh native session without inspecting Hermes files, explicit skip, and safe lost-request interruption;
+- subsequent normal turns and absence of supplied credential values from client projections/reports.
 
-## Recovery history and an observed failure
+The companion native clarification suite passes real batch requests, reconnect recovery, partial-answer acknowledgement and continuation without response replay. Existing M0–M2 and model/profile/reasoning acceptance remains mandatory and passed. The older clarification report still emits its original remaining-work labels; the two full-interaction reports and current completion record supersede those legacy labels.
 
-The interrupted attempt had preserved Phase 4B at `c0b0984` and independent main branding at `6f42dc1`. Two-parent checkpoint `8cf021f` reconciles both histories; nothing was force-pushed or squashed. Its first combined native run `34804127178` failed with RPC 5001 during the settings stage. The diagnostic-only follow-up `73eee380` passed both modes, so the original exception's precise cause was not conclusively captured.
+The model endpoint is deterministic; Hermes tools/callbacks are real. Test setup uses a disposable OS account with sudo limited to `/usr/bin/id`, disposable approval targets and external fixture skills via supported CLI configuration. It does not access an operator host, edit upstream tracked source or inspect Hermes state/config files. Generated credentials are masked and excluded from retained outcome reports.
 
-Source inspection and deterministic tests independently exposed a missing startup-readiness guard: native session allocation can precede agent construction. `d820aa8` adds that guard and its regressions. The live harness now records fixed error classifications and separate model/effort stage labels, never raw upstream messages. The final combined acceptance passed with empty failure classifications. The earlier failed run is retained as a failure, not relabelled a pass. Original standalone acceptance in `phase4b-acceptance.json` is historical; the combined report above supersedes it for deployment.
+## Explicit operating boundaries
 
-## Known limits and remaining phases
+**Credential reconnect:** this pin cannot supply pending sudo/secret snapshots. Old credential forms become non-actionable after disconnect. Stop response, settlement and an explicitly requested fresh turn are tested recovery paths within the WebUI. This is not seamless credential-request restoration; interruption does not undo previously completed tool effects.
 
-**Reasoning scope race:** the pinned Hermes setter can fall back to the profile default if another client removes the referenced runtime after preflight. The WebUI requests session scope and blocks observed stale state, but cannot make the upstream operation atomic. Avoid deleting/closing that live session in another client while applying effort. The dialog, README and ADR-019 disclose this; an upstream fail-closed setter remains the permanent remedy.
+**Bounded projections:** at most five live conversation views per tab. The current turn retains 40 tool/16 request cards; earlier activity retains six turns with ten tool summaries each and further text limits. The active metadata list is capped at 100 rows and approval polling at 12 working runtimes per refresh. These limits are documented behaviour, not unlimited session monitoring or a persistent transcript cache.
 
-**Transcript evidence:** the operator diagnostic contained metadata, not message payloads. Confirmed tool-summary and structured-content defects are repaired, but every literal SVG string in the unseen private transcript has not been independently reproduced. Provider reasoning flags and accepted effort names likewise do not guarantee every provider/level combination.
+**Separate reasoning-setting race:** the pinned upstream setter can still fall back to the profile default if another client deletes a runtime after preflight. Avoid deleting the same live session elsewhere while applying reasoning effort. Phase 3 completion does not fix or certify that independent upstream atomicity issue.
 
-**M3 still open:** full native approval/sudo/secret execution acceptance, broader historical activity and attention for unselected conversations. **PWA/release still open:** installed service-worker/update flow, physical iPhone/Android keyboards, workspace/Git, attachments/voice, OAuth, global provider/profile management, slash-command polish, rewind/regenerate, multi-architecture publication and broader accessibility/performance/security hardening.
+## Remaining roadmap
 
-## Deployment and architecture
+- **Phases 0, 1, 2, 3:** accepted for the supported baseline.
+- **Phase 4:** modern shell and composer sub-deliveries accepted; installable PWA/service-worker/update flow and physical iPhone/Android acceptance remain.
+- **Phases 5–6:** constrained workspace/Git read-only, then opt-in writes remain.
+- **Phase 7:** profile/model/effort controls are already delivered; slash commands, usage/context and fully tested rewind/edit/regenerate remain.
+- **Phases 8–9:** management surfaces, attachments and voice remain capability-dependent future work.
+- **Phase 10:** multi-architecture publication, full accessibility/performance/security review and release hardening remain.
 
-Retain the existing private `.env`, standalone `compose.host.yaml`, the correct NG Compose project and LAN/8788 settings. Gated auth and explicit trusted-local token bridging remain separate. No operator host, unrelated 8787 service, Docker storage or Hermes configuration was modified by this work. Follow `local-testing-upgrade.md` for an uncommitted checkout instead of resetting it.
+## Recovery and deployment
 
-No production Hermes Python imports, direct state/config access, Relay, durable local conversation store or duplicate runtime were added. Hermes owns settings and conversations. Every completed implementation checkpoint was committed, pushed and remotely verified before the next slice. See ADRs 017–019 and `phase4b-composer-controls.md` for scope and limitations.
+The interrupted run had already pushed 12 commits through `d1aba226` on `phase3-completion`. Recovery downloaded its exact source and CI results, reran local checks and preserved the individual remote commits rather than recreating or squashing application history. Each subsequent completion-document increment is committed, pushed and remotely verified.
+
+Retain the existing private `.env`, standalone `compose.host.yaml`, correct NG Compose project and LAN/8788 settings. No deployment migration is required. No operator host, unrelated 8787 service or Docker storage is changed by this work. Follow `local-testing-upgrade.md` when a checkout has local modifications.
+
+Hermes remains the sole owner of sessions, runtime, credentials and settings. See `phase3-interactions.md`, the completed checklist and ADR-020 for the Phase 3 contract and boundaries.

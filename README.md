@@ -1,8 +1,8 @@
-# Hermes WebUI NG
+# HermesUI NG
 
 A standalone, modern web client for **vanilla Hermes Agent**. Hermes owns the agent and durable conversations; the WebUI owns the browser experience.
 
-> Development build. The modern React shell is the default application at `/`; the former diagnostic interface remains available at `/diagnostic`. Phase 4B adds native composer controls and typed history rendering. This is not full PWA or production-release certification. See `docs/implementation-status.md` for the exact verified commit and remaining gates.
+> Development build. The modern React shell is the default application at `/`; the former diagnostic interface remains available at `/diagnostic`. Phase 4B adds native composer controls and typed history rendering, and Phase 3 / M3 native interaction acceptance is complete. This is not full PWA or production-release certification. See `docs/implementation-status.md` for the exact verified commit and remaining gates.
 
 ## The application
 
@@ -18,7 +18,11 @@ The existing native workflow remains: new/open/resume, repeated turns, interrupt
 
 Saved native tool summaries have their own expandable cards rather than `[Non-text entry]` assistant bubbles. Known structured text, sidecar replies and public reasoning are recovered from history; missing tool output and encrypted reasoning are not fabricated or dumped into chat. Decorative message SVGs are hidden from the accessibility tree without stripping legitimate SVG words or code from message content.
 
-Initial Phase 3 reasoning/tool cards and approval/clarify/sudo/secret inputs are integrated. Approval and clarification recover from supported native snapshots. Credential cards become non-actionable after disconnect where Hermes has no recovery snapshot. Values clear on submission and lifecycle/account boundaries. **M3 remains open:** live approval/sudo/secret execution acceptance, broader historical activity and off-selection attention are not completed by this slice.
+**Phase 3 / M3 Agent Interaction Beta is complete for the supported baseline.** Reasoning/tool activity and approval/clarify/sudo/secret controls are integrated, including allow/deny/skip, exact expiry and validated response outcomes. The desktop sidebar and mobile drawer indicate work and requests needing attention in other conversations. Up to five live conversation projections retain bounded pending-request descriptors across same-tab selection changes, but clear hidden transcripts and entered credential values. Earlier observed tool/reasoning activity is bounded and expanded on demand, not persisted as a second history database.
+
+Approval and clarification recover from supported native snapshots. This Hermes revision does not expose pending sudo/secret snapshots after a disconnect: old credential forms therefore become non-actionable. Use **Stop response**, review the settled turn and explicitly request a fresh turn when needed. This in-WebUI recovery is tested; credentials and prompts are never replayed automatically, and interruption does not undo prior tool effects. Values clear on submission and selection/lifecycle/account boundaries.
+
+M3 acceptance includes real approval allow/deny/expiry, restricted sudo execution/skip, secret capture/skip and recovery against unmodified Hermes through the production container in both auth modes. See `docs/phase3-interactions.md`, `docs/phase3-completion-checklist.md` and the retained completion evidence for limits and exact results. Physical-device/PWA and release hardening remain separate gates.
 
 The runtime-tested Hermes baseline is **`NousResearch/hermes-agent@b6b53c69a6ed49cb099cf1bfe76b5e6edd718e5a`**. Newer upstream source inspections are not runtime certifications. Tests separately cover the browser fixture, the actual Docker image and unmodified Hermes with a deterministic model endpoint. Evidence and verification limitations are recorded under `docs/evidence/`.
 
@@ -77,7 +81,7 @@ npm run test:e2e:critical
 
 `npm run dev:fixture` starts explicitly synthetic loopback fixtures for browser development. They are test-only and not copied into the runtime image. The modern root route and retained diagnostic route have separate browser coverage. Every completed implementation increment is committed and pushed remotely; CI retains source checkpoints and test evidence.
 
-Diagnostics now identify phase 4 / milestone 4B. They contain only bounded metadata: no prompt bodies, settings arguments, selected model values or credentials. This is a development milestone label, not a claim that the full mobile/PWA phase is complete.
+Diagnostics retain the phase 4 / milestone 4B shell identifier. They contain only bounded metadata: no prompt bodies, settings arguments, selected model values or credentials. The identifier is not a full-roadmap completion counter; `docs/implementation-status.md` records the now-accepted M3 gate and remaining mobile/PWA work.
 
 **Not yet delivered or certified:** installed PWA/service worker, physical-phone keyboard testing, workspace/Git, global provider/profile management, slash-command polish, voice/attachments, broader management, OAuth, multi-architecture publication and public-internet release hardening. Unsupported actions are omitted rather than presented as decorative controls. Browser emulation and automated accessibility checks are not full physical-device or WCAG certification.
 
@@ -87,7 +91,7 @@ Diagnostics now identify phase 4 / milestone 4B. They contain only bounded metad
 Browser
   |
   v
-Hermes WebUI NG container :8787 (configurable)
+HermesUI NG container :8787 (configurable)
   |-- React/TypeScript application at /
   |-- troubleshooting interface at /diagnostic
   |-- Node BFF + same-origin reverse proxy
@@ -124,7 +128,7 @@ Read `AGENTS.md` and `BUILD-BRIEF.md` before changes. The original product, arch
 | `docs/14-architecture-decisions.md` | Original ADRs |
 | `docs/15-repo-layout-standards.md` | Repository conventions |
 
-Delivered behaviour and deviations are documented in `phase1-foundation.md`, `phase2-chat.md`, `phase3-interactions.md`, `phase4-modern-shell.md`, `phase4b-composer-controls.md`, `architecture-decisions.md` and ADRs 017–019 under `docs/`. **`docs/implementation-status.md` is the current gate/evidence record.**
+Delivered behaviour and deviations are documented in `phase1-foundation.md`, `phase2-chat.md`, `phase3-interactions.md`, `phase4-modern-shell.md`, `phase4b-composer-controls.md`, `architecture-decisions.md` and ADRs 017–020 under `docs/`. **`docs/implementation-status.md` is the current gate/evidence record.**
 
 ## Required upstream references
 

@@ -1,3 +1,4 @@
+import { SessionAttention } from '../src/hermes/session-attention.js';
 import { profileIdentifier, type ModelChoice, type Effort } from '../src/hermes/model-catalog.js';
 import { DocumentRequests } from './document-requests.js';
 import { DashboardClient } from '../src/hermes/dashboard-client.js';
@@ -17,6 +18,7 @@ export class AppRuntime {
   readonly gateway: GatewayClient;
   readonly connection: ConnectionStore;
   readonly chat: ChatController;
+  readonly attention: SessionAttention;
   accountGeneration = 0;
   error = '';
   private revision = 0;
@@ -30,6 +32,7 @@ export class AppRuntime {
     this.gateway = new GatewayClient(new WsAuthClient(this.dashboard, signal => this.connection.verifyAdmission(signal)), { diagnostics: this.diagnostics });
     this.connection = new ConnectionStore(this.dashboard, this.gateway, this.diagnostics);
     this.chat = new ChatController(this.dashboard, this.gateway, error => this.gateway.suspend(error));
+    this.attention = new SessionAttention(this.gateway);
   }
   get readable() { return this.connection.hasAccess && !this.connection.state.offline; }
   get ready() { return this.readable && this.gateway.state.phase === 'ready'; }
@@ -66,21 +69,25 @@ export class AppRuntime {
   start() {
     if (this.started) return;
     this.started = true;
-    this.cleanup.push(this.chat.subscribe(this.notify), this.gateway.onState(this.notify));
+    this.cleanup.push(this.attention.subscribe(this.notify), this.chat.subscribe(() => {
+      const state = this.chat.native.state;
+      if (state.runtimeId && state.storedId) this.attention.bind(state.runtimeId, { id: state.storedId, profile: state.profile });
+      this.attention.select(state.runtimeId); this.notify();
+    }), this.gateway.onState(() => { this.attention.setEnabled(this.ready); this.notify(); }));
     this.cleanup.push(this.connection.onIdentityBoundary(() => {
       ++this.accountGeneration; this.openedLocation = false;
-      this.chat.clear(); this.error = ''; history.replaceState(null, '', location.pathname);
+      this.attention.clear(); this.chat.clear(); this.error = ''; history.replaceState(null, '', location.pathname);
       document.querySelectorAll<HTMLInputElement>('input[type="password"]').forEach(input => { input.value = ''; });
       this.notify();
     }));
     this.cleanup.push(this.connection.subscribe(() => {
-      this.chat.setEnabled(this.readable);
+      this.chat.setEnabled(this.readable); this.attention.setEnabled(this.ready);
       if (this.readable && !this.openedLocation) { this.openedLocation = true; this.navigate(); }
       this.notify();
     }));
     const resume = () => {
       const visible = document.visibilityState === 'visible';
-      this.connection.poll(visible ? 30_000 : 0);
+      this.connection.poll(visible ? 30_000 : 0); this.attention.setVisible(visible);
       if (visible) this.run(() => this.connection.resume());
     };
     const listen = (target: EventTarget, event: string, callback: () => void) => {
@@ -106,6 +113,11 @@ export class AppRuntime {
     if (!this.readable || this.chat.busy) return;
     try { history.pushState(null, '', navigation(ref)); this.run(() => this.chat.open(ref)); }
     catch { this.error = 'This conversation link is invalid.'; this.notify(); }
+  };
+  openLive = (runtimeId: string) => {
+    if (!this.ready || this.chat.busy) return;
+    history.pushState(null, '', location.pathname);
+    this.run(() => this.chat.openLive(runtimeId));
   };
   setDraft = (value: string) => { this.chat.setDraft(value); this.notify(); };
   send = () => this.run(async () => {
@@ -155,6 +167,6 @@ export class AppRuntime {
   dispose() {
     this.requests.dispose();
     this.cleanup.forEach(fn => fn()); this.cleanup = [];
-    cancelAnimationFrame(this.frame); this.chat.dispose(); this.connection.dispose(); this.listeners.clear();
+    cancelAnimationFrame(this.frame); this.attention.dispose(); this.chat.dispose(); this.connection.dispose(); this.listeners.clear();
   }
 }

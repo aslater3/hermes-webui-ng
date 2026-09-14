@@ -1,0 +1,87 @@
+{
+  "milestone": "M3 Agent Interaction Beta",
+  "phase": 3,
+  "status": "accepted",
+  "dateUtc": "2026-09-14",
+  "applicationCommit": "d1aba2263ff1660499f167c9b5faa7b63abda038",
+  "testedPullRequestMerge": "8b4ca4a5de64a54c9942f722d374447b4fdf5c08",
+  "sourceTree": "a1caac4edc0c7ec4f0edbb6bd12139255d953b6a",
+  "upstreamRef": "b6b53c69a6ed49cb099cf1bfe76b5e6edd718e5a",
+  "pullRequest": 6,
+  "localVerification": {
+    "node": "22.16.0",
+    "build": "pass",
+    "typecheck": "pass",
+    "lint": "pass",
+    "unitPassed": 158,
+    "wirePassed": 20,
+    "sourceTreeMatchesRemote": true,
+    "browserAndDockerExecutedLocally": false
+  },
+  "ci": {
+    "checkpoint": { "runId": 34810326460, "conclusion": "success" },
+    "browser": {
+      "runId": 34810326450,
+      "conclusion": "success",
+      "passed": 268,
+      "failed": 0,
+      "skipped": 0,
+      "flaky": 0,
+      "projects": ["desktop-chromium", "iphone-webkit", "android-chromium", "narrow-320"],
+      "screenshots": 64
+    },
+    "image": { "runId": 34810326447, "conclusion": "success" },
+    "vanillaHermes": { "runId": 34810326478, "conclusion": "success", "modes": ["dashboard", "trusted-local"] }
+  },
+  "artifacts": [
+    { "name": "source-checkpoint", "id": 10334507084, "sha256": "70c1ae9875aca96782aea6da849c1cd23cf6d6f31a91cd4ce54b49ffafaedc92" },
+    { "name": "diagnostic-browser-results", "id": 10335006100, "sha256": "1d437d54cf541092534f92e011760cf56246f7f0f21af4ea8a8c7f43165353a8" },
+    { "name": "vanilla-hermes-acceptance", "id": 10334058489, "sha256": "59bf485934667c16caf222f4ab76e84819cf670d758d89f8349fa77018f0554c" }
+  ],
+  "nativeInteractionReports": {
+    "phase3-full-dashboard.json": { "success": true, "gateCount": 11 },
+    "phase3-full-trusted-local.json": { "success": true, "gateCount": 11 },
+    "gatesPassedInEachMode": [
+      "real-approval-recovery-allow-once-and-command-effect",
+      "real-approval-denial-prevents-command",
+      "real-approval-expiry-fails-closed",
+      "native-sudo-password-runs-restricted-id-command",
+      "lost-sudo-request-cannot-replay-and-can-be-interrupted-in-webui",
+      "native-sudo-skip-settles-without-password",
+      "native-secret-capture-completes-skill-setup",
+      "fresh-native-session-observes-stored-secret-without-webui-filesystem-access",
+      "lost-secret-request-cannot-replay-and-can-be-interrupted-in-webui",
+      "native-secret-skip-is-explicit-and-settles",
+      "subsequent-turn-and-no-credential-values-in-client-state-or-report"
+    ],
+    "clarificationCompanion": {
+      "report": "phase3-tools.json",
+      "success": true,
+      "gates": [
+        "real-clarify-tool-and-batch-request",
+        "pending-clarify-recovered-after-reconnect",
+        "native-partial-batch-acknowledgement",
+        "confirmed-response-resumes-real-agent",
+        "next-turn-without-response-replay"
+      ],
+      "note": "This older companion report still emits its original remaining-work labels. The two full-interaction reports and this completion record supersede those labels; the clarification assertions remain required."
+    }
+  },
+  "additionalVerification": [
+    "Native active-session metadata and approval-pending read distinguish waiting from working without guessing profile ownership.",
+    "Desktop/mobile tests recover an unselected pending credential after a conversation switch with the previously entered value cleared.",
+    "Other-conversation completion produces an attention badge without modifying the foreground transcript.",
+    "Earlier observed tool/reasoning activity is bounded and lazily expanded without restoring answered forms.",
+    "Regression tests cover duplicate/changed request identity, exact expiry, malformed acknowledgements, history/selection races and account replacement.",
+    "Final desktop earlier-activity and iPhone returned-conversation screenshots inspected; all three artifact digests verified."
+  ],
+  "boundaries": [
+    "Unmodified pinned Hermes and the actual non-root/read-only production WebUI image. Only model decisions use a deterministic endpoint.",
+    "Sudo uses a disposable CI account authorised only for /usr/bin/id. Approval targets are disposable canary directories. Secret setup uses an external fixture skill configured through the supported Hermes CLI.",
+    "No access to the operator host or Hermes state/config files. Fresh native skill execution verifies secret availability without WebUI filesystem inspection.",
+    "Pending sudo/secret forms cannot be authoritatively reconstructed after disconnect at this upstream pin. Old forms are non-actionable; Stop response and an explicitly requested fresh turn provide an in-WebUI recovery path.",
+    "At most five live conversation projections in one tab; hidden transcripts are discarded, entered credentials are not retained. Six earlier activity turns and bounded output are transient, not a durable history database.",
+    "Active-session inventory is capped at 100 rows; approval detail probing is bounded to 12 working runtimes per refresh. This does not claim unlimited-concurrency monitoring.",
+    "Browser tests use synthetic protocol fixtures and mobile emulation. Physical-device keyboards, installed PWA, full release security/performance certification and the existing upstream reasoning-scope race remain separate open gates."
+  ]
+}
