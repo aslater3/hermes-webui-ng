@@ -2,7 +2,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { Config } from '../config.js';
 import { json } from '../proxy/hermes-proxy.js';
 
-export const PUBLIC_BUILD = { version: '0.0.1', phase: 4, milestone: '4B', protocol: 'hermes-gateway-v1' } as const;
+export const PUBLIC_BUILD = { version: '0.0.1', phase: 4, milestone: '4C', protocol: 'hermes-gateway-v1' } as const;
 const WEBUI = PUBLIC_BUILD;
 /** Only public, non-user-specific metadata may cross these unauthenticated endpoints. */
 export function foundationRoutes(config: Config) {
@@ -62,7 +62,7 @@ export function foundationRoutes(config: Config) {
       if (!res.destroyed) json(res, 200, { schemaVersion: 1, webui: WEBUI, hermes,
         gateway: { status: 'browser-not-probed' },
         workspace: { available: false, writable: false, git: false },
-        features: { nativeChatDiagnostic: true, diagnostics: true, pwa: false },
+        features: { nativeChatDiagnostic: true, diagnostics: true, pwa: true },
       });
     });
     return true;
