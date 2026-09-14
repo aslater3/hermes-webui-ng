@@ -44,11 +44,17 @@ test('operator-enabled editing saves exact text and preserves a draft across bac
     await page.screenshot({ path: info.outputPath('workspace-edit.png') });
     // A reduced-height 320px surface models the viewport pressure of a touch keyboard.
     await page.setViewportSize({ width: 320, height: 440 });
+    // The matchMedia transition rebuilds the modal shell. Wait for the actual
+    // compact workspace and editor before measuring its controls.
+    await expect(page.locator('.modal-workspace[open]')).toBeVisible();
+    await expect(page.locator('.modal-workspace-mutation[open]')).toBeVisible();
     await expect(editor).toHaveText('export const edited = true;');
     const saveButton = dialog.getByRole('button', { name: 'Save file', exact: true });
     await expect(saveButton).toBeVisible();
-    const box = await saveButton.boundingBox(); expect(box!.height).toBeGreaterThanOrEqual(44);
-    expect(box!.y + box!.height).toBeLessThanOrEqual(440);
+    await expect.poll(async () => {
+      const box = await saveButton.boundingBox();
+      return !!box && box.height >= 44 && box.y >= 0 && box.y + box.height <= 440;
+    }, { message: 'The settled mobile Save control is touch-sized and within the viewport' }).toBe(true);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     await page.screenshot({ path: info.outputPath('workspace-edit-narrow.png') });
     await dialog.getByRole('button', { name: 'Save file', exact: true }).click();
