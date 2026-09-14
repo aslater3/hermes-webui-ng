@@ -1,10 +1,11 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { ChatController, navigation, navigationRef } from '../../src/hermes/chat-controller.js';
+import { HttpError } from '../../src/hermes/dashboard-client.js';
 import type { ConnectionState } from '../../src/hermes/gateway-client.js';
 import type { GatewayEvent } from '../../src/hermes/protocol.js';
 import type { HistoryPage } from '../../src/hermes/session-rest.js';
-function fixture() {
+function fixture(options: { missingHistory?: boolean } = {}) {
   const state: ConnectionState = {phase:'ready', generation:1, attempt:0};
   const events = new Set<(event:GatewayEvent) => void>();
   let prompts=0, creates=0, resumed='';
@@ -20,7 +21,10 @@ function fixture() {
       return {};
     } };
   const reader = {sessions:async()=>({rows:[],total:0,limit:20,offset:0}),searchSessions:async()=>[],
-    sessionMessages:async (ref:{id:string}):Promise<HistoryPage>=>({id:ref.id,profile:'owner',messages:[],returned:0,offset:0,limit:100})};
+    sessionMessages:async (ref:{id:string}):Promise<HistoryPage>=>{
+      if (options.missingHistory) throw new HttpError(404);
+      return {id:ref.id,profile:'owner',messages:[],returned:0,offset:0,limit:100};
+    }};
   const chat = new ChatController(reader,gateway); chat.setEnabled(true);
   return {chat, gateway, prompts:()=>prompts, creates:()=>creates, resumed:()=>resumed, finish:()=>resolvePrompt?.({})};
 }
@@ -37,6 +41,11 @@ test('double send remains one RPC; late acknowledgement cannot clear another con
 test('session browsing resolves canonical owning profile and never creates on resume',async()=>{
   const h=fixture(); await h.chat.open({id:'existing'});
   assert.equal(h.resumed(),'existing'); assert.equal(h.chat.selected?.profile,'owner'); assert.equal(h.creates(),0); h.chat.dispose();
+});
+test('an empty native session can resume before Dashboard REST materialises its first transcript',async()=>{
+  const h=fixture({missingHistory:true}); await h.chat.open({id:'empty-session',profile:'owner'});
+  assert.equal(h.resumed(),'empty-session'); assert.equal(h.chat.selected?.id,'empty-session');
+  assert.equal(h.chat.browser.history.phase,'empty'); assert.equal(h.creates(),0); h.chat.dispose();
 });
 test('drafts are per-selection transient memory and account clear removes them',async()=>{
   const h=fixture(); await h.chat.open({id:'one',profile:'owner'}); h.chat.setDraft('private');

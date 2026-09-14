@@ -79,7 +79,7 @@ export function parseInput(kind: InputKind, raw: unknown): AgentInput {
     prompt: bounded(p.prompt ?? p.description ?? p.reason),
     command: kind === 'approval' ? bounded(p.command) : undefined,
     envVar: kind === 'secret' ? bounded(p.env_var) : undefined,
-    choices: kind === 'approval' ? (p.choices === undefined ? ['once', 'deny'] : approvalChoices.filter((c) => ['once', 'deny'].includes(c))) : [],
+    choices: kind === 'approval' ? (p.choices === undefined ? ['once', 'deny'] : approvalChoices.filter((c) => ['once', 'session', 'deny'].includes(c))) : [],
     questions,
     answered: p.answers && typeof p.answers === 'object' ? questions.flatMap((q) => q.id && Object.hasOwn(p.answers as object, q.id) ? [q.id] : []) : [],
     blocked,

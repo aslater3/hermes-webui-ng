@@ -1,4 +1,4 @@
-import type { DashboardClient } from './dashboard-client.js';
+import { HttpError, type DashboardClient } from './dashboard-client.js';
 import type { GatewayClient } from './gateway-client.js';
 import { NativeSession } from './native-session.js';
 import { SessionBrowser } from './session-browser.js';
@@ -88,6 +88,9 @@ export class ChatController {
     if (this.error.kind === 'auth-required') this.onAuthFailure?.(this.error);
     this.publish();
   }
+  private missingRestHistory(): boolean {
+    return this.browser.history.error instanceof HttpError && this.browser.history.error.status === 404;
+  }
   setEnabled(enabled: boolean): void {
     const was = this.enabled; this.enabled = enabled;
     if (enabled && !was && this.browser.index.phase === 'empty') void this.browser.list();
@@ -131,11 +134,16 @@ export class ChatController {
     const scope = this.reset(ref); this.busy = true; this.publish();
     try {
       const page = await this.browser.open(ref);
-      if (scope !== this.scope || !page) return;
-      this.selected = { id:page.id, profile:page.profile };
+      if (scope !== this.scope) return;
+      if (page) this.selected = { id:page.id, profile:page.profile };
+      else if (!this.missingRestHistory()) return;
       if (this.ready()) {
-        if (this.native.state.runtimeId && this.native.state.storedId === page.id) await this.native.refresh();
-        else await this.native.resume(page.id, page.profile);
+        const target = page ? { id: page.id, profile: page.profile } : ref;
+        if (this.native.state.runtimeId && this.native.state.storedId === target.id) await this.native.refresh();
+        else await this.native.resume(target.id, target.profile);
+        // Hermes may expose a newly-created native session before Dashboard REST has
+        // materialised its first transcript. A successful native resume is authoritative.
+        if (!page) this.browser.clearHistory();
       }
     } catch (error) { this.fail(error, scope); }
     finally { if (scope === this.scope) { this.busy = false; this.publish(); } }
@@ -151,9 +159,13 @@ export class ChatController {
     finally { if (scope === this.scope) { this.busy = false; this.publish(); } }
   }
   async attachIfReady(): Promise<void> {
-    if (!this.ready() || this.busy || !this.selected || this.native.state.storedId || this.browser.history.phase !== 'ready') return;
+    if (!this.ready() || this.busy || !this.selected || this.native.state.storedId ||
+      (this.browser.history.phase !== 'ready' && !this.missingRestHistory())) return;
     const scope = this.scope; this.busy = true; this.publish();
-    try { await this.native.resume(this.selected.id, this.selected.profile); }
+    try {
+      await this.native.resume(this.selected.id, this.selected.profile);
+      if (this.missingRestHistory()) this.browser.clearHistory();
+    }
     catch (error) { this.fail(error, scope); }
     finally { if (scope === this.scope) { this.busy = false; this.publish(); } }
   }

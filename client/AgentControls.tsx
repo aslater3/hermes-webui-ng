@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, useSyncExternalStore } from 'react';
 import { createPortal } from 'react-dom';
-import { Brain, Check, ChevronDown, Cpu, Layers3, LoaderCircle, RefreshCw, Search } from 'lucide-react';
+import { Brain, Check, ChevronDown, Cpu, Layers3, LoaderCircle, RefreshCw, Search, Zap } from 'lucide-react';
 import { AgentCatalogue } from '../src/hermes/agent-catalogue.js';
 import { EFFORTS, type Effort } from '../src/hermes/model-catalog.js';
 import type { AppRuntime } from './runtime.js';
@@ -28,6 +28,7 @@ export function AgentControls({ runtime: rt }: { runtime: AppRuntime }) {
   const provider = data.models?.provider ?? state.agent?.provider;
   const selected = data.models?.choices.find(row => row.model === model && row.provider === provider);
   const effort = state.agent?.reasoningEffort ?? data.effort;
+  const yolo = state.agent?.yolo === true;
   const locked = !rt.ready || rt.chat.busy || rt.chat.historical || settings.busy || ['attaching', 'running', 'waiting', 'unknown', 'error'].includes(state.phase);
   const blocked = locked || settings.outcome === 'unknown';
   const open = (next: typeof panel) => { setQuery(''); setLimit(80); setPanel(next); };
@@ -38,6 +39,11 @@ export function AgentControls({ runtime: rt }: { runtime: AppRuntime }) {
     <button type="button" className="agent-chip" aria-label={`Profile: ${profile || 'default'}`} title="Start a conversation with another profile" disabled={locked} onClick={() => open('profiles')}><Layers3 size={14}/><span>{profile || 'default'}</span><ChevronDown size={12}/></button>
     <button type="button" className="agent-chip model-chip" aria-label={`Model: ${model || 'not reported'}`} title={model ? `${model}${provider ? ` · ${provider}` : ''}` : 'Choose a configured Hermes model'} disabled={locked} onClick={() => open('models')}><Cpu size={14}/><span>{model || (data.loading ? 'Loading model…' : 'Choose model')}</span><ChevronDown size={12}/></button>
     <button type="button" className="agent-chip" aria-label={`Reasoning: ${effortLabel(effort)}`} title="Reasoning effort for this conversation" disabled={locked} onClick={() => open('reasoning')}><Brain size={14}/><span>{effortLabel(effort)}</span><ChevronDown size={12}/></button>
+    <label className={`yolo-toggle${yolo ? ' yolo-active' : ''}`} title="YOLO mode bypasses routine approval prompts for this conversation. Explicit deny rules and Hermes hardline blocks still apply.">
+      <Zap size={14}/><span>YOLO</span>
+      <input type="checkbox" role="switch" aria-label="YOLO mode for this conversation" checked={yolo} disabled={blocked} onChange={event => rt.run(() => rt.changeYolo(event.target.checked))}/>
+      <span className="yolo-slider" aria-hidden="true"/>
+    </label>
     {settings.busy && <span className="settings-working" role="status"><LoaderCircle size={14} className="spin"/>Applying…</span>}
     {settings.note && <span className={`settings-note${settings.outcome === 'unknown' || settings.outcome === 'rejected' ? ' settings-warning' : ''}`} role="status">{settings.note}{settings.outcome === 'unknown' && <button type="button" onClick={() => rt.run(() => native.settings.recover())} disabled={locked}>Read current settings</button>}</span>}
     {panel && createPortal(<Modal title={panel === 'models' ? 'Choose model' : panel === 'profiles' ? 'Choose profile' : 'Reasoning effort'} kind="agent" onClose={close}>

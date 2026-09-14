@@ -45,7 +45,7 @@ export class AgentScenarios {
     const c=this.cases.get(sid);
     if(!c||c.kind!==kind||c.payload.request_id!==params.request_id){reply(kind==='approval'?{resolved:0}:{status:'expired'});return true;}
     this.responseCounts[kind]++;
-    if(kind==='approval'&&!['once','deny'].includes(String(params.choice))){reply({resolved:0});return true;}
+    if(kind==='approval'&&!['once','session','deny'].includes(String(params.choice))){reply({resolved:0});return true;}
     if(kind==='clarify'&&params.question_id){
       if(!['colour','note'].includes(String(params.question_id))){reply({status:'expired'});return true;}
       c.answers.add(String(params.question_id));

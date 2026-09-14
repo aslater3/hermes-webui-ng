@@ -4,11 +4,13 @@
 
 ## Native contract and user controls
 
-Supported runtime: `NousResearch/hermes-agent@b6b53c69a6ed49cb099cf1bfe76b5e6edd718e5a`. Reasoning and tool activity are projections of native Gateway events; the WebUI does not execute tools or set approval policy. Tool cards distinguish start/progress/completion, failure, duration, truncated output and unknown state. Public reasoning is separate from the final answer; untrusted content is rendered as inert text.
+Supported runtime: `NousResearch/hermes-agent@b6b53c69a6ed49cb099cf1bfe76b5e6edd718e5a`. Reasoning and tool activity are projections of native Gateway events; the WebUI does not execute tools or write global/persistent approval policy. Session-scoped approval and YOLO controls use Hermes' own native contract. Tool cards distinguish start/progress/completion, failure, duration, truncated output and unknown state. Public reasoning is separate from the final answer; untrusted content is rendered as inert text.
 
 All input requests are keyed by the native session and request ID. Responses use only `approval.respond` (`choice`), `clarify.respond` (`answer`, optional `question_id`), `sudo.respond` (`password`) and `secret.respond` (`value`). The operator selects the owning conversation before replying.
 
-Approval exposes Allow once and Deny, restricted by the native request. Pending approvals are intentionally visually prominent: a warning-coloured card, explicit **Permission required** heading, blocking-state copy and a stronger composer attention strip make the paused turn obvious on desktop and mobile. A newly observed approval also attempts one short Web Audio chime. Browsers only permit audible playback after the user has interacted with the page; if audio has not been unlocked or is muted, the visual request remains authoritative and no delayed sound is queued.
+Approval exposes **Allow once**, **Approve for session** when Hermes offers the native `session` choice, and **Deny**. Permanent `always` approval is intentionally not exposed by this WebUI. A **YOLO** action enables Hermes' session-scoped `config.set key:yolo` flag and then approves that exact pending request once; it does not replay approval responses if either operation becomes uncertain. YOLO bypasses routine approval prompts for the selected conversation, but Hermes' explicit deny rules and hardline blocks remain authoritative. The same effective YOLO state is shown as a switch beside the composer reasoning control. Turning the switch off clears only the session flag; a broader Hermes process/global bypass can keep the effective state enabled.
+
+Pending approvals are intentionally visually prominent: a warning-coloured card, explicit **Permission required** heading, blocking-state copy and a stronger composer attention strip make the paused turn obvious on desktop and mobile. A newly observed approval also attempts one short Web Audio chime. Browsers only permit audible playback after the user has interacted with the page; if audio has not been unlocked or is muted, the visual request remains authoritative and no delayed sound is queued.
 
 Clarification supports single and multi-select questions and per-question confirmation in a batch. Password/secret fields are masked and provide a deliberate submit or skip action. Secret cards disclose that Hermes may save the value in its own credential configuration. The WebUI never writes that configuration itself.
 
@@ -52,7 +54,7 @@ Reload discards that live archive and obtains only the history Hermes exposes. N
 
 ## Verification
 
-Accepted application: `d1aba2263ff1660499f167c9b5faa7b63abda038`; exact CI merge/tree and artifact hashes are in the completion evidence. Later approval-attention UX changes are tracked independently rather than rewriting the M3 acceptance record.
+Accepted application: `d1aba2263ff1660499f167c9b5faa7b63abda038`; exact CI merge/tree and artifact hashes are in the completion evidence. Later approval-attention and session-YOLO UX changes are tracked independently rather than rewriting the M3 acceptance record.
 
 - Build, server/frontend typecheck, lint, 158 unit tests and 20 HTTP/WS contracts pass at the accepted M3 checkpoint.
 - 268 browser tests pass across desktop Chromium, iPhone WebKit emulation, Android Chromium and narrow-320 at that checkpoint; no failures, skips or flaky results.

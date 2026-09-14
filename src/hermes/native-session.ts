@@ -1,6 +1,6 @@
 import { displayMessage, type DisplayMessage } from './history-message.js';
 import { NativeSettings } from './native-settings.js';
-import { agentMetadata, type AgentMetadata } from './model-catalog.js';
+import { agentMetadata, yoloSetParams, type AgentMetadata } from './model-catalog.js';
 import { AgentActivity, inputRpc } from './agent-activity.js';
 import type { ConnectionState, GatewayClient } from './gateway-client.js';
 import { ClientError, record, textField, type GatewayEvent } from './protocol.js';
@@ -38,6 +38,7 @@ export class NativeSession {
   private unsubscribe: (() => void)[];
   private submission?: { epoch: number };
   private interruption?: { epoch: number; promise: Promise<void> };
+  private yoloFlight?: { epoch: number; enabled: boolean; promise: Promise<void> };
 
   constructor(private readonly gateway: Transport) {
     this.settings = new NativeSettings(gateway, {
@@ -77,7 +78,7 @@ export class NativeSession {
       this.settings.reset();
       this.activity.disconnect();
       ++this.epoch;
-      this.flight = undefined;
+      this.flight = undefined; this.yoloFlight = undefined;
       if (this.state.storedId) this.publish({ phase: 'unknown', runtimeId: undefined, agentStarting: undefined,
         deliveryUnknown: this.state.deliveryUnknown || !!this.submission, submitting: false, interrupting: false });
       this.submission = undefined; this.interruption = undefined;
@@ -96,7 +97,7 @@ export class NativeSession {
     const epoch = ++this.epoch;
     this.settings.reset();
     if (!reconnect) this.activity.reset();
-    this.flight = undefined;
+    this.flight = undefined; this.yoloFlight = undefined;
     this.submission = undefined; this.interruption = undefined;
     this.publish({
       phase: 'attaching',
@@ -261,6 +262,44 @@ export class NativeSession {
     });
     this.interruption = { epoch, promise }; return promise;
   }
+  /** Session-only approval bypass. Explicit deny rules and Hermes hardline blocks remain authoritative upstream. */
+  setYolo(enabled: boolean): Promise<void> {
+    const epoch = this.epoch;
+    if (this.yoloFlight?.epoch === epoch) {
+      if (this.yoloFlight.enabled === enabled) return this.yoloFlight.promise;
+      return Promise.reject(new ClientError('protocol', 'Wait for the current YOLO change to finish'));
+    }
+    const promise = (async () => {
+      this.valid(epoch);
+      const runtimeId = this.state.runtimeId;
+      if (!this.foreground || !runtimeId || !['idle', 'waiting'].includes(this.state.phase) || this.state.interrupting || this.state.submitting || this.settings.state.busy)
+        throw new ClientError('protocol', 'YOLO can be changed only for the selected idle or approval-waiting conversation');
+      const raw = record(await this.gateway.call('config.set', yoloSetParams(runtimeId, this.state.profile, enabled)));
+      this.valid(epoch);
+      if (raw.key !== 'yolo' || raw.value !== (enabled ? '1' : '0') || (raw.scope !== undefined && raw.scope !== 'session'))
+        throw new ClientError('protocol', 'Hermes did not confirm the session YOLO setting');
+      ++this.revision;
+      await this.refresh(); this.valid(epoch);
+      if (enabled && this.state.agent?.yolo !== true)
+        throw new ClientError('timeout', 'Hermes acknowledged YOLO but the native session snapshot did not enable it');
+      if (!enabled && this.state.agent?.yolo === true)
+        throw new ClientError('protocol', 'YOLO remains active because Hermes has a broader approval bypass enabled');
+    })().finally(() => {
+      if (this.yoloFlight?.epoch === epoch && this.yoloFlight.enabled === enabled) this.yoloFlight = undefined;
+    });
+    this.yoloFlight = { epoch, enabled, promise }; return promise;
+  }
+  /** Enable session YOLO deliberately, then approve the exact request once. Nothing is replayed on uncertainty. */
+  async enableYoloAndApprove(key: string): Promise<void> {
+    const before = this.activity.state.inputs.find(input => input.key === key);
+    if (!before || before.kind !== 'approval' || before.status !== 'pending' || before.blocked || !before.choices.includes('once'))
+      throw new ClientError('protocol', 'No YOLO-eligible approval request is pending');
+    await this.setYolo(true);
+    const current = this.activity.state.inputs.find(input => input.key === key);
+    if (!current || current.kind !== 'approval' || current.status !== 'pending' || current.blocked || !current.choices.includes('once'))
+      throw new ClientError('protocol', 'The approval expired while YOLO was being enabled');
+    await this.respond(key, 'once');
+  }
   /** The active request and session generation authorise one deliberate response, never a replay. */
   async respond(key: string, value: string, questionId?: string): Promise<void> {
     const epoch = this.epoch;
@@ -299,6 +338,7 @@ export class NativeSession {
     this.settings.reset();
     this.activity.reset();
     ++this.epoch;
+    this.yoloFlight = undefined;
     this.unsubscribe.forEach((unsubscribe) => unsubscribe());
     this.listeners.clear();
   }

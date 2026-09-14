@@ -2,10 +2,11 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { AgentActivity, ACTIVITY_LIMITS, displayValue, inputRpc, parseInput } from '../../src/hermes/agent-activity.js';
 const event = (type: string, payload: unknown) => ({ type, session_id: 'live', payload });
-test('approval exposes only explicit once/deny choices and retains the command', () => {
+test('approval exposes once/session/deny but never permanent approval', () => {
   const prompt = parseInput('approval', { request_id:'a',command:'fixture operation',choices:['once','session','always','deny'] });
-  assert.deepEqual(prompt.choices,['once','deny']);
+  assert.deepEqual(prompt.choices,['once','session','deny']);
   assert.deepEqual(inputRpc(prompt,{value:'once'},'live'),{method:'approval.respond',params:{session_id:'live',request_id:'a',choice:'once'}});
+  assert.deepEqual(inputRpc(prompt,{value:'session'},'live'),{method:'approval.respond',params:{session_id:'live',request_id:'a',choice:'session'}});
   assert.throws(()=>inputRpc(prompt,{value:'always'},'live'));
   assert.throws(()=>inputRpc(parseInput('approval',{request_id:'a',command:'x'.repeat(9000)}),{value:'once'},'live'));
   assert.throws(()=>inputRpc(parseInput('approval',{request_id:'a'}),{value:'once'},'live'));
