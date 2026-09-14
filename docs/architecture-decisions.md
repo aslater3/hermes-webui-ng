@@ -39,3 +39,7 @@ Every completed recovery or implementation slice must be committed AND pushed to
 ## ADR-P7-001 — Parallel native session polish
 
 Accepted 14 September 2026 for the requested Phase 7 branch. Phase 7 depends on existing native session/settings contracts, not Phase 6 workspace writes. Selected-session usage/context is allowlisted and generation-scoped, with no new persistence or polling. Commands and destructive rewind remain separately gated. Full decision: `adr-phase7-parallel-session-polish.md`. Existing phase acceptance and physical-device requirements are unchanged.
+
+## ADR-025–027 — Opt-in workspace file mutations
+
+Phase 6 retains the native Hermes boundary and adds only dedicated project-file mutations. ADR-025 defines versioned atomic saves and the external-writer race boundary; ADR-026 resolves plain-metadata policy and kernel locking/no-clobber primitives; ADR-027 records the required file-write scope, security review and explicit deferral of optional Git mutations. Writes remain off by default and require a separately selected writable project mount, actual TLS and live Hermes admission. The iOS Web Push proposal is a separate, unimplemented feature. Final code/CI acceptance is recorded in `implementation-status.md`, not inferred from this ADR index.

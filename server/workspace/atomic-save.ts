@@ -1,3 +1,5 @@
+import { writeParent } from './file-operations.js';
+import { lockedRoot, plainMetadata } from './native-boundary.js';
 import { constants } from 'node:fs';
 import { open, rename, unlink, type FileHandle } from 'node:fs/promises';
 import { randomBytes } from 'node:crypto';
@@ -44,22 +46,23 @@ export class WorkspaceWriter {
       await previous;
       const signal = checks.signal ? AbortSignal.any([checks.signal, this.lifetime.signal]) : this.lifetime.signal;
       current(signal);
-      return await this.replace(root, parts, data.text, data.expectedVersion, { ...checks, signal });
+      return await lockedRoot(root, () => this.replace(root, parts, data.text, data.expectedVersion, { ...checks, signal }));
     } finally {
       release(); --this.count;
       if (this.lanes.get(key) === lane) this.lanes.delete(key);
     }
   }
   private async replace(root: WorkspaceRoot, parts: string[], text: string, expected: string, checks: SaveChecks): Promise<SaveResult> {
-    const path = parts.join('/'), parents = parts.slice(0, -1), name = parts.at(-1)!;
+    const path = parts.join('/'), name = parts.at(-1)!;
     let parent: FileHandle | undefined, temporary: FileHandle | undefined, tempPath: string | undefined;
     let committed = false;
     try {
-      parent = await openChecked(root, parents, true);
+      parent = await writeParent(root, path);
+      await plainMetadata(parent, true);
       const parentStat = await parent.stat();
       const inspect = async () => {
         const handle = await openChecked(root, parts, false);
-        try { return await fileSnapshot(handle, root); } finally { await handle.close(); }
+        try { await plainMetadata(handle); return await fileSnapshot(handle, root); } finally { await handle.close(); }
       };
       const source = await inspect();
       if (source.version !== expected) throw new WorkspaceError('WORKSPACE_VERSION_CONFLICT', 409);
@@ -79,6 +82,7 @@ export class WorkspaceWriter {
       const created = await temporary.stat();
       if (created.gid !== source.stat.gid) await temporary.chown(source.stat.uid, source.stat.gid);
       await temporary.chmod(source.stat.mode & 0o777);
+      await plainMetadata(temporary);
       await temporary.sync();
       current(checks.signal);
       await checks.beforeCommit?.();
@@ -86,8 +90,9 @@ export class WorkspaceWriter {
       // Revalidate current root/path identity and content immediately before atomic replacement.
       const latest = await inspect();
       if (latest.version !== expected) throw new WorkspaceError('WORKSPACE_VERSION_CONFLICT', 409);
-      const freshParent = await openChecked(root, parents, true);
+      const freshParent = await writeParent(root, path);
       try {
+        await plainMetadata(freshParent, true);
         const stat = await freshParent.stat();
         if (stat.dev !== parentStat.dev || stat.ino !== parentStat.ino) throw new WorkspaceError('WORKSPACE_CHANGED_RETRY', 409);
       } finally { await freshParent.close(); }

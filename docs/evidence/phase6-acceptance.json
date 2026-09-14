@@ -1,0 +1,126 @@
+{
+  "milestone": "Phase 6 required workspace file-write scope",
+  "dateUtc": "2026-09-14",
+  "applicationCommit": "9916e16e735aff86b7e9d18679bb0a95667c252a",
+  "testedPrMergeCommit": "3f7b807c366b4e12b1d9b2bcecbb12545c3c5e36",
+  "sourceTree": "986b92bb53c97e7bcbb07c4ab82bc94b31be7b4d",
+  "preservedMain": "f8b3dbefe0272136a87abc8318e61a34a54104f8",
+  "phase7IntegrationCommit": "4bd15f35e1f212cee2292289cddab17097d3164c",
+  "upstreamRef": "b6b53c69a6ed49cb099cf1bfe76b5e6edd718e5a",
+  "scope": {
+    "requiredFileOperations": "accepted",
+    "optionalGitMutations": "deferred; flag rejected and reader stays read-only",
+    "iosWebPush": "proposal only; not implemented",
+    "physicalDeviceCertification": "open"
+  },
+  "local": {
+    "node": "22.16.0",
+    "build": "passed",
+    "typecheck": "passed",
+    "lint": "passed",
+    "unitPassed": 264,
+    "contractPassed": 38,
+    "sourceMatchesCiArchive": true,
+    "sourceTreeReconstructed": true,
+    "dockerOrBrowserNetworkRun": false
+  },
+  "ci": {
+    "checkpoint": {
+      "runId": 34901770416,
+      "conclusion": "success"
+    },
+    "browsers": {
+      "runId": 34901770410,
+      "conclusion": "success",
+      "passed": 408,
+      "failed": 0,
+      "skipped": 0,
+      "flaky": 0
+    },
+    "image": {
+      "runId": 34901770413,
+      "conclusion": "success"
+    },
+    "https": {
+      "runId": 34901770527,
+      "conclusion": "success",
+      "passed": 17,
+      "repeatedWebKitPassed": 25,
+      "failed": 0,
+      "skipped": 0,
+      "flaky": 0,
+      "certificateVerification": true
+    },
+    "nativeHermes": {
+      "runId": 34901770543,
+      "conclusion": "success",
+      "modes": [
+        "dashboard",
+        "trusted-local"
+      ],
+      "productionImage": true,
+      "readOnlyAndWritableMounts": true
+    }
+  },
+  "artifacts": [
+    {
+      "name": "source",
+      "id": 10371231822,
+      "sha256": "4ff5442ff384f5d58efed79dcb8c540e6a696fb80adac6d35475e8b9707c9744",
+      "digestVerified": true
+    },
+    {
+      "name": "browser",
+      "id": 10370299511,
+      "sha256": "3c1d2ba8455f8b51c22a7338e1bd8147bf1443b7999a243db6b553e60f9e56a0",
+      "digestVerified": true
+    },
+    {
+      "name": "https",
+      "id": 10370789357,
+      "sha256": "028ec22002624b1e9050b3a6fe11bf4ababf5ae42e57527871a9c7e7cfbf80b1",
+      "digestVerified": true
+    },
+    {
+      "name": "live",
+      "id": 10370759304,
+      "sha256": "7a541e4dd2e5cb007bdd47c4433a15179cd0dcc69f0b1b55d19d7c05a1753bec",
+      "digestVerified": true
+    }
+  ],
+  "nativeFileWriteGates": {
+    "dashboard": [
+      "native-authenticated-save-readback-and-stale-version-conflict",
+      "bounded-upload-no-clobber-rename-and-nonrecursive-delete",
+      "project-boundary-and-csrf-guard-enforced-in-runtime-image",
+      "logout-revokes-write-authority"
+    ],
+    "trusted-local": [
+      "native-authenticated-save-readback-and-stale-version-conflict",
+      "bounded-upload-no-clobber-rename-and-nonrecursive-delete",
+      "project-boundary-and-csrf-guard-enforced-in-runtime-image"
+    ]
+  },
+  "screenshotsInspected": [
+    "desktop workspace editor",
+    "iPhone WebKit editor",
+    "desktop-to-mobile 320x440 editor with Save reachable"
+  ],
+  "softwareReview": "docs/adr-027-phase6-write-review.md",
+  "deploymentGuide": "docs/phase6-deployment.md",
+  "limits": [
+    "The original roadmap makes Git stage/unstage/commit optional. They are not implemented or enabled by this acceptance.",
+    "iOS notifications are investigated in a separate proposal. No subscription, background sender, native observer or physical Apple push evidence is claimed.",
+    "Atomic rename is not content compare-and-swap against non-cooperating external editors, Hermes tools or mount changes. Avoid concurrent edits of the same file.",
+    "Runtime-owned, owner-controlled plain POSIX project directories only. Extended attributes/access or default ACL/security-label layouts are rejected, not silently stripped.",
+    "All admitted users share configured writable roots; trusted-local still has no browser login. HTTPS is not user authentication.",
+    "No recycle bin, recursive delete, malware scanning, power-loss certification or persistent offline draft/write queue. Browser/OS termination can lose unsaved tab-memory edits.",
+    "Browser fixtures, production-image/native-Hermes evidence and physical iPhone/Android acceptance remain distinct. No full WCAG or production-wide security certification is claimed."
+  ],
+  "failedRunsSupersededNotRelabelled": [
+    34897756394,
+    34899858103,
+    34900594147,
+    34901256580
+  ]
+}

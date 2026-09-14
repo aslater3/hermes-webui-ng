@@ -15,7 +15,7 @@ import { json, proxyHttp, proxyUpgrade, refuseUpgrade, type Log } from './proxy/
 export function createApp(config: Config, log: Log = (event) => console.log(JSON.stringify(event))) {
   const sockets = new Set<Duplex>();
   const foundation = foundationRoutes(config);
-  const workspace = workspaceRoutes(config);
+  const workspace = workspaceRoutes(config, log);
   const server = transportServer(config,
     (req, res) => {
       const raw = req.url ?? '/';

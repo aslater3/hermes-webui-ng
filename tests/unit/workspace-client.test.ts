@@ -12,8 +12,8 @@ test('workspace client requests only the local cookie-scoped read API without ca
   assert.equal((await api.roots(signal())).roots[0]?.id, 'workspace');
   assert.match(api.download('workspace', 'hello world.html'), /path=hello\+world.html/);
 });
-test('workspace client rejects malformed, writable, oversized and cross-path responses', async () => {
-  for (const data of [{ roots: [{ id: 'workspace', label: 'X', writable: true }], git: true }, { roots: [{ id: '/etc', label: 'X', writable: false }], git: true }])
+test('workspace client rejects malformed, nonboolean capability, oversized and cross-path responses', async () => {
+  for (const data of [{ roots: [{ id: 'workspace', label: 'X', writable: 'true' }], git: true }, { roots: [{ id: '/etc', label: 'X', writable: false }], git: true }])
     await assert.rejects(new WorkspaceApi(async () => response(data)).roots(signal()));
   for (const path of ['../x', '/root/x', 'x//y', 'x\\y', '%2e%2e', 'x\0']) assert.throws(() => validPath(path));
   await assert.rejects(new WorkspaceApi(async () => response({ path: 'other', kind: 'text', text: 'wrong', size: 5 })).preview('workspace', 'wanted', signal()));

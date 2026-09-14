@@ -1,0 +1,18 @@
+# Explicit writable alternative to compose.workspace.yaml, not an addition to it.
+# Combine with exactly ONE base: compose.host.yaml OR compose.yaml.
+# The existing dedicated project must be owned by the non-root runtime UID.
+services:
+  webui:
+    volumes:
+      - type: bind
+        source: ${WORKSPACE_HOST_PATH:?Set an existing dedicated project directory}
+        target: /workspace
+        read_only: false
+        bind:
+          create_host_path: false
+    environment:
+      WORKSPACE_ROOTS: /workspace
+      WORKSPACE_WRITE_ENABLED: 'true'
+      WORKSPACE_WRITABLE_ROOTS: workspace
+      GIT_ENABLED: ${GIT_ENABLED:-true}
+      GIT_WRITE_ENABLED: 'false'

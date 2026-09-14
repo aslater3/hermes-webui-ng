@@ -1,3 +1,7 @@
+import { loadConfig } from '../../server/config.js';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { writePolicy, assertWriteRequest, writableRoot } from '../../server/workspace/write-policy.js';
@@ -38,4 +42,11 @@ test('audit is bounded metadata and salted tags only; it records once and cannot
   const other: unknown[] = []; new WriteAudit(event => other.push(event)).begin('PRIVATE_COOKIE')(200, 'saved', 'workspace', 'PRIVATE_FILE.txt');
   assert.notDeepEqual(logs, other);
   assert.doesNotThrow(() => new WriteAudit(() => { throw new Error('bad log sink'); }).begin(undefined)(200, 'saved'));
+});
+
+test('an HTTPS origin string cannot enable writes on a plaintext listener', async t => {
+  const root = await mkdtemp(join(tmpdir(), 'workspace-tls-required-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  assert.throws(() => loadConfig({ HERMES_DASHBOARD_URL: 'http://127.0.0.1:9119', PUBLIC_ORIGIN: 'https://127.0.0.1:8788',
+    WORKSPACE_ROOTS: root, WORKSPACE_WRITE_ENABLED: 'true', WORKSPACE_WRITABLE_ROOTS: 'workspace' }), /configured TLS certificate and key/);
 });
