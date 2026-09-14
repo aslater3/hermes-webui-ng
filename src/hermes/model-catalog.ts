@@ -13,7 +13,7 @@ export interface ModelChoice {
 }
 export interface ModelCatalogue { model?: string; provider?: string; choices: ModelChoice[] }
 export interface ProfileChoice { name: string; label: string; description: string }
-export interface AgentMetadata { model?: string; provider?: string; reasoningEffort?: string }
+export interface AgentMetadata { model?: string; provider?: string; reasoningEffort?: string; yolo?: boolean }
 export interface ModelChangeResult { confirmation?: string; warning?: string; deferred: boolean }
 
 function optionalText(value: unknown, limit: number): string | undefined {
@@ -43,8 +43,9 @@ export function agentMetadata(input: unknown): AgentMetadata {
   const reasoningEffort = info.reasoning_effort === '' ? 'provider-default' :
     typeof info.reasoning_effort === 'string' && EFFORTS.includes(info.reasoning_effort as Effort)
       ? info.reasoning_effort : undefined;
+  const yolo = typeof info.yolo === 'boolean' ? info.yolo : undefined;
   return { ...(model ? { model } : {}), ...(provider ? { provider } : {}),
-    ...(reasoningEffort ? { reasoningEffort } : {}) };
+    ...(reasoningEffort ? { reasoningEffort } : {}), ...(yolo !== undefined ? { yolo } : {}) };
 }
 /** Project only public choice fields. Never retain paths, URLs, credentials or full config. */
 export function modelCatalogue(input: unknown): ModelCatalogue {
@@ -102,6 +103,11 @@ export function reasoningSetParams(runtimeId: string, profile: string | undefine
   if (!runtimeId.trim()) throw new ClientError('protocol', 'A live native session is required');
   return { session_id: runtimeId, ...(profile ? { profile: profileIdentifier(profile) } : {}),
     key: 'reasoning', value: effortValue(effort), scope: 'session' };
+}
+export function yoloSetParams(runtimeId: string, profile: string | undefined, enabled: boolean) {
+  if (!runtimeId.trim()) throw new ClientError('protocol', 'A live native session is required');
+  return { session_id: runtimeId, ...(profile ? { profile: profileIdentifier(profile) } : {}),
+    key: 'yolo', value: enabled ? '1' : '0', scope: 'session' };
 }
 export function modelChangeResult(input: unknown): ModelChangeResult {
   const data = record(input);
