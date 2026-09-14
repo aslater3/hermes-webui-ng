@@ -9,6 +9,7 @@ try {
       JSON.stringify({
         event: 'webui.started',
         port: config.port,
+        tls: !!config.tls,
         version: '0.0.1-phase0',
         workspace: false,
       }),
