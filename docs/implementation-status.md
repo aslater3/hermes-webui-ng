@@ -1,55 +1,31 @@
 # Implementation Status
 
-Updated: 14 September 2026. **Phase 5 / M5 Read-only Workspace Beta has passed its software exit gate.** Delivered through PR #12 with individual remote checkpoints preserved. Phases 0–3, the modern shell/HTTPS/PWA software and approval-attention follow-up retain their accepted evidence. The original Phase 4 physical-device report remains open; Phase 5 does not certify physical devices or the final production release.
+## Phase 6 — Started; write feature not enabled
 
-## Exact accepted source and evidence
+14 September 2026. The operator confirms Phase 5 is deployed and working. Development is on `phase6-workspace-writes`, draft PR #15, based on `c237ebdff73729612637322e8faa2e57e7e99766`. Main and the existing read-only deployment remain unchanged.
 
-Feature checkpoint: **`b67c8d00039cd19b46195616495e95d8fa7de79c`**. CI tested the combined PR merge **`e6c14fb414d9af42e97cd738cf07ee9a790a8fc2`**, whose parents are that feature checkpoint and main **`f5ff2ad3e4d6603619b5f4c534149ddeb96f2b3d`**. Its archived source reconstructs Git tree **`ebf6bd71e955bb9fa85a8b26393cc0d9081f0fc9`** exactly. This includes the newer approvals/YOLO, sidebar and website work on main. Acceptance documentation after this checkpoint changes no application code.
+The first published checkpoint `eb8c80824cc5c1b6ec7919056fb3204f59871ac8` adds explicit write opt-in/root selection, an HTTPS same-origin/JSON/custom-header request guard, strong content-and-metadata file revisions and metadata-only audit. It passed all five CI workflows: checkpoint `34871926924`, general browsers `34871926884`, image `34871926957`, trusted HTTPS `34871926941`, and native Hermes `34871926940`. These are regression checks for additive internal primitives, not proof of an enabled write feature.
 
-All five required CI workflows passed:
+The next checkpoint adds an internal atomic existing-text-file writer and ten regression tests. It stages and fsyncs an exclusive sibling, revalidates the original revision and parent, atomically renames and reads back the replacement. Same-process saves are serialised; stale revisions conflict. Precommit failure/cancellation preserves the original, while post-rename failures are unconfirmed and must never trigger automatic retry. Temporary siblings are excluded from file/Git views.
 
-| Gate | Result | Actions run |
-|---|---|---|
-| Recovery checkpoint: build, lint, unit and HTTP/WS contracts | Passed | `34854030120` |
-| General desktop/mobile browsers | 348 passed; zero failed/skipped/flaky | `34854030445` |
-| Production image smoke | Passed | `34854030409` |
-| Trusted HTTPS/PWA browsers | 8 passed plus 10 repeated WebKit cases; zero failed/skipped/flaky | `34854030295` |
-| Pinned vanilla Hermes and mounted workspace | Both authentication modes passed | `34854030374` |
+Fresh local production build, TypeScript emission, frontend/server typecheck, lint, **205 unit tests and 34 HTTP/WebSocket contracts** pass. The writer is **not connected to production routes or UI**. Current flags still reject enabling writes; there is no deployable Save button, upload or Git mutation. First-checkpoint CI does not certify the later writer. See `phase6-workspace-writes.md` and ADR-025 for the precise boundaries and remaining tests.
 
-Fresh local checks against that exact archived combined source passed frontend/server typecheck, lint, production build, **191 unit tests and 34 HTTP/WebSocket contracts**, on Node 22.16.0. Browser and Docker execution above occurred in GitHub Actions. No local Docker or physical-phone run is claimed. Source/browser/HTTPS/native artifact SHA-256 digests were verified. Actual final desktop file-preview and iPhone Git-diff screenshots were inspected.
+Remaining Phase 6 work: resolve ACL/xattr metadata policy; guarded bounded HTTP save/readback integration; desktop/mobile editing with dirty-draft, conflict and unknown-result handling; confirmed mkdir/rename/delete/uploads; separately gated Git mutations; writable-container/native integration and security exit review. Atomic replacement is not an atomic compare-and-swap against non-cooperating external editors or multiple BFFs. Neither that boundary nor physical-device certification is being silently closed.
 
-Permanent evidence: **`evidence/phase5-acceptance.json`**. Older progress notes are historical checkpoints; this status and acceptance record supersede their pending-gate statements.
+## Previous accepted milestone and compatibility
 
-## Delivered functionality
+Phase 5 / M5 Read-only Workspace Beta is delivered on main at `c237ebd`, following PR #12 merge `3cc7f74`. The operator has now deployed it successfully. Its accepted application was the combined PR tree at `e6c14fb414d9af42e97cd738cf07ee9a790a8fc2`: feature `b67c8d0` plus main `f5ff2ad3`, retaining approvals/YOLO, sidebar and website work.
 
-Files/Git/Changes provide logical root selection, directory browsing/filtering/pagination, lazy read-only CodeMirror text preview, explicit attachment download, repository discovery, branch/status and staged/working unified diffs. The desktop right pane has a width toggle; mobile uses a full-screen Workspace with safe areas, touch controls and Back to chat. Normal chat does not require a project mount. Binary, oversized, blocked and unsupported paths have explicit states rather than active previews or fake controls.
+The acceptance record is `evidence/phase5-acceptance.json`: all five required workflows passed; 348 general browser tests; 8 HTTPS plus 10 repeated WebKit cases; 191 unit tests and 34 wire contracts on the identical combined source. Production tests used unmodified Hermes, verified TLS and a dedicated read-only project mount in both auth modes, asserting write refusal and unchanged project/index hashes. These historical results are not substituted for Phase 6 write acceptance.
 
-The UI validates response shapes and scopes async reads to the current view generation. Close, account/session/profile change, hidden document, offline state or authentication work clears private previews. No file or diff body enters the static-only service-worker cache. The editor receives a matching HTML/CSP stylesheet nonce; script policy remains self-only without unsafe-inline/eval. Unknown formats and missing editor chunks fall back to inert text. File saves, uploads, staging and commits are not enabled.
+Runtime-certified Hermes remains `NousResearch/hermes-agent@b6b53c69a6ed49cb099cf1bfe76b5e6edd718e5a`. Current auth source was additionally inspected at `498abb677ec39ea3ae9f8f5ed60e7def6bc47e70`; source inspection does not certify another runtime. No production Hermes imports, direct state/config access, duplicate agent or durable local chat database are introduced.
 
-## Native-Hermes production-mount acceptance
-
-The production WebUI container is run non-root with a read-only filesystem, verified TLS and a separate disposable project mounted read-only. Both Dashboard authentication and explicit trusted-local admission pass root/tree/preview/download, Git discovery/status/staged/working diffs, rejected traversal/metadata/secret/symlink paths and rejected write requests. Dashboard logout revokes workspace access. The harness additionally verifies operating-system mount write refusal and unchanged index/working-file hashes. Existing native chat, model/reasoning, approval/clarify/sudo/secret and HTTPS/reconnect regressions remain mandatory and passed.
-
-Runtime-certified Hermes: **`NousResearch/hermes-agent@b6b53c69a6ed49cb099cf1bfe76b5e6edd718e5a`**. Hermes is unmodified; the model endpoint is deterministic and project data is disposable CI data, not an operator's files. Additional upstream auth-source inspection at `5eb99eb2844b22ebb723711b8e6a0bbb80bb5f04` is not runtime certification.
-
-## Security boundary and supported layouts
-
-Project roots are operator-configured, never browser-selected host paths or Hermes state. Every file/Git request verifies native admission. The BFF-local cookie-scoped alias preserves the existing Hermes cookie Path; it neither forwards project requests to Hermes nor invents another login. **All admitted users share access to all configured roots.** Filename exclusions are defence in depth, not a secret scanner. Dedicated read-only project mounts are required; never mount a home, credential store, Hermes state or Docker socket.
-
-Linux descriptor/root-identity checks reject traversal, project symlinks, special files and multiply linked files. Git uses an exact-locked JavaScript parser behind a read-only virtual filesystem and bounded worker threads, not a Git executable or apt layer. Repository hooks, config includes, filters and helpers are not executed. Standard local SHA-1 repositories and loose/packed objects are tested. External gitdir worktrees, symlink metadata, alternates, submodule traversal and newer repository formats remain unsupported or uncertified as detailed in ADR-023. The index is not refreshed or written. Host edits are not an atomic repository snapshot.
-
-Limits remain explicit: 256 KiB previews, 10 MiB downloads, 1,000 entries per directory scan, 200-entry pages, bounded Git workers and 500 returned changes. Diffs are HEAD-to-index or index-to-worktree, not arbitrary revisions. No direct Hermes state/config access, duplicate agent runtime, durable local conversation store or workspace-content cache is introduced.
-
-## Corrections and remote history
-
-The recovered backend and every subsequent coherent slice were pushed before continuation. Checkpoints include `cf44fcd` file API, `0458a1c` Git reader, `5adc34d` routes/mount, `c487c2c` diagnostic lifecycle, `c0228dd` image smoke, `67bd46f` client/store, `01afb1e` editor/views, `ea2de0d` app integration, `ed20636` production-mount acceptance, `ae5843f` milestone metadata and `b67c8d0` content-based Git status. Dependency capture/import/declaration commits remain in history.
-
-The first mount test exposed a real Git-status bug: equal-size rapid edits could reuse the parser's cached staged object. The final reader hashes actual bounded working-file content, with a deterministic regression and unchanged-index assertion. The failed native run `34852854883` remains a failure; it is superseded by the passing corrected run, not relabelled. Earlier image tests confused runtime dependencies and empty npm namespaces with installed development tools; corrected smoke still requires non-root/read-only operation and excludes actual build/test packages. Diagnostic WebKit navigation uses document-scoped request cancellation.
+Phase 5 Files/Git/Changes remain read-only, with logical roots, descriptor-constrained reads, lazy CodeMirror, desktop/mobile panes and no cached private previews. All admitted users can read the configured project roots; dedicated project mounts must exclude homes, credentials, Hermes state and Docker sockets. Unsupported Git formats and limits are documented in ADRs 022–024 and `phase5-workspace.md`.
 
 ## Deployment and remaining roadmap
 
-Preserve private `.env`, TLS and the existing NG Compose project. Set `WORKSPACE_HOST_PATH` to a dedicated existing project directory and add `compose.workspace.yaml` to exactly one base, `compose.host.yaml` or `compose.yaml`. The override mounts `/workspace` read-only; file/Git writes remain false. No host deployment, unrelated port 8787 service or Docker data-root was changed by this work. See `phase5-workspace.md` for exact commands.
+Retain the existing private `.env`, token, TLS certificates, NG Compose project and optional read-only `compose.workspace.yaml`. Nothing in these Phase 6 foundation commits remounts a project, changes host permissions or modifies the user's deployed service. The legacy 8787 service and Docker storage are untouched. Do not enable development-only write settings on an operator deployment yet.
 
-**Phase 5 is accepted. Phase 6 is next:** opt-in writes, atomic conflict-aware saves, file operations/uploads and separately guarded Git mutations. Those remain disabled and unimplemented. Phase 7 retains model/profile/reasoning controls but commands/usage and optional rewind polish remain; Phases 8–10 management, attachments/voice and release-wide hardening remain. Physical iPhone/Android installation, keyboard/background and notification-volume checks remain open in `phase4-device-smoke.md`.
+Phases 0–3 remain accepted. Phase 4 HTTPS/PWA software is delivered but the original physical iPhone/Android installation, keyboard/background and notification-volume report remains open. Phase 5 is accepted. Phase 6 is in progress; Phase 7 still needs commands/usage and optional rewind polish beyond existing model/profile/reasoning controls. Phases 8–10 management, attachments/voice and release-wide hardening remain open.
 
-Independent Hermes limitations remain documented: the reasoning setter deletion race, unavailable sudo/secret reconnect snapshots and no true-infinite approval wait on the tested pin. Workspace does not alter them. Prior accepted evidence remains under `evidence/`; ADRs 022–024 define the new feature boundary.
+Previous acceptance evidence remains under `docs/evidence/`, including `phase3-completion-acceptance.json`, `phase4b-combined-acceptance.json`, `phase4c-final-acceptance.json`, `approval-attention-acceptance.json` and `phase5-acceptance.json`. Known Hermes limits (reasoning setter deletion race, unavailable sudo/secret reconnect snapshots and no true-infinite approval wait at the tested pin) are unchanged.
