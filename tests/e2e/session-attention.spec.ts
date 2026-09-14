@@ -31,6 +31,8 @@ test('native completion in another conversation produces a review badge without 
   const network = await pwaNetwork(false, {
     beforePromptComplete: text => text === prompt ? permit : Promise.resolve(),
   });
+  // Compare the exact content, not its article wrapper which also contains "You".
+  const userMessages = page.locator('[data-role="user"] .user-text');
   try {
     await loginPwa(page, network.origin); await send(page, prompt);
     await newChat(page); await send(page, 'Current foreground response'); await idle(page);
@@ -40,13 +42,13 @@ test('native completion in another conversation produces a review badge without 
     // A fixed 3.1s fixture timer can finish before a slower mobile UI switches away.
     await expect(button).toContainText('Working');
     await expect(button).not.toContainText('New activity');
-    await expect(page.locator('[data-role="user"]').last()).toHaveText('Current foreground response');
+    await expect(userMessages).toHaveText(['Current foreground response']);
     release();
     await expect(button).toContainText('New activity');
-    await expect(page.locator('[data-role="user"]').last()).toHaveText('Current foreground response');
+    await expect(userMessages).toHaveText(['Current foreground response']);
     await button.click(); await idle(page);
-    await expect(page.locator('[data-role="user"]').last()).toHaveText(prompt);
-    await expect(page.locator('[data-role="user"]')).not.toContainText('Current foreground response');
+    await expect(userMessages).toHaveText([prompt]);
+    await expect(userMessages).not.toContainText('Current foreground response');
     expect(network.metrics.submits).toBe(2);
     expect(network.metrics.creates).toBe(2);
   } finally {
