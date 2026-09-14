@@ -46,3 +46,11 @@ test('polling coalesces, bounds inventory and degrades unsupported/error state w
   await store.refresh(); assert.equal(store.phase, 'unsupported'); assert.equal(store.items[0]?.status, 'unknown');
   store.setVisible(false); await store.refresh(); assert.equal(wire.count, 2);
 });
+
+test('working sessions with a confirmed pending approval are reported as waiting without retaining commands', async t => {
+  const wire = new Wire(), original = wire.call;
+  wire.call = async method => method === 'approval.pending' ? { approvals: [{ command: 'PRIVATE_OPERATION' }] } : original(method);
+  const store = new SessionAttention(wire); t.after(() => store.dispose()); store.setEnabled(true);
+  wire.rows = [wire.row('working')]; await store.refresh();
+  assert.equal(store.items[0]?.status, 'waiting'); assert.ok(!JSON.stringify(store.items).includes('PRIVATE_OPERATION'));
+});

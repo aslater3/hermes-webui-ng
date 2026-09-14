@@ -97,6 +97,17 @@ export class SessionAttention {
             owner: owner?.id === storedId ? owner : undefined,
             review: runtimeId !== this.current && (old?.review === true || (status === 'idle' && !!old && ['working', 'waiting'].includes(old.status))) };
         });
+        // Hermes keeps approvals in a separate registry; active_list can still say working.
+        // Probe only a bounded set of working runtimes, and retain a boolean, not commands.
+        const waiting = await Promise.all(this.items.filter(item => item.status === 'working').slice(0, 12).map(async item => {
+          try {
+            const pending = record(await this.gateway.call('approval.pending', { session_id: item.runtimeId }));
+            return Array.isArray(pending.approvals) && pending.approvals.length > 0 ? item.runtimeId : undefined;
+          } catch { return undefined; }
+        }));
+        if (!valid()) return;
+        if (revision !== this.revision) { raced = true; return; }
+        this.items = this.items.map(item => waiting.includes(item.runtimeId) ? { ...item, status: 'waiting' } : item);
         this.phase = 'ready';
       } catch (error) {
         if (!valid()) return;

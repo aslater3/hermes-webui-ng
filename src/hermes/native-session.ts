@@ -192,7 +192,7 @@ export class NativeSession {
         agentStarting: live.status === 'starting' || (live.info !== null && typeof live.info === 'object' && !Array.isArray(live.info) && record(live.info).lazy === true),
         streaming: this.foreground ? streaming : '',
         error: undefined,
-        phase: live.status === 'waiting' ? 'waiting' : live.running || this.submission ? 'running' : 'idle',
+        phase: live.status === 'waiting' || this.activity.state.inputs.some(input => ['pending', 'sending'].includes(input.status)) ? 'waiting' : live.running || this.submission ? 'running' : 'idle',
       });
       return;
     }
@@ -240,7 +240,7 @@ export class NativeSession {
         this.publish({ submitting: false, deliveryUnknown: !(error instanceof ClientError && error.kind === 'rpc') });
         this.failure(epoch, error);
       }
-      throw error; // Never retry a prompt: an absent acknowledgement does not mean non-delivery.
+      throw error;
     }
   }
   interrupt(): Promise<void> {
@@ -254,7 +254,7 @@ export class NativeSession {
       this.valid(epoch);
       await this.gateway.call('session.interrupt', { session_id: runtimeId });
       this.valid(epoch);
-      await this.refresh(); // The acknowledgement alone is NOT evidence of an idle agent.
+      await this.refresh();
     })().finally(() => {
       if (this.interruption?.epoch === epoch) this.interruption = undefined;
       if (this.epoch === epoch) this.publish({ interrupting: false });
@@ -271,11 +271,10 @@ export class NativeSession {
     if (!runtimeId || !input || this.state.interrupting)
       throw new ClientError('disconnected', 'No active agent request');
     const rpc = inputRpc(input, { value, questionId }, runtimeId);
-    value = ''; // Do not retain a reply in a view model or a generic composer draft.
+    value = '';
     this.activity.status(key, 'sending'); ++this.revision; this.publish({});
     try {
       const pending = this.gateway.call(rpc.method, rpc.params);
-      // GatewayClient serialises synchronously. The pending RPC table stores no params/body.
       for (const field of ['password', 'value', 'answer']) delete rpc.params[field];
       const result = await pending;
       this.valid(epoch);
@@ -290,7 +289,6 @@ export class NativeSession {
           error instanceof ClientError && error.rpcCode === 4009 ? 'expired' : 'unknown');
         this.publish({});
       }
-      // Expiry, rejection and lost acknowledgements are never converted into a second send.
       throw error instanceof ClientError ? error : new ClientError('protocol', 'Agent response failed');
     } finally {
       for (const field of ['password', 'value', 'answer']) delete rpc.params[field];

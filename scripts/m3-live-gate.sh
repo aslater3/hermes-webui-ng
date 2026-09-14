@@ -22,9 +22,8 @@ cleanup() {
   docker logs webui-m3 2>/dev/null | tail -n 8 || true
   docker rm -f webui-m3 >/dev/null 2>&1 || true
   if [ -n "$hermes_pid" ]; then sudo kill "$hermes_pid" 2>/dev/null || true; fi
-  if [ "$created" = true ]; then sudo pkill -u "$account" || true; sudo rm -f /etc/sudoers.d/hermes-m3-fixture; sudo userdel "$account" || true; fi
+  if [ "$created" = true ]; then sudo pkill -u "$account" || true; for attempt in $(seq 1 30); do if ! pgrep -u "$account" >/dev/null; then break; fi; sleep 0.1; done; sudo pkill -KILL -u "$account" || true; if [ -n "$hermes_pid" ]; then wait "$hermes_pid" 2>/dev/null || true; fi; sudo rm -f /etc/sudoers.d/hermes-m3-fixture; sudo userdel "$account" || true; fi
   if [ -n "$provider_pid" ]; then kill "$provider_pid" 2>/dev/null || true; wait "$provider_pid" 2>/dev/null || true; fi
-  # This path is created above, not supplied by the operator.
   sudo rm -rf -- "$lab"
   exit "$result"
 }
@@ -39,7 +38,6 @@ printf 'only a disposable fixture\n' > "$lab/allow-target/canary"
 printf 'only a disposable fixture\n' > "$lab/deny-target/canary"
 printf 'only a disposable fixture\n' > "$lab/expire-target/canary"
 sudo chown -R "$account:$account" "$lab"; sudo chmod 0755 "$lab"
-# Permit the disposable user to traverse the CI toolchain without modifying upstream source.
 for target in "$hermes" "$(readlink -f upstream/.venv/bin/python)"; do
   dir="$(dirname "$target")"; while [ "$dir" != / ]; do sudo chmod o+x "$dir"; dir="$(dirname "$dir")"; done
 done
