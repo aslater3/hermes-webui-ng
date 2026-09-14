@@ -1,0 +1,14 @@
+/* Saved tool summaries remain compact and distinct from assistant replies. */
+.history-tool { margin-block: 10px; }
+.history-tool details, .history-reasoning { border: 1px solid var(--border); border-radius: 10px; min-width: 0; }
+.history-tool summary, .history-reasoning summary { cursor: pointer; min-height: 48px; padding: 12px 14px; line-height: 1.5; overflow-wrap: anywhere; color: var(--muted); }
+.history-tool summary svg, .history-reasoning summary svg { vertical-align: middle; margin-right: 8px; }
+.history-tool summary strong { color: var(--text); font-weight: 600; }
+.history-tool summary span { margin-left: 12px; font-size: 12px; }
+.history-tool pre, .history-reasoning pre { margin: 0; padding: 0 14px 14px; max-height: 22rem; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 13px; }
+.history-reasoning { margin-bottom: 14px; }
+.history-tool .small { padding-inline: 14px; }
+@media (max-width: 430px) {
+  .history-tool summary span { display: block; margin-left: 0; margin-top: 3px; }
+  .history-tool pre, .history-reasoning pre { max-height: 40dvh; }
+}

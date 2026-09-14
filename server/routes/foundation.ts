@@ -2,7 +2,8 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { Config } from '../config.js';
 import { json } from '../proxy/hermes-proxy.js';
 
-const WEBUI = { version: '0.0.1', phase: 1, protocol: 'hermes-gateway-v1' };
+export const PUBLIC_BUILD = { version: '0.0.1', phase: 4, milestone: '4B', protocol: 'hermes-gateway-v1' } as const;
+const WEBUI = PUBLIC_BUILD;
 /** Only public, non-user-specific metadata may cross these unauthenticated endpoints. */
 export function foundationRoutes(config: Config) {
   let cached: { expires: number; value: Promise<unknown> } | undefined;

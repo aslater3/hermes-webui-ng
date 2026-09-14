@@ -1,24 +1,15 @@
-import { Suspense, lazy, memo, useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { ArrowDown, ArrowUp, ArrowUpRight, Check, Copy, Code2, Compass, Layers3, ListChecks, LoaderCircle, Square, Wrench } from 'lucide-react';
+import { HermesMark } from './HermesMark.js';
+import { AgentControls } from './AgentControls.js';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { ArrowDown, ArrowUp, ArrowUpRight, Code2, Compass, ListChecks, LoaderCircle, Square, Wrench } from 'lucide-react';
 import type { AppRuntime } from './runtime.js';
 import type { NativeSession } from '../src/hermes/native-session.js';
 import { AgentView } from '../src/hermes/agent-view.js';
 import { draftKey } from '../src/hermes/chat-controller.js';
 import { enterSends } from '../src/hermes/chat-behaviour.js';
 import { Notice } from './primitives.js';
-import { HermesMark } from './HermesMark.js';
-const Markdown = lazy(() => import('./Markdown.js'));
+import { HistoryMessage as Message } from './HistoryMessage.js';
 
-const Message = memo(function Message({ role, text, truncated = false }: { role: string; text: string; truncated?: boolean }) {
-  const [copied, setCopied] = useState(false), [note, setNote] = useState('');
-  const user = role === 'user';
-  return <article className={`message message-${user ? 'user' : 'assistant'}`} data-role={role}>
-    <div className="message-label">{!user && <span className="assistant-mark"><HermesMark size={15}/></span>}<span>{user ? 'You' : role === 'assistant' ? 'Hermes' : role}</span></div>
-    <div className="message-content">{user ? <div className="user-text">{text}</div> : <Suspense fallback={<pre className="plain-message">{text}</pre>}><Markdown text={text}/></Suspense>}</div>
-    {truncated && <p className="muted small">This message reached the display limit.</p>}
-    {!user && <div className="message-actions"><button aria-label="Copy message" title="Copy message" onClick={() => { if (!navigator.clipboard) { setNote('Select the message to copy.'); return; } void navigator.clipboard.writeText(text).then(() => { setCopied(true); setNote('Message copied.'); }).catch(() => setNote('Select the message to copy.')); }}>{copied ? <Check size={14}/> : <Copy size={14}/>}</button><span className="sr-only" role="status">{note}</span></div>}
-  </article>;
-});
 function Activity({ owner, enabled, historical, revision }: { owner: NativeSession; enabled: boolean; historical: boolean; revision: number }) {
   const root = useRef<HTMLElement>(null), view = useRef<AgentView | null>(null);
   useLayoutEffect(() => { const renderer = new AgentView(root.current!); view.current = renderer; return () => { renderer.dispose(); root.current?.replaceChildren(); view.current = null; }; }, []);
@@ -40,7 +31,7 @@ export function Conversation({ runtime: rt, revision }: { runtime: AppRuntime; r
   const following = useRef(true), [unread, setUnread] = useState(false), [draft, setDraft] = useState(chat.draft);
   const scope = `${draftKey(chat.selected)}:${historical ? saved.page?.offset ?? 0 : 'live'}`;
   const busy = ['running', 'waiting'].includes(state.phase), loading = chat.busy || state.phase === 'attaching';
-  const writable = rt.ready && !loading && !historical && (!chat.selected || state.phase === 'idle');
+  const writable = rt.ready && !chat.native.settings.state.busy && chat.native.settings.state.outcome !== 'unknown' && !chat.native.settings.state.confirmation && !loading && !historical && (!chat.selected || state.phase === 'idle');
   const pending = chat.native.activity.state.inputs.filter(input => ['pending', 'sending'].includes(input.status)).length;
   const error = chat.error?.message || state.error?.message || saved.error?.message;
   const empty = !messages.length && !streaming && !busy && !loading && !error;
@@ -74,9 +65,9 @@ export function Conversation({ runtime: rt, revision }: { runtime: AppRuntime; r
       {state.deliveryUnknown && <Notice>Delivery was not confirmed. Check the recovered conversation before resending. Nothing has been replayed.</Notice>}
       {empty && <div className="welcome"><div className="welcome-mark"><HermesMark size={30}/></div><p className="eyebrow">A SPACE FOR YOUR NEXT IDEA</p><h1>What are we working on?</h1><p>Think it through. Build it out. Make it happen with Hermes.</p><div className="welcome-suggestions">{starters.map(({ icon: Icon, title, subtitle, draft }) => <button key={title} onClick={() => useStarter(draft)} disabled={!writable} title={`Use “${title}” as a draft`}><Icon size={19}/><span><strong>{title}</strong><small>{subtitle}</small></span><ArrowUpRight size={15}/></button>)}</div></div>}
       {loading && <div className="loading-conversation" role="status"><LoaderCircle size={19} className="spin"/>Opening your conversation…</div>}
-      {messages.slice(0, activityAt).map((message, index) => <Message key={`${scope}:${index}`} role={message.role} text={message.text} truncated={message.truncated}/>)}
+      {messages.slice(0, activityAt).map((message, index) => <Message key={`${scope}:${index}`} {...message}/>)}
       <Activity owner={chat.native} enabled={rt.ready && !loading} historical={snapshot} revision={revision}/>
-      {messages.slice(activityAt).map((message, index) => <Message key={`${scope}:${activityAt + index}`} role={message.role} text={message.text} truncated={message.truncated}/>)}
+      {messages.slice(activityAt).map((message, index) => <Message key={`${scope}:${activityAt + index}`} {...message}/>)}
       {streaming && <div className="message message-assistant streaming"><div className="message-label"><span className="assistant-mark"><HermesMark size={15}/></span>Hermes <span className="working-label">Working</span></div><pre className="plain-message">{streaming}<span className="stream-cursor"/></pre></div>}
       {busy && !streaming && !pending && <div className="thinking-indicator" role="status"><span/><span/><span/>Hermes is working</div>}
       {state.phase === 'waiting' && !pending && <Notice>Hermes is waiting for input, but no recoverable request is available. Refresh or use the original client.</Notice>}
@@ -89,7 +80,7 @@ export function Conversation({ runtime: rt, revision }: { runtime: AppRuntime; r
         <label className="sr-only" htmlFor="shell-prompt">Message Hermes</label>
         <textarea id="shell-prompt" ref={composer} rows={2} placeholder={historical ? 'Return to latest to continue this conversation' : !rt.ready ? 'Connect to Hermes to send a message' : 'Message Hermes…'} value={draft} maxLength={32768} disabled={!writable} onChange={event => { setDraft(event.target.value); rt.chat.setDraft(event.target.value); }}
           onKeyDown={event => { if (enterSends(event.nativeEvent, navigator.maxTouchPoints > 0 || matchMedia('(pointer:coarse)').matches)) { event.preventDefault(); send(); } }}/>
-        <div className="composer-toolbar"><span className="profile-label" title="Conversation owner profile"><Layers3 size={14}/>{chat.selected?.profile || 'default'}<span className="native-label">Native agent</span></span>
+        <div className="composer-toolbar"><AgentControls runtime={rt}/>
           <div className="composer-right">{draft.length > 30000 && <span className="small muted">{draft.length.toLocaleString()} / 32,768</span>}{busy ? <button type="button" className="send-button stop-button" aria-label="Stop response" title="Stop response" disabled={!rt.ready || !!state.submitting || !!state.interrupting} onClick={() => rt.run(() => chat.interrupt())}>{state.interrupting ? <LoaderCircle size={18} className="spin"/> : <Square size={15} fill="currentColor"/>}</button> : <button type="submit" className="send-button" aria-label="Send message" title="Send message" disabled={!writable || !draft.trim()}><ArrowUp size={20}/></button>}</div>
         </div>
       </form><div className="composer-caption"><span>Your conversations stay in Hermes.</span><span className="desktop-hint">Enter to send · Shift + Enter for a new line</span></div>

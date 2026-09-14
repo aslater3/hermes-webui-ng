@@ -7,6 +7,7 @@ export const EXPECTED_RESPONSE = 'HERMES_WEBUI_NG_PHASE0_OK';
 export async function startProvider(port = 0, holdMs = 5000) {
   let completions = 0;
   let activeHolds = 0;
+  const selections: { model: string; effort?: string }[] = [];
   const timers = new Set<ReturnType<typeof setTimeout>>();
   const server = createServer((req, res) => {
     const json = (status: number, body: unknown) => {
@@ -14,11 +15,11 @@ export async function startProvider(port = 0, holdMs = 5000) {
       res.end(JSON.stringify(body));
     };
     if (req.method === 'GET' && req.url === '/health') {
-      json(200, { completions, activeHolds });
+      json(200, { completions, activeHolds, selections });
       return;
     }
     if (req.method === 'GET' && req.url === '/v1/models') {
-      json(200, { object: 'list', data: [{ id: 'phase0-fixture', object: 'model', owned_by: 'test' }] });
+      json(200, { object: 'list', data: ['phase0-fixture', 'phase0-fixture-alternate'].map(id => ({ id, object: 'model', owned_by: 'test' })) });
       return;
     }
     if (req.method !== 'POST' || req.url !== '/v1/chat/completions') {
@@ -46,6 +47,12 @@ export async function startProvider(port = 0, holdMs = 5000) {
         }
         const call = phase3Tool(body.messages, 'tools' in body ? body.tools : undefined);
         completions++;
+        if ('model' in body && typeof body.model === 'string' && /^phase0-fixture(?:-alternate)?$/.test(body.model)) {
+          const effort = 'reasoning_effort' in body && typeof body.reasoning_effort === 'string' &&
+            /^(none|minimal|low|medium|high|xhigh|max|ultra)$/.test(body.reasoning_effort) ? body.reasoning_effort : undefined;
+          selections.push({ model: body.model, ...(effort ? { effort } : {}) });
+          if (selections.length > 32) selections.shift();
+        }
         const latest = [...body.messages].reverse().find((message: unknown) =>
           typeof message === 'object' && message !== null && 'role' in message && message.role === 'user');
         const hold = latest && typeof latest.content === 'string' && latest.content.includes('PHASE2_HOLD_');
@@ -54,7 +61,7 @@ export async function startProvider(port = 0, holdMs = 5000) {
         const common = {
           id: `chatcmpl-${randomUUID()}`,
           created: Math.floor(Date.now() / 1000),
-          model: 'phase0-fixture',
+          model: 'model' in body && typeof body.model === 'string' ? body.model : 'phase0-fixture',
         };
         const usage = { prompt_tokens: 20, completion_tokens: 8, total_tokens: 28 };
         if ('stream' in body && body.stream === true) {

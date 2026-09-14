@@ -13,8 +13,9 @@ const KINDS = ['auth-required', 'forbidden', 'network', 'timeout', 'protocol', '
 const METHODS = [
   'gateway.ping', 'session.create', 'session.resume', 'session.activate',
   'session.history', 'session.interrupt', 'prompt.submit',
+  'model.options', 'profiles.list', 'config.get', 'config.set',
 ];
-const ROUTES = ['status', 'providers', 'identity', 'ticket', 'login', 'logout', 'schema', 'capabilities', 'sessions', 'sessionSearch', 'sessionHistory'];
+const ROUTES = ['access', 'status', 'providers', 'identity', 'ticket', 'login', 'logout', 'schema', 'capabilities', 'sessions', 'sessionSearch', 'sessionHistory'];
 export interface DiagnosticEntry {
   at: number;
   event: (typeof EVENTS)[number];

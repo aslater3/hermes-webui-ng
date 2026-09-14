@@ -33,6 +33,7 @@ test('public capability/diagnostic API exposes only allowlisted metadata, never 
   assert.equal(data.gateway.status, 'browser-not-probed');
   assert.deepEqual(data.workspace, { available: false, writable: false, git: false });
   assert.equal(data.features.pwa, false);
+  assert.equal(data.webui.phase, 4); assert.equal(data.webui.milestone, '4B');
   await Promise.all([read('/api/webui/capabilities'), read('/api/webui/capabilities')]);
   assert.equal(requests, 1, 'public probes are coalesced and briefly cached');
   assert.equal(JSON.stringify([data, await read('/api/webui/diagnostics')]).includes('private'), false);

@@ -2,6 +2,7 @@
 import { createServer } from 'node:http';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { WebSocketServer, type WebSocket } from 'ws';
+import { ModelScenarios } from './model-scenarios.js';
 import { AgentScenarios } from './agent-scenarios.js';
 import { WS_PROTOCOL } from '../../src/hermes/dashboard-client.js';
 
@@ -9,6 +10,7 @@ export async function startFixture(port = 0, options: { sessionToken?: string } 
   const cookie = `fixture_auth=${randomBytes(24).toString('hex')}`;
   const tickets = new Set<string>();
   const interactions = new AgentScenarios();
+  const models = new ModelScenarios();
   const validCookies = new Set([cookie]);
   const sessions = new Map<string, { key: string; messages: {role:string; text:string}[]; running: boolean; profile: string; updated: number; turn: number; inflight: string }>();
   const metrics = { tickets: 0, creates: 0, submits: 0, upgrades: 0 };
@@ -99,22 +101,25 @@ export async function startFixture(port = 0, options: { sessionToken?: string } 
       const request = JSON.parse(raw.toString()); const { id, method, params = {} } = request;
       const reply = (result: unknown) => client.send(JSON.stringify({ jsonrpc: '2.0', id, result }));
       const error = () => client.send(JSON.stringify({ jsonrpc: '2.0', id, error: { code: 4001, message: 'Not found' } }));
+      if (models.handle(method, params, reply, error, event)) return;
       if (method === 'gateway.ping') { reply({ ok: true }); return; }
       if (method === 'session.create') {
         const sid = randomUUID(); const key = randomUUID(); metrics.creates++;
-        sessions.set(sid, { key, messages: [], running: false, profile: typeof params.profile === 'string' ? params.profile : 'default', updated: Date.now()/1000, turn: 0, inflight: '' }); reply({ session_id: sid, stored_session_id: key, info: { profile_name: sessions.get(sid)!.profile } }); return;
+        models.create(sid, typeof params.profile === 'string' ? params.profile : 'default');
+        sessions.set(sid, { key, messages: [], running: false, profile: typeof params.profile === 'string' ? params.profile : 'default', updated: Date.now()/1000, turn: 0, inflight: '' }); reply({ session_id: sid, stored_session_id: key, info: models.info(sid) }); return;
       }
       if (method === 'session.resume') {
         const entry = [...sessions].find(([, session]) => session.key === params.session_id);
         if (!entry || (params.profile && entry[1].profile !== params.profile)) { error(); return; }
-        reply({ session_id: entry[0], session_key: entry[1].key, info: { profile_name: entry[1].profile } }); return;
+        if (!('model' in models.info(entry[0]))) models.create(entry[0], entry[1].profile);
+        reply({ session_id: entry[0], session_key: entry[1].key, info: { ...models.info(entry[0]), profile_name: entry[1].profile } }); return;
       }
       const session = sessions.get(params.session_id);
       if (!session) { error(); return; }
       const emitAgent = (type:string,payload:unknown) => {if(client.readyState===1)event(type,params.session_id,payload);};
       if(interactions.respond(params.session_id,method,params,reply))return;
       if (method === 'session.history') { reply({ messages: session.messages }); return; }
-      if (method === 'session.activate') { reply({ running: session.running, status: session.running ? 'working' : 'idle', inflight: { assistant: session.inflight },...interactions.snapshot(params.session_id,emitAgent) }); return; }
+      if (method === 'session.activate') { reply({ info: models.info(String(params.session_id)), running: session.running, status: session.running ? 'working' : 'idle', inflight: { assistant: session.inflight },...interactions.snapshot(params.session_id,emitAgent) }); return; }
       if (method === 'session.interrupt') { interactions.interrupt(params.session_id); session.turn++; session.running = false; session.inflight = ''; reply({ ok: true }); event('session.info', params.session_id, { running:false }); return; }
       if (method === 'prompt.submit') {
         if (session.running) { error(); return; }
