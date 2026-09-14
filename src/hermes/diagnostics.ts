@@ -14,6 +14,7 @@ const METHODS = [
   'gateway.ping', 'session.create', 'session.resume', 'session.activate',
   'session.history', 'session.interrupt', 'prompt.submit',
   'model.options', 'profiles.list', 'config.get', 'config.set',
+  'session.active_list', 'approval.pending', 'approval.respond', 'clarify.respond', 'sudo.respond', 'secret.respond',
 ];
 const ROUTES = ['access', 'status', 'providers', 'identity', 'ticket', 'login', 'logout', 'schema', 'capabilities', 'sessions', 'sessionSearch', 'sessionHistory'];
 export interface DiagnosticEntry {
