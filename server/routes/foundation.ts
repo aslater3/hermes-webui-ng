@@ -61,7 +61,7 @@ export function foundationRoutes(config: Config) {
     void capabilities().then((hermes) => {
       if (!res.destroyed) json(res, 200, { schemaVersion: 1, webui: WEBUI, hermes,
         gateway: { status: 'browser-not-probed' },
-        workspace: { available: !!config.workspaceRoots?.length, writable: false, git: false },
+        workspace: { available: !!config.workspaceRoots?.length, writable: false, git: !!config.gitEnabled && !!config.workspaceRoots?.length },
         features: { nativeChatDiagnostic: true, diagnostics: true, pwa: true },
       });
     });

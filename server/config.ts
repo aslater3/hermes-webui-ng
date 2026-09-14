@@ -7,6 +7,7 @@ export const PROXY_PREFIX = '/__hermes';
 export interface Config {
   tls?: TlsFiles;
   workspaceRoots?: WorkspaceRoot[];
+  gitEnabled?: boolean;
   authMode?: 'dashboard' | 'trusted-local';
   readonly sessionToken?: string;
   upstream: URL;
@@ -48,11 +49,11 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   })) {
     if (env[key] && env[key] !== allowed) throw new Error(`${key} is not supported by this read-only build`);
   }
-  if (env.TRUST_PROXY || (env.GIT_ENABLED && env.GIT_ENABLED !== 'false')) {
-    throw new Error('Git and client-supplied proxy trust are not enabled in this build');
-  }
+  if (env.TRUST_PROXY) throw new Error('Client-supplied proxy trust is not enabled');
+  if (env.GIT_ENABLED && !['true', 'false'].includes(env.GIT_ENABLED)) throw new Error('GIT_ENABLED must be true or false');
   const config: Config = {
     workspaceRoots: workspaceRoots(env.WORKSPACE_ROOTS),
+    gitEnabled: env.GIT_ENABLED === 'true',
     upstream: origin(env.HERMES_DASHBOARD_URL, 'HERMES_DASHBOARD_URL'),
     publicOrigin: origin(env.PUBLIC_ORIGIN, 'PUBLIC_ORIGIN'),
     host: env.HOST ?? '0.0.0.0',

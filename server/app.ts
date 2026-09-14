@@ -116,6 +116,7 @@ export function createApp(config: Config, log: Log = (event) => console.log(JSON
   return {
     server,
     close: async () => {
+      await workspace.close();
       for (const socket of sockets) socket.destroy();
       server.closeAllConnections();
       await new Promise<void>((resolve) => server.close(() => resolve()));

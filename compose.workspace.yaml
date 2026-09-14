@@ -1,0 +1,16 @@
+# Optional read-only project mount. Combine with ONE base (compose.yaml OR compose.host.yaml).
+# Set WORKSPACE_HOST_PATH to an existing dedicated project folder, never a home/Hermes directory.
+services:
+  webui:
+    volumes:
+      - type: bind
+        source: ${WORKSPACE_HOST_PATH:?Set an existing dedicated project directory}
+        target: /workspace
+        read_only: true
+        bind:
+          create_host_path: false
+    environment:
+      WORKSPACE_ROOTS: /workspace
+      WORKSPACE_WRITE_ENABLED: 'false'
+      GIT_ENABLED: ${GIT_ENABLED:-true}
+      GIT_WRITE_ENABLED: 'false'

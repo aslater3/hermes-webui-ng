@@ -1,3 +1,4 @@
+import { WorkspaceGit } from '../workspace/git.js';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { pipeline } from 'node:stream/promises';
 import { basename } from 'node:path';
@@ -9,15 +10,16 @@ import { FILE_LIMITS, openWorkspacePath, preview, tree, WorkspaceError } from '.
 /** Cookie-scoped alias is LOCAL, reserved before the Hermes proxy; see ADR-022. */
 export const WORKSPACE_ALIAS = '/__hermes/webui-local/';
 export function workspaceRoutes(config: Config) {
+  const git = new WorkspaceGit();
   let inflight = 0;
   const rates = new Map<string, { count: number; until: number }>();
-  return (req: IncomingMessage, res: ServerResponse): boolean => {
+  const handler = (req: IncomingMessage, res: ServerResponse): boolean => {
     const raw = req.url ?? '';
     const scoped = raw.startsWith(WORKSPACE_ALIAS);
-    const canonical = raw.startsWith('/api/webui/files/') || raw.split('?')[0] === '/api/webui/workspaces';
+    const canonical = (raw.startsWith('/api/webui/files/') || raw.startsWith('/api/webui/git/')) || raw.split('?')[0] === '/api/webui/workspaces';
     if (!scoped && !canonical) return false;
     const route = raw.slice(scoped ? WORKSPACE_ALIAS.length : '/api/webui/'.length).split('?')[0];
-    if (!['workspaces', 'files/tree', 'files/read', 'files/download'].includes(route ?? '')) {
+    if (!['workspaces', 'files/tree', 'files/read', 'files/download', 'git/repos', 'git/status', 'git/diff'].includes(route ?? '')) {
       json(res, 404, { error: { code: 'WORKSPACE_ROUTE_UNAVAILABLE' } }); return true;
     }
     if (req.method !== 'GET') { json(res, 405, { error: { code: 'WORKSPACE_READ_ONLY' } }); return true; }
@@ -36,15 +38,22 @@ export function workspaceRoutes(config: Config) {
         if (res.destroyed) return;
         if (refreshedCookies.length) res.setHeader('Set-Cookie', refreshedCookies);
         const params = new URL(raw, config.publicOrigin).searchParams;
-        const allowed = route === 'workspaces' ? [] : ['root', 'path', ...(route === 'files/tree' ? ['offset'] : [])];
+        const allowed = route === 'workspaces' ? [] : route === 'git/status' ? ['root', 'repo'] : route === 'git/diff' ? ['root', 'repo', 'path', 'staged'] : ['root', 'path', ...(route === 'files/tree' ? ['offset'] : [])];
         for (const key of params.keys()) if (!allowed.includes(key) || params.getAll(key).length !== 1) throw new WorkspaceError('WORKSPACE_INVALID_QUERY');
         const roots = config.workspaceRoots ?? [];
         if (route === 'workspaces') {
-          json(res, 200, { roots: roots.map(({ id, label }) => ({ id, label, writable: false })), git: false, limits: FILE_LIMITS }); return;
+          json(res, 200, { roots: roots.map(({ id, label }) => ({ id, label, writable: false })), git: !!config.gitEnabled && !!roots.length, limits: FILE_LIMITS }); return;
         }
         const root = roots.find(item => item.id === params.get('root'));
         if (!root) throw new WorkspaceError('WORKSPACE_ROOT_UNAVAILABLE', 404);
         const path = params.get('path') ?? '';
+        if (route?.startsWith('git/')) {
+          if (!config.gitEnabled) throw new WorkspaceError('GIT_DISABLED', 404);
+          const staged = params.get('staged') ?? 'false';
+          if (!['true', 'false'].includes(staged)) throw new WorkspaceError('WORKSPACE_INVALID_QUERY');
+          const action = route.slice(4) as 'repos' | 'status' | 'diff';
+          json(res, 200, await git.read(root, action === 'repos' ? path : params.get('repo') ?? '', action, path, staged === 'true')); return;
+        }
         if (route === 'files/tree') {
           const offset = params.get('offset') ?? '0';
           if (!/^\d{1,4}$/.test(offset)) throw new WorkspaceError('WORKSPACE_INVALID_PAGE');
@@ -71,4 +80,5 @@ export function workspaceRoutes(config: Config) {
     })();
     return true;
   };
+  return Object.assign(handler, { close: () => git.close() });
 }
