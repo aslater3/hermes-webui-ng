@@ -1,6 +1,8 @@
 import { test, expect } from '@playwright/test';
 import { login, send } from './shell-fixture.js';
 
+test.use({ baseURL: 'http://127.0.0.1:8787' });
+
 test('approval is visually prominent and explains the Hermes expiry boundary', async ({ page }, info) => {
   await login(page);
   await send(page, `[agent-test] approval prominence ${info.project.name}`);
