@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#101513">
+  <meta name="color-scheme" content="dark">
+  <meta name="description" content="HermesUI NG is a modern, standalone web interface for vanilla Hermes Agent: native conversations, tools, approvals, model controls, PWA and diagnostics without a second agent runtime.">
+  <meta property="og:title" content="HermesUI NG — Hermes in the browser, without another agent in the middle">
+  <meta property="og:description" content="A chat-first, Hermes-native web interface for vanilla Hermes Agent.">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://aslater3.github.io/hermes-webui-ng/">
+  <meta property="og:image" content="https://raw.githubusercontent.com/aslater3/hermes-webui-ng/main/docs/assets/hermesui-ng-hero.jpg">
+  <meta name="twitter:card" content="summary_large_image">
+  <link rel="canonical" href="https://aslater3.github.io/hermes-webui-ng/">
+  <link rel="preconnect" href="https://raw.githubusercontent.com">
+  <link rel="icon" href="https://raw.githubusercontent.com/aslater3/hermes-webui-ng/main/client/hermes-mark.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="./styles.css">
+  <title>HermesUI NG — Modern web UI for Hermes Agent</title>
+</head>
+<body>
+  <div class="site-noise" aria-hidden="true"></div>
+  <header class="site-header">
+    <a class="wordmark" href="#top" aria-label="HermesUI NG home">
+      <span class="mark"><img src="https://raw.githubusercontent.com/aslater3/hermes-webui-ng/main/client/hermes-mark.svg" alt=""></span>
+      <span>HermesUI</span><small>NG</small>
+    </a>
+    <nav aria-label="Primary navigation">
+      <a href="#why">Why</a>
+      <a href="#experience">Interface</a>
+      <a href="#capabilities">Capabilities</a>
+      <a href="#architecture">Architecture</a>
+    </nav>
+    <a class="nav-cta" href="https://github.com/aslater3/hermes-webui-ng">GitHub <span aria-hidden="true">↗</span></a>
+  </header>
+
+  <main id="top">
+    <section class="hero section-shell">
+      <div class="hero-copy" data-reveal>
+        <div class="status-line"><span></span> Open source · self-hosted · Hermes-native</div>
+        <h1>Hermes in the browser.<br><em>No second agent in the middle.</em></h1>
+        <p class="lede">HermesUI NG is a modern, standalone interface for vanilla Hermes Agent. Native conversations, tools, approvals, model controls and diagnostics — while Hermes remains the source of truth.</p>
+        <div class="hero-actions">
+          <a class="button primary" href="https://github.com/aslater3/hermes-webui-ng">View on GitHub <span>↗</span></a>
+          <a class="button secondary" href="#experience">See the interface</a>
+        </div>
+        <div class="hero-proof" aria-label="Product qualities">
+          <span>React 19</span><span>Native Gateway RPC</span><span>HTTPS / WSS</span><span>Installable PWA</span>
+        </div>
+      </div>
+
+      <div class="hero-visual" data-reveal>
+        <div class="orb orb-a"></div><div class="orb orb-b"></div>
+        <div class="hero-window">
+          <div class="window-label"><span class="window-dot"></span> CURRENT UI · DARK</div>
+          <img src="./screenshots/conversation.svg" alt="HermesUI NG desktop conversation showing session history, native tool activity and the message composer">
+        </div>
+        <div class="float-card float-native"><strong>HERMES NATIVE</strong><span>One runtime. One source of truth.</span></div>
+        <div class="float-card float-state"><span class="pulse"></span><strong>CONNECTED</strong><span>Native Gateway</span></div>
+      </div>
+    </section>
+
+    <div class="ticker" aria-hidden="true"><div>CONVERSATIONS <b>✦</b> TOOLS <b>✦</b> APPROVALS <b>✦</b> MODELS <b>✦</b> REASONING <b>✦</b> PWA <b>✦</b> MOBILE <b>✦</b> DIAGNOSTICS <b>✦</b> HERMES NATIVE <b>✦</b></div></div>
+
+    <section class="section-shell section" id="why">
+      <div class="section-heading" data-reveal>
+        <p class="eyebrow">WHY ANOTHER WEB UI?</p>
+        <h2>Because the UI should not quietly become your agent.</h2>
+        <p>Many AI web interfaces are designed to own the runtime, conversation database and tool policy. HermesUI NG takes the opposite approach: it is a browser client for Hermes, not a replacement for Hermes.</p>
+      </div>
+      <div class="principles" data-reveal>
+        <article><span>01</span><h3>No shadow runtime</h3><p>Prompts run through Hermes. The browser does not embed a second agent loop or reinterpret the conversation behind your back.</p></article>
+        <article><span>02</span><h3>No shadow history</h3><p>Durable conversation state stays in Hermes, so CLI, TUI, automation and the web interface can converge on the same authoritative sessions.</p></article>
+        <article><span>03</span><h3>No fake tool layer</h3><p>Reasoning, tool activity and human-input requests are projections of native Hermes Gateway events and RPCs.</p></article>
+      </div>
+
+      <div class="comparison" data-reveal>
+        <div class="comparison-head"><div></div><strong>HermesUI NG</strong><span>Generic agent-first WebUI</span></div>
+        <div><span>Agent runtime</span><strong>Hermes owns it</strong><span>Often UI-owned or adapted</span></div>
+        <div><span>Conversation state</span><strong>Native Hermes sessions</strong><span>Often duplicated locally</span></div>
+        <div><span>Tool / approval flow</span><strong>Native Gateway semantics</strong><span>Usually translated by an adapter</span></div>
+        <div><span>Reconnect behaviour</span><strong>No automatic prompt / secret replay</strong><span>Implementation-dependent</span></div>
+        <div><span>Deployment model</span><strong>Standalone beside vanilla Hermes</strong><span>Often a bundled platform</span></div>
+      </div>
+    </section>
+
+    <section class="section showcase" id="experience">
+      <div class="section-shell">
+        <div class="section-heading split-heading" data-reveal>
+          <div><p class="eyebrow">THE INTERFACE</p><h2>Built around the work, not the chrome.</h2></div>
+          <p>A compact desktop shell, responsive mobile experience and first-class interaction states. The visuals below use the current HermesUI NG palette and safe synthetic data.</p>
+        </div>
+        <figure class="showcase-main" data-reveal>
+          <img src="./screenshots/conversation.svg" alt="Desktop HermesUI NG conversation view with recent conversations, assistant response and native tool activity">
+          <figcaption><strong>Chat first.</strong> Session switching, streaming output, model/reasoning controls and tool activity stay in one focused workspace.</figcaption>
+        </figure>
+        <div class="showcase-grid">
+          <figure data-reveal><div class="shot-frame warning-frame"><img src="./screenshots/approval.svg" alt="HermesUI NG permission request showing a prominent warning card with Allow once and Deny actions"></div><figcaption><strong>Blocking requests look blocking.</strong> Permission requests surface in-context with a dedicated attention state rather than disappearing into a log.</figcaption></figure>
+          <figure data-reveal><div class="shot-frame mobile-frame"><img src="./screenshots/mobile.svg" alt="HermesUI NG responsive mobile conversation view"></div><figcaption><strong>The same Hermes, on mobile.</strong> Responsive controls, mobile conversation navigation and installable PWA behaviour without a separate mobile backend.</figcaption></figure>
+        </div>
+      </div>
+    </section>
+
+    <section class="section-shell section" id="capabilities">
+      <div class="section-heading" data-reveal><p class="eyebrow">WHAT IT DOES</p><h2>A serious operator UI for a serious agent.</h2></div>
+      <div class="feature-grid">
+        <article data-reveal><div class="feature-icon">⌁</div><h3>Native conversations</h3><p>Create, resume and switch Hermes sessions, recover authoritative history after reload, stream turns and stop generation.</p></article>
+        <article data-reveal><div class="feature-icon">◇</div><h3>Tool-aware activity</h3><p>Reasoning and tool progress live beside the conversation with expandable detail instead of becoming a separate developer console.</p></article>
+        <article data-reveal><div class="feature-icon">!</div><h3>Human approvals</h3><p>Approval, clarification, sudo and secret requests are explicit interaction states with bounded, native responses.</p></article>
+        <article data-reveal><div class="feature-icon">◫</div><h3>Model controls</h3><p>Profiles, providers, model selection and reasoning effort come from Hermes capabilities rather than hard-coded assumptions.</p></article>
+        <article data-reveal><div class="feature-icon">↯</div><h3>Installable PWA</h3><p>HTTPS/WSS, operator-owned local CA support, an offline shell and guarded application updates for trusted self-hosted deployments.</p></article>
+        <article data-reveal><div class="feature-icon">◎</div><h3>Diagnosable by design</h3><p>Readiness, connection state and bounded diagnostics are available without turning the primary interface into an operations dashboard.</p></article>
+      </div>
+    </section>
+
+    <section class="architecture section" id="architecture">
+      <div class="section-shell architecture-layout">
+        <div class="section-heading" data-reveal><p class="eyebrow">ARCHITECTURE</p><h2>Thin where it matters.</h2><p>The browser talks through a same-origin Node boundary. Hermes continues to own agent execution, native session state and the Gateway contract.</p><a class="text-link" href="https://github.com/aslater3/hermes-webui-ng/blob/main/docs/04-system-architecture.md">Read the architecture docs ↗</a></div>
+        <div class="arch-stack" data-reveal>
+          <div class="arch-node browser"><small>BROWSER</small><strong>React / TypeScript UI</strong><span>Conversation · controls · PWA</span></div>
+          <div class="arch-wire"><span>HTTPS / WSS</span></div>
+          <div class="arch-node bff"><small>HERMESUI NG</small><strong>Same-origin Node BFF</strong><span>Auth boundary · proxy · static app</span></div>
+          <div class="arch-wire"><span>REST + Gateway JSON-RPC</span></div>
+          <div class="arch-node hermes"><small>SOURCE OF TRUTH</small><strong>Vanilla Hermes Agent</strong><span>Sessions · tools · runtime · durable state</span></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section-shell section start" id="start">
+      <div class="start-card" data-reveal>
+        <div><p class="eyebrow">RUN IT YOURSELF</p><h2>Clone. Configure. Launch.</h2><p>HermesUI NG is designed to sit beside an existing Hermes Dashboard. TLS setup and trusted-local deployment options are documented in the repository.</p><div class="hero-actions"><a class="button primary" href="https://github.com/aslater3/hermes-webui-ng#quick-start">Quick start <span>↗</span></a><a class="button secondary" href="https://github.com/aslater3/hermes-webui-ng/blob/main/docs/implementation-status.md">Implementation status</a></div></div>
+        <div class="terminal" aria-label="Clone command"><div class="terminal-bar"><span></span><span></span><span></span><button type="button" data-copy-command="git clone https://github.com/aslater3/hermes-webui-ng.git">Copy</button></div><pre><span>$</span> git clone https://github.com/aslater3/hermes-webui-ng.git
+<span>$</span> cd hermes-webui-ng
+<span>$</span> cp .env.example .env
+<span>$</span> docker compose up --build -d</pre></div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer section-shell">
+    <div class="wordmark"><span class="mark"><img src="https://raw.githubusercontent.com/aslater3/hermes-webui-ng/main/client/hermes-mark.svg" alt=""></span><span>HermesUI</span><small>NG</small></div>
+    <p>Modern web interface for vanilla Hermes Agent.</p>
+    <div class="footer-links"><a href="https://github.com/aslater3/hermes-webui-ng">Repository</a><a href="https://github.com/aslater3/hermes-webui-ng/issues">Issues</a><a href="https://github.com/NousResearch/hermes-agent">Hermes Agent</a></div>
+    <small class="build-meta">Site build __BUILD_SHA__ · __BUILD_DATE__</small>
+  </footer>
+  <script type="module" src="./site.js"></script>
+</body>
+</html>
