@@ -26,7 +26,7 @@ export class AgentView {
   private readonly summary = node('p', '', 'hint');
   private readonly warning = node('p', '', 'agent-warning');
   private readonly requests = node('div', '', 'agent-requests');
-  private readonly reasoning = node('details');
+  private readonly reasoning = node('details', '', 'agent-reasoning');
   private readonly reasoningText = node('pre');
   private readonly thinking = node('p', '', 'hint');
   private readonly earlier = node('details', '', 'agent-earlier');
@@ -51,7 +51,7 @@ export class AgentView {
     this.requests.setAttribute('aria-label', 'Agent requests');
     this.earlier.append(this.earlierLabel, this.earlierBody);
     this.earlier.addEventListener('toggle', () => this.renderArchive());
-    this.root.append(heading, this.summary, this.warning, this.requests, this.thinking, this.reasoning, this.tools, this.earlier);
+    this.root.append(heading, this.summary, this.warning, this.requests, this.thinking, this.tools, this.reasoning, this.earlier);
     document.addEventListener('visibilitychange', this.visibility);
     window.addEventListener('pagehide', this.pagehide);
   }
@@ -90,7 +90,10 @@ export class AgentView {
     const liveKeys = new Set(activity.inputs.map(p => p.key));
     for (const [key, card] of this.inputs) if (!liveKeys.has(key)) { this.erase(card); card.root.remove(); this.inputs.delete(key); }
     for (const input of activity.inputs) this.input(owner, input, enabled && !historical && !owner.state.interrupting);
+    const hadReasoning = !!this.reasoningText.textContent;
     this.reasoning.hidden = !activity.reasoning; this.reasoningText.textContent = activity.reasoning;
+    if (!activity.reasoning) this.reasoning.open = false;
+    else if (!hadReasoning) this.reasoning.open = true;
     this.thinking.hidden = !activity.thinking; this.thinking.textContent = activity.thinking;
     const toolIds = new Set(activity.tools.map(t => t.id));
     for (const [id, card] of this.toolCards) if (!toolIds.has(id)) {card.root.remove();this.toolCards.delete(id);}
