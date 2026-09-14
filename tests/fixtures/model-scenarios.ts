@@ -1,8 +1,8 @@
 /** SYNTHETIC inventory/config fixture; live acceptance is separate. */
 export class ModelScenarios {
-  private sessions = new Map<string, { model: string; provider: string; reasoning_effort: string; profile_name: string }>();
+  private sessions = new Map<string, { model: string; provider: string; reasoning_effort: string; profile_name: string; yolo: boolean }>();
   create(id: string, profile = 'default'): void {
-    this.sessions.set(id, { model: profile === 'work' ? 'work-model' : 'fixture-alpha', provider: 'custom:fixture', reasoning_effort: profile === 'work' ? 'low' : 'medium', profile_name: profile });
+    this.sessions.set(id, { model: profile === 'work' ? 'work-model' : 'fixture-alpha', provider: 'custom:fixture', reasoning_effort: profile === 'work' ? 'low' : 'medium', profile_name: profile, yolo: false });
   }
   info(id: string) { return this.sessions.get(id) ?? {}; }
   handle(method: string, params: Record<string, unknown>, reply: (data: unknown) => void,
@@ -32,6 +32,10 @@ export class ModelScenarios {
     if (params.key === 'reasoning' && params.scope === 'session') {
       session.reasoning_effort = String(params.value);
       emit('session.info', id, this.info(id)); reply({ key: 'reasoning', value: params.value }); return true;
+    }
+    if (params.key === 'yolo' && params.scope === 'session' && ['0', '1'].includes(String(params.value))) {
+      session.yolo = String(params.value) === '1';
+      emit('session.info', id, this.info(id)); reply({ key: 'yolo', value: session.yolo ? '1' : '0', scope: 'session' }); return true;
     }
     error(); return true;
   }
