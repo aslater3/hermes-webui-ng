@@ -1,18 +1,19 @@
 # Phase 3 completion checklist
 
-Started 14 September 2026 from main `197b910d2e517427a4f2880f6309fd11f36cf446` at the owner's request. Preserve the accepted modern shell, native composer controls, HermesUI NG branding and both deployment modes. Each coherent change must be tested, committed, pushed and remotely verified.
+Completed 14 September 2026 through PR #6, from main `197b910d2e517427a4f2880f6309fd11f36cf446`. The modern HermesUI NG shell, branding, native composer controls and both authentication modes are preserved.
 
-Runtime baseline: `NousResearch/hermes-agent@b6b53c69a6ed49cb099cf1bfe76b5e6edd718e5a`. Upstream main inspected separately at `ef698baa2af6bd3b88d33d760e23444cc5201c6e`; inspection does not certify that runtime.
+Runtime baseline: `NousResearch/hermes-agent@b6b53c69a6ed49cb099cf1bfe76b5e6edd718e5a`. The interrupted implementation recorded a separate upstream source inspection at `ef698baa2af6bd3b88d33d760e23444cc5201c6e`; that is not a runtime certification.
 
-- [ ] Read-only native active-session attention, with stale/account/profile isolation.
-- [ ] Keep live request descriptors while changing conversations; never retain entered credentials or replay responses.
-- [ ] Bounded earlier tool/reasoning activity and authoritative saved-history fallback.
-- [ ] Exact expiry, duplicate/malformed request and unknown-response regressions.
-- [ ] Actual native approval allow/deny, sudo and secret execution in isolated CI, without Hermes imports or patched runtime.
-- [ ] Desktop, iPhone WebKit, Android and narrow viewport browser acceptance.
-- [ ] Existing chat/model/auth/diagnostic regressions and production-image smoke.
-- [ ] Retain exact CI evidence, update implementation status, merge without squash after gates pass.
+- [x] Read-only native active-session attention with stale/account/profile isolation. `session.active_list` plus bounded `approval.pending` reads, no inferred profile ownership.
+- [x] Live request descriptors survive conversation selection changes. Entered credentials are cleared; background views cannot submit responses.
+- [x] Bounded earlier tool/reasoning activity with on-demand DOM construction and authoritative saved-history fallback after reload.
+- [x] Exact expiry, duplicate/changed request identity, malformed batch acknowledgements and unknown-response regression tests.
+- [x] Real approval allow/deny/expiry, restricted sudo execution/skip and secret capture/skip against unmodified Hermes in disposable CI, in both auth modes.
+- [x] In-WebUI recovery from unrecoverable sudo/secret forms: stale response blocked, explicit interruption, then a deliberately requested fresh turn.
+- [x] Desktop Chromium, iPhone WebKit, Android Chromium and narrow-320 browser acceptance: 268 passed, none failed/skipped/flaky.
+- [x] Existing chat/model/auth/diagnostic regressions and non-root/read-only production-image smoke.
+- [x] Exact source, live and browser evidence recovered and verified; current documentation records the completed gate and limitations.
 
-No production Hermes filesystem/config/state access or second agent runtime is permitted. Tests may provision their own disposable operating-system account and external fixture skill using supported configuration/CLI, never the operator's home. Native credential recovery limitations must remain explicit and provide a safe interrupt/retry path, not fabricated pending prompts.
+Accepted code: `d1aba2263ff1660499f167c9b5faa7b63abda038`. CI merge `8b4ca4a5de64a54c9942f722d374447b4fdf5c08` has the same source tree, `a1caac4edc0c7ec4f0edbb6bd12139255d953b6a`. Permanent run IDs, artifact hashes and gate results: `evidence/phase3-completion-acceptance.json`.
 
-M3 remains OPEN until these gates are evaluated. Physical keyboards, installed PWA and later release hardening remain separate phases.
+M3 Agent Interaction Beta is accepted for this supported baseline. Physical iPhone/Android keyboards, installed PWA and release-wide security/performance certification remain later gates. The tested upstream cannot recover pending sudo/secret forms after a lost connection; this is explicitly represented, not bypassed with invented requests. The WebUI never imports Hermes, reads its state/config files or maintains a duplicate runtime/database.

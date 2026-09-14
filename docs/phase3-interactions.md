@@ -1,27 +1,50 @@
 # Phase 3 — tools, reasoning and interactive prompts
 
-Work in progress, now available on `main`. At the repository owner's request, the initial Phase 3 implementation was merged through PR #1 at `6659055bcfba6ad143037fd0e1824d8fd180ddb5` before local deployment testing. Its seven individual commits are preserved. This supersedes the earlier branch-isolation/hold instruction: Phase 2 is available historically at `daf0bbfcf704ea588003f4816e49110ef431f061`, but main contains the combined implementation. M3 remains open; merging is not acceptance sign-off.
+**M3 Agent Interaction Beta accepted, 14 September 2026, through PR #6.** This supersedes the initial partial-delivery status from PR #1. The original Phase 3 checkpoint remains in `evidence/phase3-initial-checkpoint.json`; current completion evidence is `evidence/phase3-completion-acceptance.json`.
 
-## Contract baseline
+## Native contract and user controls
 
-Runtime baseline remains `NousResearch/hermes-agent@b6b53c69a6ed49cb099cf1bfe76b5e6edd718e5a`. Current source additionally inspected at `422bc9bde9d212ab3741fbc45a871a3938436d59`; this does not certify that newer runtime.
+Supported runtime: `NousResearch/hermes-agent@b6b53c69a6ed49cb099cf1bfe76b5e6edd718e5a`. Reasoning and tool activity are projections of native Gateway events; the WebUI does not execute tools or set approval policy. Tool cards distinguish start/progress/completion, failure, duration, truncated output and unknown state. Public reasoning is separate from the final answer; untrusted content is rendered as inert text.
 
-The source contract is `tui_gateway/agent_callbacks.py`, `tool_progress.py`, `server.py`, `methods_prompt.py` and the documented native Gateway interface. Tool cards use stable `tool_id`; reasoning uses `reasoning.delta`/`reasoning.available` and thinking/activity events. All displayed payloads are untrusted and bounded.
+All input requests are keyed by the native session and request ID. Responses use only `approval.respond` (`choice`), `clarify.respond` (`answer`, optional `question_id`), `sudo.respond` (`password`) and `secret.respond` (`value`). The operator selects the owning conversation before replying.
 
-Requests are identified by both the active native session and upstream `request_id`. Responses use only the official `approval.respond` (`choice`), `clarify.respond` (`answer`, optional `question_id`), `sudo.respond` (`password`) and `secret.respond` (`value`). An RPC result with `status: expired` is not successful delivery. Approval response uses `resolved`; a false/zero result is not permission granted. No response is automatically replayed after acknowledgement loss.
+Approval exposes Allow once and Deny, restricted by the native request. Clarification supports single and multi-select questions and per-question confirmation in a batch. Password/secret fields are masked and provide a deliberate submit or skip action. Secret cards disclose that Hermes may save the value in its own credential configuration. The WebUI never writes that configuration itself.
 
-Approval choices must be restricted to those supplied by Hermes and displayed explicitly. Approval policy stays upstream. Batch clarify confirms one upstream question ID at a time and respects the server's `remaining` result; cancelling the entire request sends the supported empty answer without a question ID.
+Responses remain awaiting confirmation until the supported RPC result is validated. Expired, unsupported, malformed and unknown outcomes are not treated as successful delivery. Resolved requests cannot be revived by a duplicate event; changed details under the same request ID block confirmation. An absent or malformed acknowledgement never causes an automatic retry. Pending values are not moved into drafts, transcript records, URLs, diagnostics or browser storage.
 
-## Recovery and secrets
+## Switching conversations and attention
 
-Authoritative `session.activate` snapshots expose `pending_approval` and `pending_clarify`. The inspected baseline does not expose pending sudo/secret snapshots. Do not manufacture actionable credential prompts by replaying historical events: successful responses need not leave an expiry event. A disconnected/changed session invalidates response admission immediately; missing recovery support must be shown rather than guessed.
+The desktop sidebar and mobile Conversations drawer show active native sessions, including Working, Needs your input and New activity. `session.active_list` is read-only; a bounded `approval.pending` probe catches approval waits that upstream still classifies as working. Polling pauses when hidden/disconnected. Account and connection generations reject obsolete results.
 
-Passwords and secret values are held only in masked form controls until a deliberate submit, cleared immediately, and never copied into transcripts, generic drafts, diagnostic events, support reports or browser persistence. A secret request may cause Hermes to store the supplied value; make that upstream effect explicit before submission. The WebUI never edits Hermes files itself.
+Active-list rows do not provide a reliable profile owner. A durable ID alone is not used to infer one. Known runtime-to-profile bindings come from native session admission; an unknown active row is opened through its native runtime identity so Hermes resolves its owner.
 
-## Delivery and remaining gates
+Up to five live conversation projections are retained in a tab. Switching away drops the hidden transcript and streaming buffer but retains bounded activity/request descriptors, so a still-live request can be found and answered after returning. Background projections cannot submit input. Values already entered in credential form controls are cleared on selection changes, backgrounding, disconnect, submission and account boundaries. If the five-view limit is occupied by active/unresolved work, opening another conversation is refused with an explanation rather than silently discarding a pending request.
 
-The initial bounded projection, response admission/reconciliation, responsive input cards and synthetic coverage are implemented. Build/typecheck/lint, 92 unit tests, 12 wire contracts, 120 browser cases, image smoke and the initial real-Hermes clarification gate passed. All four PR workflows also passed at merged branch head `cbefddd`. Evidence and exact run references remain in `evidence/phase3-initial-checkpoint.json` and `implementation-status.md`.
+## Reconnect and safe recovery
 
-Still required for M3: real-Hermes approval/sudo/secret execution acceptance; broader tool-heavy and historical presentation; off-selection attention/reconciliation; further adverse-response and multi-request recovery tests; and final acceptance/review. The current tool/reasoning view is limited to the current or most-recent observed turn and selected conversation. Physical phones, real virtual keyboards and installed PWA remain separate later acceptance gates.
+`session.activate` supplies authoritative approval and clarification snapshots. These recover after reconnect, including partially answered clarification batches.
 
-Every subsequent completed increment must still be committed and pushed remotely before starting the next increment. Do not report M3 complete merely because PR #1 has been merged.
+At this pin, pending sudo/secret snapshots are not exposed. After losing admission, those old cards are deliberately non-actionable even if an old event reappears. The operator can use **Stop response**, let Hermes settle the turn, review the transcript and explicitly request a new turn for a fresh credential prompt. This flow is tested against real Hermes and requires no terminal/TUI. Interrupting does not undo tool effects that already completed; no prompt or credential is replayed automatically.
+
+This is an explicit upstream recovery boundary, not a claim that every credential request survives browser reload or a transport loss.
+
+## Bounded history and rendering
+
+The current turn keeps at most 40 tool cards and 16 request cards. Tool output/reasoning is capped at 32,768 characters and tool input at 16,384. Truncation/omission is labelled.
+
+Earlier activity retains at most six observed turns per projection, each with ten tool summaries. Archived input/output/reasoning is further capped at 8,192 characters (thinking at 2,048). Archive DOM is constructed when expanded, not eagerly for every observed turn. It contains no answer controls or credential responses. This is bounded transient presentation, not a local durable conversation database.
+
+Reload discards that live archive and obtains only the history Hermes exposes. Native saved-tool summaries, structured text and public reasoning remain supported by the shared history decoder; absent tool result bodies and encrypted reasoning are not invented. The active-session metadata view is capped at 100 rows with up to 12 working-runtime approval probes per refresh; unlimited-concurrency monitoring is not claimed.
+
+## Verification
+
+Accepted application: `d1aba2263ff1660499f167c9b5faa7b63abda038`; exact CI merge/tree and artifact hashes are in the completion evidence.
+
+- Build, server/frontend typecheck, lint, 158 unit tests and 20 HTTP/WS contracts pass.
+- 268 browser tests pass across desktop Chromium, iPhone WebKit emulation, Android Chromium and narrow-320; no failures, skips or flaky results.
+- Non-root, read-only production Docker smoke passes.
+- Unmodified Hermes passes real approval allow/deny/expiry, sudo execution/skip, secret capture/skip, live attention and lost-credential interruption in both gated and trusted-local deployments. The existing real clarification-batch gate and earlier auth/chat/model regressions also pass.
+
+Only the model endpoint is deterministic. The full-interaction harness uses a disposable CI OS account, sudo permission limited to `/usr/bin/id`, disposable approval canaries and external fixture skills configured through Hermes' supported CLI. A subsequent native skill invocation verifies stored-secret availability without reading Hermes files. No operator host or deployment is accessed.
+
+Browser tests cover the responsive UI with synthetic protocol fixtures; native acceptance separately proves runtime/tool effects through the actual container. These layers must not be conflated with physical-device/PWA certification. Phase 4 mobile/PWA, later workspace/management/voice phases, the separate upstream reasoning-setting race and release hardening remain open.
