@@ -24,7 +24,7 @@
 </p>
 
 > [!IMPORTANT]
-> **HermesUI NG is under active development.** Phases 0–3 are accepted for the supported baseline. Phase 4C adds self-signed HTTPS/WSS, an installable static-only PWA, guarded updates and a conversation-details pane. Physical iPhone/Android acceptance and production-release certification remain open. See [`docs/implementation-status.md`](docs/implementation-status.md) for the exact verified state.
+> **HermesUI NG is under active development.** Phases 0–3 and Phase 5 / Read-only Workspace Beta are accepted for the supported baseline. Phase 4C supplies self-signed HTTPS/WSS, an installable static-only PWA, guarded updates and a conversation-details pane. Physical iPhone/Android acceptance and production-release certification remain open. See [`docs/implementation-status.md`](docs/implementation-status.md) for the exact verified state.
 
 ## What is HermesUI NG?
 
@@ -52,13 +52,14 @@ It is deliberately **not** a forked agent runtime, a second conversation databas
 - **Responsive shell** — desktop sidebar, mobile conversation drawer, session attention indicators and keyboard/touch command palette.
 - **Appearance** — light, dark and system themes.
 - **HTTPS and PWA** — operator-owned local CA, HTTPS/WSS, public offline shell, installation guidance and deliberate updates protected by draft/run/input/settings guards.
-- **Conversation details** — optional native-metadata right pane on desktop and equivalent mobile sheet; not the future file/Git workspace.
+- **Conversation details** — optional native-metadata right pane on desktop and equivalent mobile sheet, separate from project files.
+- **Read-only Workspace and Git** — optional project roots, file browsing/filtering, lazy CodeMirror previews, explicit downloads, repository discovery, branch/status and staged/working diffs. Desktop right pane and full-screen mobile view share the same read-only boundary.
 - **Authentication modes** — normal Hermes Dashboard authentication, plus an explicit trusted-LAN mode for intentionally ungated loopback Hermes deployments.
 - **Diagnostics** — the modern application is served at `/`; the retained troubleshooting interface is at `/diagnostic`.
 
 ### Not yet delivered or certified
 
-Physical Home Screen/standalone installation, keyboard and OS-background certification, workspace/Git features, global provider/profile management, slash-command polish, voice/attachments, OAuth, broader management surfaces, multi-architecture publication and public-internet release hardening are still future work.
+Physical Home Screen/standalone installation, keyboard and OS-background certification, workspace/Git writes, global provider/profile management, slash-command polish, voice/attachments, OAuth, broader management surfaces, multi-architecture publication and public-internet release hardening are still future work.
 
 ## Quick start
 
@@ -114,6 +115,22 @@ See [`docs/adr-018-trusted-local-access.md`](docs/adr-018-trusted-local-access.m
 ### Upgrading an existing locally modified deployment
 
 Do not reset a working checkout or overwrite its `.env`. Follow [`docs/local-testing-upgrade.md`](docs/local-testing-upgrade.md) to preserve local patches and deployment-specific credentials while moving to the NG stack.
+
+### Optional read-only project workspace
+
+In the existing private `.env`, set `WORKSPACE_HOST_PATH=/absolute/path/to/project` to a dedicated existing project directory. Preserve the existing token, certificates and NG Compose project, then add the optional override to exactly one base:
+
+```sh
+# Existing host-network deployment; substitute your current NG project name:
+docker compose -p EXISTING_NG_PROJECT -f compose.host.yaml -f compose.workspace.yaml up --build -d
+# For bridge networking, use compose.yaml instead of compose.host.yaml.
+```
+
+Open the folder button in the chat header or **Quick actions → Open workspace**. The override binds the project at `/workspace` read-only and enables read-only Git inspection; set `GIT_ENABLED=false` to disable Git independently. Without a mount, the UI explains that no workspace is configured and chat remains usable.
+
+**All admitted users can read all configured roots.** Never mount a home, Hermes state, credential store or Docker socket. Filename exclusions are not a secret scanner. Reads reject traversal, project symlinks and special/hardlinked files; project HTML/SVG is inert text or attachment-only. Previews are limited to 256 KiB and downloads to 10 MiB. Git does not execute hooks, repository config helpers or a shell, and never refreshes/writes the index. Unsupported repository layouts and resource limits are explained in [`docs/phase5-workspace.md`](docs/phase5-workspace.md).
+
+Files, previews and diffs are not persisted in the app's offline cache. Private views clear on close, background, offline and account/session changes. File saves/uploads and Git staging/commits belong to Phase 6 and remain disabled. Final Phase 5 evidence is in [`docs/evidence/phase5-acceptance.json`](docs/evidence/phase5-acceptance.json).
 
 ## Self-signed HTTPS, installation and updates
 
@@ -201,7 +218,8 @@ The repository exercises:
 - production-container smoke tests;
 - pinned vanilla-Hermes interaction acceptance for approval, sudo and secret flows;
 - trusted-private-CA browser HTTPS/WSS, service-worker/offline/update and delayed-admission tests;
-- production-container HTTPS prompts and reconnect against unmodified Hermes in both auth modes.
+- production-container HTTPS prompts and reconnect against unmodified Hermes in both auth modes;
+- dedicated read-only project mounts with native admission, file/Git inspection, traversal/write rejection and unchanged index/file hashes.
 
 Browser emulation and automated accessibility checks are useful evidence, but they are not substitutes for physical-device or full WCAG certification.
 
@@ -242,6 +260,7 @@ Read [`AGENTS.md`](AGENTS.md) and [`BUILD-BRIEF.md`](BUILD-BRIEF.md) before maki
 | [`docs/13-acceptance-criteria.md`](docs/13-acceptance-criteria.md) | Release-level definition of done |
 | [`docs/14-architecture-decisions.md`](docs/14-architecture-decisions.md) | Original ADRs |
 | [`docs/15-repo-layout-standards.md`](docs/15-repo-layout-standards.md) | Repository conventions |
+| [`docs/phase5-workspace.md`](docs/phase5-workspace.md) | Read-only project deployment, file/Git UI and supported boundaries |
 
 Delivered behaviour and deviations are documented in the phase notes and ADRs under [`docs/`](docs/).
 
