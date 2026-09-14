@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState, type KeyboardEvent, type RefObject } from 'react';
+import { useEffect, useId, useRef, useState, useSyncExternalStore, type KeyboardEvent, type RefObject } from 'react';
 import { createPortal } from 'react-dom';
 import { Search, RefreshCw, Terminal } from 'lucide-react';
 import { commandHint, commandMatches, type CommandChoice } from '../src/hermes/command-catalog.js';
@@ -10,7 +10,8 @@ import './commands.css';
 /** Catalogue and completion contain no RPC envelopes; the selected native owner admits execution. */
 export function useCommands(rt: AppRuntime, draft: string, setDraft: (text: string) => void,
   composer: RefObject<HTMLTextAreaElement | null>, writable: boolean) {
-  const native = rt.chat.native, commands = native.commands, state = commands.state;
+  const native = rt.chat.native, commands = native.commands;
+  const state = useSyncExternalStore(commands.subscribe, commands.getSnapshot);
   const [panel, setPanel] = useState<'catalogue' | 'context' | null>(null);
   const [query, setQuery] = useState(''), [limit, setLimit] = useState(80);
   const [active, setActive] = useState(0), [dismissed, setDismissed] = useState<string>();

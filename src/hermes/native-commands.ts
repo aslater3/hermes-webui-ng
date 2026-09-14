@@ -29,10 +29,21 @@ export class NativeCommands {
   private epoch = 0;
   private visible = true;
   private loadId = 0;
+  private listeners = new Set<() => void>();
   private flight?: { id: number; promise: Promise<void> };
   constructor(private readonly rpc: Rpc, private readonly target: Target) {}
-  private publish(patch: Partial<CommandsState>): void { this.state = { ...this.state, ...patch }; this.target.notify(); }
-  reset(): void { ++this.epoch; ++this.loadId; this.flight = undefined; this.state = initial(); }
+  // Control completion must not wait for the shell's animation-frame transcript batching.
+  getSnapshot = () => this.state;
+  subscribe = (listener: () => void): (() => void) => {
+    this.listeners.add(listener); return () => { this.listeners.delete(listener); };
+  };
+  private changed(): void { for (const listener of this.listeners) listener(); }
+  private publish(patch: Partial<CommandsState>): void {
+    this.state = { ...this.state, ...patch }; this.changed(); this.target.notify();
+  }
+  reset(): void {
+    ++this.epoch; ++this.loadId; this.flight = undefined; this.state = initial(); this.changed();
+  }
   setVisible(visible: boolean): void { if (visible !== this.visible) { this.visible = visible; this.reset(); this.target.notify(); } }
   dismissAction(): void { this.publish({ action: undefined }); }
   dismissResult(): void { this.publish({ result: undefined }); }
