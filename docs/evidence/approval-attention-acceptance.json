@@ -1,0 +1,35 @@
+{
+  "milestone": "Approval attention UX follow-up",
+  "dateUtc": "2026-09-14",
+  "applicationCommit": "cac037e90ed7c9eae072eecd708ded374f357144",
+  "upstreamRef": "b6b53c69a6ed49cb099cf1bfe76b5e6edd718e5a",
+  "delivered": [
+    "Prominent pending approval card and stronger composer attention state",
+    "One-shot Web Audio chime for each newly observed visible approval after browser audio unlock",
+    "Explicit Hermes-owned approval timeout guidance without renewal or replay"
+  ],
+  "ci": {
+    "checkpoint": { "runId": 34834232371, "conclusion": "success", "unitPassed": 166, "wirePassed": 22 },
+    "browsers": { "runId": 34834233189, "conclusion": "success", "passed": 304, "failed": 0, "skipped": 0, "flaky": 0 },
+    "image": { "runId": 34834232547, "conclusion": "success" },
+    "httpsPwa": { "runId": 34834232629, "conclusion": "success" },
+    "vanillaHermes": { "runId": 34834232405, "conclusion": "success", "modes": ["dashboard", "trusted-local"] }
+  },
+  "artifacts": [
+    { "name": "source-checkpoint", "id": 10343856112, "sha256": "a2a47dd46ce573a7a276d5f279bc5f33984dd42c028388b7ca7ac8bf616090b0" },
+    { "name": "diagnostic-browser-results", "id": 10343837063, "sha256": "ae03e40fccab90ccf7e20cfd32966a5c95a3adb075b2b106ca1936733c74a1f0" }
+  ],
+  "timeoutBoundary": {
+    "owner": "Hermes",
+    "setting": "approvals.timeout",
+    "defaultSeconds": 300,
+    "zeroMeans": "immediate timeout",
+    "infiniteSupported": false,
+    "exampleOneHour": "hermes config set approvals.timeout 3600"
+  },
+  "limits": [
+    "Web Audio playback depends on a prior user gesture and browser/device mute policy; the visual request remains authoritative.",
+    "The WebUI does not renew, replay, auto-approve or resurrect expired approval requests.",
+    "Physical iPhone/Android notification-volume and PWA background behaviour remain separate device-smoke gates."
+  ]
+}
