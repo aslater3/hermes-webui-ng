@@ -57,6 +57,7 @@ test('native completion in another conversation produces a review badge without 
     expect(await button.evaluate(element => getComputedStyle(element).boxShadow)).not.toBe('none');
     await expect(savedButton).toHaveAttribute('data-attention', 'new');
     expect(await savedButton.evaluate(element => getComputedStyle(element).boxShadow)).not.toBe('none');
+    await expect(userMessages).toHaveText(['Current foreground response']);
     await button.click(); await idle(page);
     await expect(userMessages).toHaveText([prompt]);
     await expect(userMessages).not.toContainText('Current foreground response');
