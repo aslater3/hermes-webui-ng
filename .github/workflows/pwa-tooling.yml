@@ -1,0 +1,25 @@
+name: PWA build tooling capture
+on:
+  push:
+    paths: ['pwa/package.json', '.github/workflows/pwa-tooling.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  capture:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm install --prefix pwa --ignore-scripts
+      - run: tar -czf /tmp/pwa-tooling.tgz pwa/package-lock.json pwa/node_modules
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pwa-build-tooling
+          path: /tmp/pwa-tooling.tgz
+          retention-days: 7

@@ -1,0 +1,1 @@
+{"name":"hermesui-icon-build","version":"1.0.0","private":true,"type":"module","dependencies":{"@resvg/resvg-wasm":"2.6.2"}}
