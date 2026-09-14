@@ -1,6 +1,8 @@
+import { m3Tool } from './m3-model.js';
 /** Controlled model decisions for real, unmodified Hermes tool execution. */
 export interface FixtureToolCall { id: string; type: 'function'; function: { name: string; arguments: string }; }
 export function phase3Tool(messages: unknown[], tools: unknown): FixtureToolCall | undefined {
+  const m3 = m3Tool(messages, tools); if (m3) return m3;
   const object=(value:unknown):Record<string,unknown>=>typeof value==='object'&&value!==null&&!Array.isArray(value)?value as Record<string,unknown>:{};
   let at=messages.length-1;while(at>=0&&object(messages[at]).role!=='user')at--;
   const prompt=object(messages[at]).content;
