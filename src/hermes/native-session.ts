@@ -1,3 +1,4 @@
+import { sessionId } from './session-rest.js';
 import { NativeCommands } from './native-commands.js';
 import { displayMessage, type DisplayMessage } from './history-message.js';
 import { infoUsage, type SessionUsage } from './session-usage.js';
@@ -48,7 +49,7 @@ export class NativeSession {
   constructor(private readonly gateway: Transport) {
     this.settings = new NativeSettings(gateway, {
       read: () => ({ runtimeId: this.state.runtimeId, profile: this.state.profile, starting: this.state.agentStarting,
-        idle: this.foreground && !this.disposed && gateway.state.phase === 'ready' && this.state.phase === 'idle' && !this.submission && !this.commands?.state.busy, agent: this.state.agent }),
+        idle: this.foreground && !this.disposed && gateway.state.phase === 'ready' && this.state.phase === 'idle' && !this.submission && !this.commands?.blocked, agent: this.state.agent }),
       refresh: () => this.refresh(), notify: () => this.publish({}),
     });
     this.commands = new NativeCommands(gateway, {
@@ -57,6 +58,8 @@ export class NativeSession {
         idle: this.state.phase === 'idle' && !this.submission && !this.yoloFlight &&
           !this.settings.state.busy && this.settings.state.outcome !== 'unknown' && !this.settings.state.confirmation }),
       notify: () => this.publish({}),
+      refresh: () => this.refresh(),
+      submitGenerated: message => this.submitText(message, true),
     });
     this.unsubscribe = [
       gateway.onEvent((event) => this.event(event)),
@@ -67,7 +70,7 @@ export class NativeSession {
   setForeground(value: boolean): void {
     if (value !== this.foreground) { ++this.revision; ++this.usageRevision; }
     this.foreground = value;
-    if (!value) { this.commands.reset(); this.settings.reset(); this.publish({ messages: [], streaming: '', usage: undefined }); }
+    if (!value) { this.commands.reset(true); this.settings.reset(); this.publish({ messages: [], streaming: '', usage: undefined }); }
   }
   subscribe(listener: (state: SessionState) => void): () => void {
     this.listeners.add(listener);
@@ -87,7 +90,7 @@ export class NativeSession {
   }
   private connection(connection: ConnectionState): void {
     if (connection.phase !== 'ready') {
-      this.commands.reset();
+      this.commands.reset(true);
       this.settings.reset();
       this.activity.disconnect();
       ++this.epoch;
@@ -108,7 +111,7 @@ export class NativeSession {
   }
   private async attach(method: string, storedId?: string, profile?: string, reconnect = false): Promise<void> {
     const epoch = ++this.epoch;
-    this.commands.reset();
+    this.commands.reset(reconnect);
     this.settings.reset();
     if (!reconnect) this.activity.reset();
     this.flight = undefined; this.yoloFlight = undefined;
@@ -200,8 +203,14 @@ export class NativeSession {
             ? inflight.assistant.slice(-131072)
             : ''
         : '';
+      const reportedKey = live.stored_session_id ?? (live.info && typeof live.info === 'object' && !Array.isArray(live.info)
+        ? record(live.info).stored_session_id : undefined);
+      if (reportedKey !== undefined && typeof reportedKey !== 'string')
+        throw new ClientError('protocol', 'Hermes returned an invalid durable session identifier');
       this.activity.snapshot(live);
       this.publish({
+        // Compression can rotate the durable key without replacing the live runtime.
+        storedId: reportedKey ? sessionId(reportedKey) : this.state.storedId,
         messages: this.foreground ? messages : [],
         // A usage ticker must not invalidate/retry the entire transcript snapshot.
         // Preserve a newer event while a slower history/activate pair is in flight.
@@ -247,8 +256,9 @@ export class NativeSession {
       void this.refresh().catch(() => {});
     }
   }
-  async submit(text: string): Promise<void> {
-    if (!this.foreground || this.state.phase !== 'idle' || this.commands.state.busy || this.settings.state.busy || this.settings.state.outcome === 'unknown' || this.settings.state.confirmation || this.submission || !this.state.runtimeId || !text.trim() || text.length > 32768)
+  async submit(text: string): Promise<void> { return this.submitText(text, false); }
+  private async submitText(text: string, nativeCommand: boolean): Promise<void> {
+    if (!this.foreground || this.state.phase !== 'idle' || (!nativeCommand && this.commands.blocked) || this.settings.state.busy || this.settings.state.outcome === 'unknown' || this.settings.state.confirmation || this.submission || !this.state.runtimeId || !text.trim() || text.length > (nativeCommand ? 1048576 : 32768))
       throw new ClientError('protocol', 'Wait for an idle native session before submitting');
     const epoch = this.epoch;
     this.settings.cancelConfirmation();
@@ -297,7 +307,7 @@ export class NativeSession {
     const promise = (async () => {
       this.valid(epoch);
       const runtimeId = this.state.runtimeId;
-      if (!this.foreground || !runtimeId || !['idle', 'waiting'].includes(this.state.phase) || this.state.interrupting || this.state.submitting || this.commands.state.busy || this.settings.state.busy)
+      if (!this.foreground || !runtimeId || !['idle', 'waiting'].includes(this.state.phase) || this.state.interrupting || this.state.submitting || this.commands.blocked || this.settings.state.busy)
         throw new ClientError('protocol', 'YOLO can be changed only for the selected idle or approval-waiting conversation');
       const raw = record(await this.gateway.call('config.set', yoloSetParams(runtimeId, this.state.profile, enabled)));
       this.valid(epoch);

@@ -161,6 +161,18 @@ export class AppRuntime {
     try { native = await this.settingsSession(); await native.commands.execute(text); }
     catch (error) { if (native === this.chat.native && account === this.accountGeneration) throw error; }
   }
+  /** Confirm one prepared command. Never discard a different catalogue-origin draft. */
+  async confirmCommand(): Promise<void> {
+    const native = this.chat.native, account = this.accountGeneration;
+    const pending = native.commands.state.confirmation, text = pending?.text;
+    const originalDraft = this.chat.draft;
+    try {
+      await native.commands.confirm();
+      if (native === this.chat.native && account === this.accountGeneration && pending?.source === 'composer' && text === originalDraft && this.chat.draft === originalDraft) {
+        this.chat.setDraft(''); this.notify();
+      }
+    } catch (error) { if (native === this.chat.native && account === this.accountGeneration) throw error; }
+  }
   async changeModel(choice: ModelChoice): Promise<void> {
     const native = await this.settingsSession();
     await native.settings.changeModel(choice);
@@ -175,7 +187,7 @@ export class AppRuntime {
   }
   async newProfile(profile: string): Promise<void> {
     profileIdentifier(profile);
-    if (!this.ready || this.chat.busy || this.chat.native.settings.state.busy || this.chat.native.commands.state.busy ||
+    if (!this.ready || this.chat.busy || this.chat.native.settings.state.busy || this.chat.native.commands.blocked ||
       ['running', 'waiting'].includes(this.chat.native.state.phase))
       throw new ClientError('protocol', 'Wait for the current turn before changing profile');
     // A profile is a new conversation boundary. Keep the previous draft with its owner.

@@ -116,8 +116,11 @@ try {
     if (command === '/usage') assert.ok(current.session.commands.state.result?.output.includes('Session Token Usage'));
     if (command === '/history') assert.ok(current.session.commands.state.result?.output.includes(prompt));
   }
-  for (const command of ['/usage reset', '/model other --global', '/phase7-unknown'])
+  for (const command of ['/usage reset', '/phase7-unknown'])
     await assert.rejects(current.session.commands.execute(command));
+  await current.session.commands.execute('/model other --global');
+  assert.ok(current.session.commands.state.confirmation);
+  current.session.commands.cancelConfirmation();
   await current.session.refresh();
   assert.equal(JSON.stringify(current.session.state.messages), beforeHistory, 'Read-only commands add no model turn or transcript row');
   const afterCommands = modelCatalogue(await current.gateway.call('model.options', {}));
@@ -145,6 +148,29 @@ try {
   assert.ok(!report.includes(prompt)); assert.ok(!report.includes(alternate.model));
   assert.deepEqual(current.session.state.usage, usage);
   pass('fresh-client-native-recovery-and-redacted-report');
+  stage = 'native-command-parity-transactions';
+  const commandSession = new NativeSession(current.gateway); otherSessions.push(commandSession);
+  await commandSession.create('default');
+  const task = 'Describe this controlled command parity task without using tools or changing any files.';
+  await commandSession.commands.execute(`/plan ${task}`);
+  assert.ok(commandSession.commands.state.confirmation, 'A generated-prompt command requires explicit confirmation');
+  assert.equal(commandSession.state.messages.length, 0, 'Preparation did not create a model turn');
+  await commandSession.commands.confirm();
+  await until(() => commandSession.state.phase === 'idle' && commandSession.state.messages.some(message => message.text.includes(EXPECTED_RESPONSE)));
+  assert.equal(commandSession.state.messages.filter(message => message.role === 'user').length, 1);
+  assert.ok(commandSession.state.messages.some(message => message.role === 'user' && message.text.includes(task)));
+  const commandHistory = JSON.stringify(commandSession.state.messages);
+  await commandSession.commands.execute('/undo 1');
+  assert.equal(JSON.stringify(commandSession.state.messages), commandHistory, 'Unconfirmed undo leaves native history intact');
+  await commandSession.commands.confirm();
+  assert.equal(commandSession.commands.state.recovered?.kind, 'prefill');
+  assert.ok(commandSession.commands.state.recovered?.text.includes(task));
+  assert.equal(commandSession.state.messages.filter(message => message.role === 'user').length, 0);
+  await assert.rejects(commandSession.commands.confirm());
+  await commandSession.refresh();
+  assert.equal(commandSession.state.messages.filter(message => message.role === 'user').length, 0, 'Undo did not auto-resubmit the recovered input');
+  assert.equal(current.session.state.messages.filter(message => message.role === 'user' && message.text === prompt).length, 1, 'The other session remained untouched');
+  pass('native-command-confirm-plan-send-undo-readback-and-session-isolation');
   success = true;
 } catch (error) {
   console.error(error instanceof ClientError ? `${error.kind}: ${error.message}` : error instanceof Error ? error.message : 'Settings acceptance failed');

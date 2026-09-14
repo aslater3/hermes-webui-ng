@@ -39,3 +39,8 @@ Every completed recovery or implementation slice must be committed AND pushed to
 ## ADR-P7-001 — Parallel native session polish
 
 Accepted 14 September 2026 for the requested Phase 7 branch. Phase 7 depends on existing native session/settings contracts, not Phase 6 workspace writes. Selected-session usage/context is allowlisted and generation-scoped, with no new persistence or polling. Commands and destructive rewind remain separately gated. Full decision: `adr-phase7-parallel-session-polish.md`. Existing phase acceptance and physical-device requirements are unchanged.
+
+
+## ADR-CP-001 — Native command parity target and transactions
+
+Accepted for the in-progress parity branch only, 14 September 2026. Native dispatch results require distinct output/send/skill/prefill/alias handling, explicit effect confirmation, no replay and verified profile ownership. Catalogue discovery alone does not establish safe execution or full command parity. `command-parity.md` records the source comparison, transaction boundary and outstanding terminal/client/protocol work. This supersedes the eight-command execution restriction as a development target, not as a completed acceptance claim.

@@ -12,10 +12,10 @@ test('official catalogue shape retains bounded display fields, categories and ad
   assert.ok(!JSON.stringify(catalogue).includes('PRIVATE')); assert.ok(!JSON.stringify(catalogue).includes('SECRET_ERROR'));
 });
 
-test('discovery is not arbitrary execution permission and no destructive commands gain actions', () => {
+test('discovery requires explicit confirmation for native effects and unknown names remain rejected', () => {
   for (const name of ['/undo', '/retry', '/compress', '/snapshot', '/unsafe', '/default-skill', '/shell', '/config'])
-    assert.equal(commandAction(name), 'unavailable');
-  assert.throws(() => commandChoice(commandCatalogue(commandFixture()), { name: '/unsafe', argument: '' }));
+    assert.equal(commandAction(name), 'confirm-native');
+  assert.equal(commandChoice(commandCatalogue(commandFixture()), { name: '/unsafe', argument: '' }).action, 'confirm-native');
   assert.throws(() => commandChoice(commandCatalogue(commandFixture()), { name: '/unknown', argument: '' }));
 });
 
@@ -54,8 +54,10 @@ test('slash parsing preserves deliberate literal escapes and never treats malfor
 
 test('arguments cannot turn a read into a mutation; pickers require their explicit UI workflow', () => {
   const catalogue = commandCatalogue(commandFixture());
-  for (const input of ['/usage reset', '/model other --global', '/reasoning high', '/profile work', '/status something'])
+  for (const input of ['/usage reset', '/status something', '/history clear'])
     assert.throws(() => commandChoice(catalogue, slashInput(input)!));
+  for (const input of ['/model other --global', '/reasoning high', '/profile work'])
+    assert.equal(commandChoice(catalogue, slashInput(input)!).action, 'confirm-native');
   assert.equal(commandChoice(catalogue, slashInput('/h model')!).action, 'catalogue');
 });
 
@@ -94,9 +96,9 @@ test('implementation gaps and missing native support have distinct honest explan
   assert.equal(commandAvailability(usage), 'Available in WebUI');
   assert.equal(commandAvailability(usage, true), 'Not supported by this Hermes version');
   assert.match(commandHint(usage, true), /does not provide the native command method/);
-  assert.equal(commandAvailability(undo), 'Not implemented in WebUI');
-  assert.match(commandHint(undo), /Destructive history controls/);
-  assert.match(commandHint(skill), /Skill, plugin and custom command execution/);
-  assert.equal(commandAvailability(undo, true), 'Not implemented in WebUI');
-  assert.equal(commandAction(undo.name), 'unavailable', 'display improvements do not bypass command guards');
+  assert.equal(commandAvailability(undo), 'Native command · confirmation required');
+  assert.match(commandHint(undo), /review native effects/);
+  assert.match(commandHint(skill), /review native effects/);
+  assert.equal(commandAvailability(undo, true), 'Native command · confirmation required');
+  assert.equal(commandAction(undo.name), 'confirm-native', 'native effects still require explicit owner-scoped confirmation');
 });

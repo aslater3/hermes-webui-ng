@@ -40,7 +40,7 @@ test('composer sends native reads separately, while literal slash text uses only
 
 test('unknown commands and arguments leave drafts intact and cannot invoke tools or settings', async t => {
   const h = fixture(); t.after(() => h.chat.dispose()); await h.chat.create();
-  for (const text of ['/unknown', '/usage reset', '/model other --global', '/undo', '/']) {
+  for (const text of ['/unknown', '/usage reset', '/']) {
     h.chat.setDraft(text); await h.chat.send(); assert.equal(h.chat.draft, text); assert.ok(h.chat.error);
   }
   assert.ok(h.calls.every(c => !['prompt.submit', 'slash.exec', 'command.dispatch', 'config.set'].includes(c.method)));
@@ -78,4 +78,17 @@ test('historical views and account clearing discard command output and discovery
   h.chat.setDraft('/usage'); const count = h.calls.length; await h.chat.send(); assert.equal(h.calls.length, count);
   await h.chat.latest(); await h.chat.native.commands.load(); h.chat.clear();
   assert.equal(h.chat.native.commands.state.catalogue, undefined); assert.equal(h.chat.native.commands.state.result, undefined);
+});
+
+
+test('preparing and cancelling an effectful composer command preserves the exact unsent draft', async t => {
+  const h = fixture(); t.after(() => h.chat.dispose()); await h.chat.create();
+  for (const text of ['/undo 2', '/model other --global']) {
+    h.chat.setDraft(text); await h.chat.send();
+    assert.equal(h.chat.draft, text); assert.equal(h.chat.native.commands.state.confirmation?.text, text);
+    assert.equal(h.chat.error, undefined); assert.ok(h.chat.reloadBlocker());
+    await assert.rejects(h.chat.native.submit('blocked by confirmation'));
+    h.chat.native.commands.cancelConfirmation(); assert.equal(h.chat.draft, text);
+  }
+  assert.ok(h.calls.every(c => !['prompt.submit', 'slash.exec', 'command.dispatch', 'config.set'].includes(c.method)));
 });

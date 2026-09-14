@@ -1,6 +1,6 @@
 import { ClientError, record } from './protocol.js';
 
-export type CommandAction = 'catalogue' | 'models' | 'profiles' | 'reasoning' | 'context' | 'native' | 'unavailable';
+export type CommandAction = 'catalogue' | 'models' | 'profiles' | 'reasoning' | 'context' | 'native' | 'confirm-native' | 'unavailable';
 export interface CommandChoice {
   name: string;
   description: string;
@@ -24,11 +24,11 @@ export function commandAction(command: string): CommandAction {
     case '/context': return 'context';
     // These exact, argument-free slash.exec paths read the live session before worker/plugin dispatch.
     case '/usage': case '/status': case '/history': return 'native';
-    default: return 'unavailable';
+    default: return 'confirm-native';
   }
 }
 
-/** Allowlisted projection of the official, profile-scoped commands.catalog response. */
+/** Allowlisted projection of the official commands.catalog response (execution scope is verified separately). */
 export function commandCatalogue(raw: unknown): CommandCatalogue {
   const data = record(raw);
   if (!Array.isArray(data.pairs)) throw new ClientError('protocol', 'Hermes returned an unsupported command catalogue');
@@ -61,6 +61,9 @@ export function commandCatalogue(raw: unknown): CommandCatalogue {
         choice.aliases.push(alias);
     }
   }
+  for (const choice of choices.values()) {
+    if (['Skills', 'User commands', 'Plugin commands'].includes(choice.category)) choice.action = 'confirm-native';
+  }
   return { choices: [...choices.values()], partial };
 }
 
@@ -75,7 +78,7 @@ export function commandMatches(catalogue: CommandCatalogue | undefined, query: s
       names.some(value => value.includes(needle)) ? 2 : 3;
   };
   return (catalogue?.choices ?? []).map(row => ({ row, score: score(row) })).filter(row => row.score < 4)
-    .sort((a, b) => a.score - b.score || Number(a.row.action === 'unavailable') - Number(b.row.action === 'unavailable') || a.row.name.localeCompare(b.row.name))
+    .sort((a, b) => a.score - b.score || Number(['confirm-native', 'unavailable'].includes(a.row.action)) - Number(['confirm-native', 'unavailable'].includes(b.row.action)) || a.row.name.localeCompare(b.row.name))
     .slice(0, Math.max(0, Math.min(limit, COMMAND_LIMITS.entries))).map(({ row }) => row);
 }
 
@@ -94,13 +97,15 @@ export function commandChoice(catalogue: CommandCatalogue, input: { name: string
   const choice = catalogue.choices.find(row => row.name === input.name || row.aliases.includes(input.name));
   if (!choice || choice.action === 'unavailable')
     throw new ClientError('protocol', 'This command is not available in HermesUI NG. Check the command catalogue; nothing was sent to the model.');
-  if (input.argument && choice.action !== 'catalogue')
-    throw new ClientError('protocol', 'This command takes no arguments here. Use the matching picker for changes; nothing was sent.');
+  if (input.argument && ['/usage', '/status', '/history'].includes(choice.name) && choice.action === 'native')
+    throw new ClientError('protocol', 'This Hermes native read ignores arguments. No reset or other argument operation was executed.');
+  if (input.argument && choice.action !== 'catalogue') return { ...choice, action: 'confirm-native' };
   return choice;
 }
 /** Implementation coverage is separate from a missing upstream method or denied admission. */
 export function commandAvailability(choice: CommandChoice, executionUnavailable = false): string {
   if (choice.action === 'unavailable') return 'Not implemented in WebUI';
+  if (choice.action === 'confirm-native') return 'Native command · confirmation required';
   if (choice.action === 'native' && executionUnavailable) return 'Not supported by this Hermes version';
   return 'Available in WebUI';
 }
@@ -115,6 +120,7 @@ export function commandHint(choice: CommandChoice, executionUnavailable = false)
     case 'reasoning': return 'Open supported reasoning controls';
     case 'context': return 'View native usage and context';
     case 'native': return 'Read-only native command · no arguments';
+    case 'confirm-native': return 'Run in Hermes with arguments; review native effects before confirming.';
     default:
       if (['/undo', '/retry', '/rewind', '/regenerate'].includes(choice.name))
         return 'Destructive history controls are not implemented in HermesUI NG yet.';

@@ -38,8 +38,8 @@ test('the full command list scrolls past eight and every name stays left aligned
   expect(await list.evaluate(node => node.scrollHeight > node.clientHeight)).toBe(true);
   await list.evaluate(node => { node.scrollTop = node.scrollHeight; });
   await expect(options.last()).toBeInViewport();
-  await expect(options.last()).toBeDisabled();
-  await expect(options.last()).toContainText('Not implemented in WebUI');
+  await expect(options.last()).toBeEnabled();
+  await expect(options.last()).toHaveAttribute('aria-disabled', 'false');
   expect(await list.evaluate(node => node.scrollTop)).toBeGreaterThan(0);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await page.screenshot({ path: info.outputPath('commands-full-scroll.png') });
@@ -57,7 +57,7 @@ test('typing filters the entire inventory immediately and resets the scrolled li
   await expect(list.getByRole('option')).toContainText('/extra-099');
   await prompt(page).fill('/LATEALIAS'); await expect(list.getByRole('option')).toHaveCount(1);
   await expect(list.getByRole('option')).toContainText('/extra-099');
-  await expect(list.getByRole('option')).toBeDisabled();
+  await expect(list.getByRole('option')).toBeEnabled();
   await prompt(page).fill('/no-such-command'); await expect(list).toHaveCount(0);
   await expect(page.locator('.command-suggestions')).toContainText('No matching command');
   await prompt(page).fill('/'); await expect(list.getByRole('option')).toHaveCount(112);
@@ -66,22 +66,22 @@ test('typing filters the entire inventory immediately and resets the scrolled li
   await expect(prompt(page)).toHaveValue('/status ');
 });
 
-test('catalogue scrolls all matches, explains implementation gaps and filters without losing the draft', async ({ page }, info) => {
+test('catalogue scrolls all matches, explains native review requirements and filters without losing the draft', async ({ page }, info) => {
   await largeCatalogue(page); await login(page); await prompt(page).fill('Keep my unsent draft');
   await page.getByRole('button', { name: 'Browse Hermes commands', exact: true }).click();
   const dialog = page.getByRole('dialog', { name: 'Hermes commands', exact: true });
   const list = dialog.getByRole('region', { name: 'Matching Hermes commands', exact: true });
   await expect(list.locator('.command-catalogue-row')).toHaveCount(112);
-  await expect(dialog).toContainText('WebUI feature gap, not a login or permission error');
-  await expect(dialog).toContainText('112 matching · 8 available in WebUI');
+  await expect(dialog).toContainText('Native commands require review');
+  await expect(dialog).toContainText('112 matching · 112 selectable');
   expect(await list.evaluate(node => node.scrollHeight > node.clientHeight)).toBe(true);
   await list.evaluate(node => { node.scrollTop = node.scrollHeight; });
   await list.locator('.command-catalogue-row').last().scrollIntoViewIfNeeded();
   await expect(list.locator('.command-catalogue-row').last()).toBeInViewport();
   await dialog.getByLabel('Search Hermes commands', { exact: true }).fill('EXTRA-099');
   await expect(list.locator('.command-catalogue-row')).toHaveCount(1);
-  await expect(list.getByRole('button', { name: 'Use /extra-099', exact: true })).toBeDisabled();
-  await expect(list).toContainText('HermesUI NG has no handler for it yet');
+  await expect(list.getByRole('button', { name: 'Use /extra-099', exact: true })).toBeEnabled();
+  await expect(list).toContainText('review native effects before confirming');
   await dialog.getByLabel('Search Hermes commands', { exact: true }).fill('SESSION token');
   await expect(list.locator('.command-catalogue-row')).toHaveCount(1);
   await expect(list.getByRole('button', { name: 'Use /usage', exact: true })).toBeEnabled();

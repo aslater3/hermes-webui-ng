@@ -1,5 +1,9 @@
 # Implementation Status
 
+## Command parity follow-up — in progress, not accepted
+
+The owner requested full command parity after the Phase 7 delivery. Branch `feat/native-command-parity` is stacked on the unmerged picker follow-up `fix/command-picker-scroll-filter` / PR #18, preserving alignment, full-list scrolling and filtering. The first remote checkpoint `38982599c2d76166bc39d151f1674102321f53cc` added typed native outcomes; the next slice adds owner-checked, confirmed native transactions and UI handling. This does not retroactively make the eight-handler Phase 7 scope full parity. See `command-parity.md` for actual implementation, unresolved client/terminal/protocol gaps and pending CI. No merge, operator deployment or full-parity acceptance is claimed.
+
 Updated: 14 September 2026. **Phase 7 has passed its software exit gate; Phase 5 / M5 Read-only Workspace Beta remains accepted.** Phase 5 was delivered through PR #12 with individual remote checkpoints preserved. Phases 0–3, the modern shell/HTTPS/PWA software and approval-attention follow-up retain their accepted evidence. The original Phase 4 physical-device report remains open; Phase 5 does not certify physical devices or the final production release.
 
 ## Command picker follow-up (verification in progress)

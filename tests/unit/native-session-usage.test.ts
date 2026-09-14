@@ -110,3 +110,21 @@ test('dispose clears the usage projection and removes all callbacks', async () =
   rpc.emit('session.usage', { total: 999 }); assert.equal(usageOf(session), undefined);
   assert.equal(rpc.events.size, 0); assert.equal(rpc.states.size, 0);
 });
+
+
+test('native snapshots adopt a rotated durable key after compression without guessing a different runtime', async t => {
+  const rpc = new UsageRpc(), session = new NativeSession(rpc); t.after(() => session.dispose()); await session.create();
+  const runtimeId = session.state.runtimeId;
+  rpc.info = { stored_session_id: 'durable-compressed', profile_name: 'default', usage: { total: 56 } };
+  await session.refresh();
+  assert.equal(session.state.storedId, 'durable-compressed'); assert.equal(session.state.runtimeId, runtimeId);
+  rpc.phase('reconnecting'); rpc.phase('ready'); await tick();
+  assert.equal(session.state.storedId, 'durable-compressed');
+});
+
+test('invalid rotated durable identifiers fail closed before changing navigation ownership', async t => {
+  const rpc = new UsageRpc(), session = new NativeSession(rpc); t.after(() => session.dispose()); await session.create();
+  rpc.info = { stored_session_id: '../../private' };
+  await assert.rejects(session.refresh()); assert.equal(session.state.storedId, 'durable-default');
+  assert.equal(session.state.phase, 'error');
+});

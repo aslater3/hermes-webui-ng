@@ -34,7 +34,7 @@ export function Conversation({ runtime: rt, revision }: { runtime: AppRuntime; r
   const following = useRef(true), [unread, setUnread] = useState(false), [draft, setDraft] = useState(chat.draft);
   const scope = `${draftKey(chat.selected)}:${historical ? saved.page?.offset ?? 0 : 'live'}`;
   const busy = ['running', 'waiting'].includes(state.phase), loading = chat.busy || state.phase === 'attaching';
-  const writable = rt.ready && !chat.native.commands.state.busy && !chat.native.settings.state.busy && chat.native.settings.state.outcome !== 'unknown' && !chat.native.settings.state.confirmation && !loading && !historical && (!chat.selected || state.phase === 'idle');
+  const writable = rt.ready && !chat.native.commands.blocked && !chat.native.settings.state.busy && chat.native.settings.state.outcome !== 'unknown' && !chat.native.settings.state.confirmation && !loading && !historical && (!chat.selected || state.phase === 'idle');
   const commands = useCommands(rt, draft, value => { setDraft(value); rt.setDraft(value); }, composer, writable);
   const pending = chat.native.activity.state.inputs.filter(input => ['pending', 'sending'].includes(input.status)).length;
   const error = chat.error?.message || state.error?.message || saved.error?.message;
