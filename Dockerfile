@@ -21,5 +21,5 @@ COPY --from=build /app/package.json ./package.json
 USER 10001:10001
 EXPOSE 8787
 HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
-  CMD node -e "fetch('http://127.0.0.1:'+process.env.PORT+'/healthz',{signal:AbortSignal.timeout(3000)}).then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+  CMD ["node", "build/server/healthcheck.js"]
 CMD ["node", "build/server/index.js"]
