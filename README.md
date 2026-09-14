@@ -24,7 +24,7 @@
 </p>
 
 > [!IMPORTANT]
-> **HermesUI NG is under active development.** Phases 0–3 and Phase 5 / Read-only Workspace Beta are accepted for the supported baseline. Phase 4C supplies self-signed HTTPS/WSS, an installable static-only PWA, guarded updates and a conversation-details pane. Physical iPhone/Android acceptance and production-release certification remain open. See [`docs/implementation-status.md`](docs/implementation-status.md) for the exact verified state.
+> **HermesUI NG is under active development.** Native chat, Phase 5 read-only Workspace and Phase 7 session controls are accepted for the supported baseline. Phase 6 adds explicitly opted-in file editing and operations. Phase 4C supplies self-signed HTTPS/WSS, an installable static-only PWA, guarded updates and a conversation-details pane. Physical iPhone/Android acceptance and production-release certification remain open. See [`docs/implementation-status.md`](docs/implementation-status.md) for the exact verified state.
 
 ## What is HermesUI NG?
 
@@ -55,11 +55,13 @@ It is deliberately **not** a forked agent runtime, a second conversation databas
 - **Conversation details** — optional native-metadata right pane on desktop and equivalent mobile sheet, separate from project files.
 - **Read-only Workspace and Git** — optional project roots, file browsing/filtering, lazy CodeMirror previews, explicit downloads, repository discovery, branch/status and staged/working diffs. Desktop right pane and full-screen mobile view share the same read-only boundary.
 - **Authentication modes** — normal Hermes Dashboard authentication, plus an explicit trusted-LAN mode for intentionally ungated loopback Hermes deployments.
+- **Opt-in workspace editing** — explicit Save/Discard, version conflicts and readback, confirmed folder/rename/delete and bounded no-clobber uploads. Read-only remains the default.
+- **Native commands and usage** — official command catalogue and safe slash handling, plus reported usage/context without guessed bills or a second usage ledger.
 - **Diagnostics** — the modern application is served at `/`; the retained troubleshooting interface is at `/diagnostic`.
 
 ### Not yet delivered or certified
 
-Physical Home Screen/standalone installation, keyboard and OS-background certification, workspace/Git writes, global provider/profile management, slash-command polish, voice/attachments, OAuth, broader management surfaces, multi-architecture publication and public-internet release hardening are still future work.
+Physical Home Screen/standalone installation, keyboard and OS-background certification, optional Git mutations, background Web Push, global provider/profile management, voice/attachments, OAuth, broader management surfaces, multi-architecture publication and public-internet release hardening remain future work.
 
 ## Quick start
 
@@ -130,7 +132,22 @@ Open the folder button in the chat header or **Quick actions → Open workspace*
 
 **All admitted users can read all configured roots.** Never mount a home, Hermes state, credential store or Docker socket. Filename exclusions are not a secret scanner. Reads reject traversal, project symlinks and special/hardlinked files; project HTML/SVG is inert text or attachment-only. Previews are limited to 256 KiB and downloads to 10 MiB. Git does not execute hooks, repository config helpers or a shell, and never refreshes/writes the index. Unsupported repository layouts and resource limits are explained in [`docs/phase5-workspace.md`](docs/phase5-workspace.md).
 
-Files, previews and diffs are not persisted in the app's offline cache. Private views clear on close, background, offline and account/session changes. File saves/uploads and Git staging/commits belong to Phase 6 and remain disabled. Final Phase 5 evidence is in [`docs/evidence/phase5-acceptance.json`](docs/evidence/phase5-acceptance.json).
+Files, previews and diffs are not persisted in the app's offline cache. Private views clear on close, background, offline and account/session changes. File saves, uploads and confirmed file operations are available only through the separately opted-in Phase 6 write configuration below. Git staging/commits remain optional deferred work and are disabled. Final Phase 5 evidence is in [`docs/evidence/phase5-acceptance.json`](docs/evidence/phase5-acceptance.json).
+
+## Optional workspace file editing (Phase 6)
+
+The existing read-only override stays unchanged. To deliberately enable edits on a suitable dedicated project, use **`compose.workspace-write.yaml` instead of `compose.workspace.yaml`**, with exactly one base:
+
+```sh
+docker compose -p EXISTING_NG_PROJECT \
+  -f compose.host.yaml -f compose.workspace-write.yaml up --build -d
+```
+
+Keep your existing `.env`, HTTPS certificates, Hermes token, project path and actual NG Compose project name. The project and relevant parents must be owned by the configured non-root runtime UID, use owner-controlled plain POSIX permissions and not rely on ACL/xattr/security metadata the writer cannot preserve. Do not strip security policy or make directories world-writable to satisfy this requirement; leave those projects read-only. See [`docs/phase6-deployment.md`](docs/phase6-deployment.md) before opting in.
+
+The Files view adds **Edit file**, explicit **Save/Discard**, **New folder**, **Upload**, **Rename** and confirmed permanent **Delete**. Text saves are atomic and version-checked, with explicit current-file conflict review. Uploads are limited to 10 MiB and never overwrite existing names; deletion is non-recursive. Desktop and mobile use the same guarded operations. Unsaved edits remain in tab memory and block deliberate PWA updates; failed acknowledgements require readback and are never automatically replayed. Browser/OS termination can still lose an unsaved edit.
+
+All admitted users can change the explicitly shared writable roots. Do not concurrently edit the same file through the agent or another editor: version checks are not an atomic lock against external writers. Git remains read-only: the original roadmap's optional stage/unstage/commit scope is deferred, and `GIT_WRITE_ENABLED=true` remains rejected. The write security review is [`ADR-027`](docs/adr-027-phase6-write-review.md); exact acceptance is recorded in [`implementation-status.md`](docs/implementation-status.md).
 
 ## Self-signed HTTPS, installation and updates
 
@@ -142,7 +159,9 @@ Browser traffic uses HTTPS/WSS. The existing connection to Hermes at **HTTP on p
 
 Settings → App provides installation guidance, update checks and **Update and reload**. A fixed build-generated allowlist caches public HTML, manifest, icons and hashed JS/CSS/SVG only. No API/auth response, transcript, credential, workspace file or offline send queue is persisted. A fresh offline launch shows the public shell; reconnect verifies access and reads native history.
 
-Updates wait for drafts in all retained conversations, active/uncertain runs, inputs, settings/auth work and other open app windows to clear. Another tab is never force-reloaded. Browser/OS termination and manual reload remain separate user/platform actions. Original physical iPhone/Android testing is still open in [`docs/phase4-device-smoke.md`](docs/phase4-device-smoke.md); automated WebKit is not a physical-device sign-off.
+Updates wait for drafts in all retained conversations, dirty/pending/uncertain workspace operations, active/uncertain runs, inputs, settings/auth work and other open app windows to clear. Another tab is never force-reloaded. Browser/OS termination and manual reload remain separate user/platform actions. Original physical iPhone/Android testing is still open in [`docs/phase4-device-smoke.md`](docs/phase4-device-smoke.md); automated WebKit is not a physical-device sign-off.
+
+Background iOS/Android notifications are investigated in [`pwa-notifications-proposal.md`](docs/pwa-notifications-proposal.md), **not implemented**. The existing approval chime is foreground behaviour, not reliable delivery to a suspended Home Screen app. The proposal requires explicit Web Push permission and a supported authorised server-side event observer; it does not add notification auto-approval or claim physical Apple push testing.
 
 ## Architecture
 
@@ -177,7 +196,7 @@ Newer upstream source inspection does not automatically mean runtime certificati
 
 ## Develop and verify
 
-Use **Node 22**:
+Use **Node 22**. Linux source builds also require `cc` and the matching Node-API headers; the Docker build stage supplies these without adding a runtime compiler or apt layer:
 
 ```sh
 npm ci
@@ -206,7 +225,7 @@ After preparing and trusting a disposable CA as shown in `.github/workflows/http
 npx playwright test -c playwright.https.config.ts
 ```
 
-The HTTPS gate waits for native Gateway admission, not merely service-worker control. A regression deliberately delays the real ticket response; CI also repeats both iPhone WebKit HTTPS cases five times without test retries. The original and repeated reports are retained separately, with `ignoreHTTPSErrors:false`.
+The HTTPS gate waits for native Gateway admission, not merely service-worker control. A regression deliberately delays the real ticket response; CI also repeats the iPhone WebKit HTTPS/PWA and workspace-editing cases five times without test retries. The original and repeated reports are retained separately, with `ignoreHTTPSErrors:false`.
 
 ### Verification layers
 
@@ -219,7 +238,8 @@ The repository exercises:
 - pinned vanilla-Hermes interaction acceptance for approval, sudo and secret flows;
 - trusted-private-CA browser HTTPS/WSS, service-worker/offline/update and delayed-admission tests;
 - production-container HTTPS prompts and reconnect against unmodified Hermes in both auth modes;
-- dedicated read-only project mounts with native admission, file/Git inspection, traversal/write rejection and unchanged index/file hashes.
+- dedicated read-only project mounts with native admission, file/Git inspection, traversal/write rejection and unchanged index/file hashes;
+- separately opted-in writable mounts, exact save/readback, conflicts, upload/no-clobber/rename/delete and native logout revocation.
 
 Browser emulation and automated accessibility checks are useful evidence, but they are not substitutes for physical-device or full WCAG certification.
 
@@ -261,6 +281,8 @@ Read [`AGENTS.md`](AGENTS.md) and [`BUILD-BRIEF.md`](BUILD-BRIEF.md) before maki
 | [`docs/14-architecture-decisions.md`](docs/14-architecture-decisions.md) | Original ADRs |
 | [`docs/15-repo-layout-standards.md`](docs/15-repo-layout-standards.md) | Repository conventions |
 | [`docs/phase5-workspace.md`](docs/phase5-workspace.md) | Read-only project deployment, file/Git UI and supported boundaries |
+| [`docs/phase6-deployment.md`](docs/phase6-deployment.md) | Explicit file-write opt-in, editor/recovery and permission limits |
+| [`docs/adr-027-phase6-write-review.md`](docs/adr-027-phase6-write-review.md) | File-write security review and optional Git-write deferral |
 
 Delivered behaviour and deviations are documented in the phase notes and ADRs under [`docs/`](docs/).
 
