@@ -30,7 +30,7 @@ export class WorkspaceMutations {
   edit = (root: string, preview: Preview) => {
     if (preview.kind !== 'text' || !preview.version || !this.start('save', root, preview.path)) return;
     const text = preview.text ?? '';
-    if (/\r\n/.test(text) && /(?<!\r)\n/.test(text)) { this.publish({ phase: 'done', note: 'Mixed newline styles are read-only here to avoid silently normalising this file.' }); return; }
+    if (/\r(?!\n)/.test(text) || /\r\n/.test(text) && /(?<!\r)\n/.test(text)) { this.publish({ phase: 'done', note: 'Mixed or unsupported newline styles are read-only here to avoid silently normalising this file.' }); return; }
     this.publish({ text, original: text, version: preview.version });
   };
   open = async (operation: Exclude<Operation, 'save'>, root: string, path: string, file?: File) => {

@@ -10,7 +10,10 @@ import { loginPwa } from '../e2e/pwa-network.js';
 async function replaceText(page: Page, dialog: Locator, text: string) {
   const editor = dialog.locator('.cm-content[contenteditable="true"]');
   await expect(editor).toBeVisible(); await editor.click();
-  await editor.press('ControlOrMeta+A'); await editor.press('Backspace');
+  // Playwright resolves ControlOrMeta from the Linux runner, but this editor
+  // deliberately uses Apple's keymap in an emulated iPhone browser.
+  const apple = await page.evaluate(() => /Mac/.test(navigator.platform) || /iP(?:hone|ad|od)/.test(navigator.userAgent));
+  await editor.press(apple ? 'Meta+A' : 'Control+A'); await editor.press('Backspace');
   await expect(editor).toHaveText(''); await page.keyboard.insertText(text);
   await expect(editor).toHaveText(text);
 }
@@ -39,6 +42,15 @@ test('operator-enabled editing saves exact text and preserves a draft across bac
     expect((await new AxeBuilder({ page }).include('.modal-workspace-mutation').analyze()).violations).toEqual([]);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     await page.screenshot({ path: info.outputPath('workspace-edit.png') });
+    // A reduced-height 320px surface models the viewport pressure of a touch keyboard.
+    await page.setViewportSize({ width: 320, height: 440 });
+    await expect(editor).toHaveText('export const edited = true;');
+    const saveButton = dialog.getByRole('button', { name: 'Save file', exact: true });
+    await expect(saveButton).toBeVisible();
+    const box = await saveButton.boundingBox(); expect(box!.height).toBeGreaterThanOrEqual(44);
+    expect(box!.y + box!.height).toBeLessThanOrEqual(440);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await page.screenshot({ path: info.outputPath('workspace-edit-narrow.png') });
     await dialog.getByRole('button', { name: 'Save file', exact: true }).click();
     await expect(dialog).toContainText('confirmed the workspace operation');
     expect(await readFile(join(f.project, 'hello.ts'), 'utf8')).toBe('export const edited = true;');

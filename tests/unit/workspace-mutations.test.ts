@@ -53,7 +53,9 @@ test('folder and delete selection never writes without the explicit confirmation
 });
 test('mixed line endings and oversized UTF-8 drafts are not silently normalised or sent', async () => {
   let writes = 0; const actions = setup(async () => { writes++; return response({}); });
-  actions.clear(); actions.edit('workspace', { ...initial, text: 'one\r\ntwo\n' }); assert.equal(actions.state.phase, 'done');
+  for (const text of ['one\r\ntwo\n', 'one\rtwo\r']) {
+    actions.clear(); actions.edit('workspace', { ...initial, text }); assert.equal(actions.state.phase, 'done');
+  }
   actions.clear(); actions.edit('workspace', initial); actions.change('é'.repeat(131073)); await actions.perform(); assert.equal(writes, 0); assert.match(actions.state.note, /256 KiB/);
 });
 
