@@ -1,3 +1,4 @@
+import { reloadPwa } from './pwa-navigation.js';
 import { test, expect, type Page } from '@playwright/test';
 import { login, send, idle, settings } from './shell-fixture.js';
 
@@ -13,7 +14,7 @@ test('PWA cache holds only static shell; offline relaunch has no transcript or s
   expect(keys.length).toBeGreaterThan(5);expect(keys.every(path=>path==='/' || path==='/manifest.webmanifest' || path.startsWith('/assets/') || /^\/pwa\/icon-\d+\.png$/.test(path))).toBe(true);
   const cached = await page.evaluate(async()=> {const name=(await caches.keys())[0]!;const cache=await caches.open(name);return Promise.all((await cache.keys()).filter(req=>!req.url.endsWith('.png')).map(async req=>(await cache.match(req))!.text()));});
   expect(cached.join('')).not.toContain('PRIVATE_OFFLINE_CANARY');
-  await context.setOffline(true); await page.reload();
+  await context.setOffline(true); await reloadPwa(page);
   await expect(page.getByRole('heading',{name:'You’re offline.'})).toBeVisible();
   await expect(page.locator('body')).not.toContainText('PRIVATE_OFFLINE_CANARY');
   await context.setOffline(false); await expect(page.locator('#shell-prompt')).toBeEnabled();
