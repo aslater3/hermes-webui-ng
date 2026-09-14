@@ -1,4 +1,5 @@
 import type { AgentInput, Question, ToolActivity, ActivityTurn } from './agent-activity.js';
+import { ApprovalAttentionTone } from './attention-tone.js';
 import type { NativeSession } from './native-session.js';
 
 function node<K extends keyof HTMLElementTagNameMap>(tag: K, text?: string, className?: string): HTMLElementTagNameMap[K] {
@@ -35,10 +36,12 @@ export class AgentView {
   private readonly tools = node('div', '', 'agent-tools');
   private readonly inputs = new Map<string, InputCard>();
   private readonly toolCards = new Map<string, ToolCard>();
+  private readonly approvalTone = new ApprovalAttentionTone();
+  private readonly announcedApprovals = new WeakMap<NativeSession, Set<string>>();
   private unlisten?: () => void;
   private visibility = () => { if (document.visibilityState !== 'visible') this.clearCredentials(); };
   private pagehide = () => this.clearCredentials();
-  dispose(): void { this.clear(); document.removeEventListener('visibilitychange', this.visibility); window.removeEventListener('pagehide', this.pagehide); }
+  dispose(): void { this.clear(); this.approvalTone.dispose(); document.removeEventListener('visibilitychange', this.visibility); window.removeEventListener('pagehide', this.pagehide); }
   constructor(private readonly root: HTMLElement) {
     const heading = node('h2', 'Agent activity and input'); heading.id = 'agent-title';
     this.root.setAttribute('aria-labelledby', heading.id);
@@ -69,6 +72,13 @@ export class AgentView {
     const activity = owner.activity.state;
     const active = activity.inputs.filter(p => ['pending','sending'].includes(p.status));
     const count = active.length;
+    if (enabled && !historical) {
+      let announced = this.announcedApprovals.get(owner);
+      if (!announced) { announced = new Set<string>(); this.announcedApprovals.set(owner, announced); }
+      const fresh = active.filter(input => input.kind === 'approval' && input.status === 'pending' && !input.blocked && !announced!.has(input.key));
+      for (const input of fresh) announced.add(input.key);
+      if (fresh.length) this.approvalTone.notify();
+    }
     this.root.hidden = historical || !(owner.activity.archive.length || activity.inputs.length || activity.tools.length || activity.reasoning || activity.thinking || activity.recoveryGap || activity.malformed);
     if (!enabled || historical) this.clearCredentials();
     this.summary.textContent = `${count ? `${count} request${count === 1 ? '' : 's'} awaiting confirmation. ` : ''}Current turn with bounded earlier activity. Saved history stays in Hermes.`;
@@ -122,7 +132,8 @@ export class AgentView {
     }
     const interactive = input.status === 'pending' && enabled && !input.blocked;
     card.root.dataset.status = input.status;
-    card.status.textContent = input.blocked ? 'Response disabled — incomplete or unsupported request details' : labels[input.status];
+    card.status.textContent = input.blocked ? 'Response disabled — incomplete or unsupported request details' :
+      input.kind === 'approval' && input.status === 'pending' ? 'Action paused — choose Allow once or Deny' : labels[input.status];
     if (['answered','expired','unknown','unsupported'].includes(input.status) || input.blocked) this.erase(card);
     for (const control of card.controls.querySelectorAll<HTMLInputElement | HTMLButtonElement | HTMLTextAreaElement>('button,input,textarea')) control.disabled = !interactive;
     for (const [qid, fieldset] of card.questions) {
@@ -135,8 +146,9 @@ export class AgentView {
     const root=node('article','',`agent-card agent-${input.kind}`); root.dataset.requestKey=input.key;
     root.setAttribute('aria-label',names[input.kind]);
     const status=node('p','','agent-input-status'), error=node('p','','agent-input-error'); status.setAttribute('role','status'); error.setAttribute('role','alert'); error.hidden=true;
+    if (input.kind === 'approval') status.setAttribute('aria-live', 'assertive');
     const controls=node('div','','agent-input-controls'); const questions=new Map<string,HTMLFieldSetElement>();
-    root.append(node('h3',names[input.kind]),status);
+    root.append(node('h3',input.kind === 'approval' ? 'Permission required' : names[input.kind]),status);
     if(input.prompt) root.append(node('p',input.prompt));
     const respond = (value: string, questionId?: string) => {
       error.hidden=true;
@@ -146,6 +158,7 @@ export class AgentView {
       });
     };
     if(input.kind==='approval') {
+      root.append(node('p','Hermes is paused until you decide. Requests can expire in Hermes; the supported baseline defaults to five minutes.','agent-attention-copy'));
       root.append(node('pre',input.command??'No complete command supplied'));
       root.append(node('p','Review the exact operation. Allow once applies only to this request; it does not change your saved approval policy.','hint'));
       for(const choice of input.choices) controls.append(button(choice==='once'?'Allow once':'Deny',()=>respond(choice)));

@@ -8,9 +8,23 @@ Supported runtime: `NousResearch/hermes-agent@b6b53c69a6ed49cb099cf1bfe76b5e6edd
 
 All input requests are keyed by the native session and request ID. Responses use only `approval.respond` (`choice`), `clarify.respond` (`answer`, optional `question_id`), `sudo.respond` (`password`) and `secret.respond` (`value`). The operator selects the owning conversation before replying.
 
-Approval exposes Allow once and Deny, restricted by the native request. Clarification supports single and multi-select questions and per-question confirmation in a batch. Password/secret fields are masked and provide a deliberate submit or skip action. Secret cards disclose that Hermes may save the value in its own credential configuration. The WebUI never writes that configuration itself.
+Approval exposes Allow once and Deny, restricted by the native request. Pending approvals are intentionally visually prominent: a warning-coloured card, explicit **Permission required** heading, blocking-state copy and a stronger composer attention strip make the paused turn obvious on desktop and mobile. A newly observed approval also attempts one short Web Audio chime. Browsers only permit audible playback after the user has interacted with the page; if audio has not been unlocked or is muted, the visual request remains authoritative and no delayed sound is queued.
+
+Clarification supports single and multi-select questions and per-question confirmation in a batch. Password/secret fields are masked and provide a deliberate submit or skip action. Secret cards disclose that Hermes may save the value in its own credential configuration. The WebUI never writes that configuration itself.
 
 Responses remain awaiting confirmation until the supported RPC result is validated. Expired, unsupported, malformed and unknown outcomes are not treated as successful delivery. Resolved requests cannot be revived by a duplicate event; changed details under the same request ID block confirmation. An absent or malformed acknowledgement never causes an automatic retry. Pending values are not moved into drafts, transcript records, URLs, diagnostics or browser storage.
+
+### Approval timeout is owned by Hermes
+
+The WebUI does not run a separate approval timer and cannot safely make an expired native request live again. On the tested Hermes pin, gateway approval waits use the canonical `approvals.timeout` setting. Its default is **300 seconds (five minutes)**. Hermes bounds the wait and returns a timeout if no answer arrives. Setting the value to `0` means an immediate timeout; it does **not** mean wait forever.
+
+The tested Hermes implementation clamps the setting to its platform-safe maximum (approximately one year), so this baseline has no supported true-infinite approval value. Operators who need a longer human response window should change Hermes itself through its supported CLI, for example:
+
+```sh
+hermes config set approvals.timeout 3600
+```
+
+That example makes approvals wait up to one hour. Choose the duration deliberately for the deployment. The WebUI does not silently change this policy, renew a timed-out request or replay an approval response. A request that expires remains expired and the user must cause Hermes to issue a fresh request if the operation is still desired.
 
 ## Switching conversations and attention
 
@@ -38,10 +52,10 @@ Reload discards that live archive and obtains only the history Hermes exposes. N
 
 ## Verification
 
-Accepted application: `d1aba2263ff1660499f167c9b5faa7b63abda038`; exact CI merge/tree and artifact hashes are in the completion evidence.
+Accepted application: `d1aba2263ff1660499f167c9b5faa7b63abda038`; exact CI merge/tree and artifact hashes are in the completion evidence. Later approval-attention UX changes are tracked independently rather than rewriting the M3 acceptance record.
 
-- Build, server/frontend typecheck, lint, 158 unit tests and 20 HTTP/WS contracts pass.
-- 268 browser tests pass across desktop Chromium, iPhone WebKit emulation, Android Chromium and narrow-320; no failures, skips or flaky results.
+- Build, server/frontend typecheck, lint, 158 unit tests and 20 HTTP/WS contracts pass at the accepted M3 checkpoint.
+- 268 browser tests pass across desktop Chromium, iPhone WebKit emulation, Android Chromium and narrow-320 at that checkpoint; no failures, skips or flaky results.
 - Non-root, read-only production Docker smoke passes.
 - Unmodified Hermes passes real approval allow/deny/expiry, sudo execution/skip, secret capture/skip, live attention and lost-credential interruption in both gated and trusted-local deployments. The existing real clarification-batch gate and earlier auth/chat/model regressions also pass.
 
