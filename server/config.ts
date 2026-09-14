@@ -1,3 +1,4 @@
+import { workspaceRoots, type WorkspaceRoot } from './workspace/files.js';
 import { tlsFiles, type TlsFiles } from './tls.js';
 import { resolve } from 'node:path';
 import { configureAccess } from './trusted-local.js';
@@ -5,6 +6,7 @@ import { configureAccess } from './trusted-local.js';
 export const PROXY_PREFIX = '/__hermes';
 export interface Config {
   tls?: TlsFiles;
+  workspaceRoots?: WorkspaceRoot[];
   authMode?: 'dashboard' | 'trusted-local';
   readonly sessionToken?: string;
   upstream: URL;
@@ -44,12 +46,13 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     WORKSPACE_WRITE_ENABLED: 'false',
     GIT_WRITE_ENABLED: 'false',
   })) {
-    if (env[key] && env[key] !== allowed) throw new Error(`${key} is not supported by this Phase 0 build`);
+    if (env[key] && env[key] !== allowed) throw new Error(`${key} is not supported by this read-only build`);
   }
-  if (env.WORKSPACE_ROOTS || env.TRUST_PROXY || env.GIT_ENABLED === 'true') {
-    throw new Error('Workspace and client-supplied proxy trust are not enabled in Phase 0');
+  if (env.TRUST_PROXY || (env.GIT_ENABLED && env.GIT_ENABLED !== 'false')) {
+    throw new Error('Git and client-supplied proxy trust are not enabled in this build');
   }
   const config: Config = {
+    workspaceRoots: workspaceRoots(env.WORKSPACE_ROOTS),
     upstream: origin(env.HERMES_DASHBOARD_URL, 'HERMES_DASHBOARD_URL'),
     publicOrigin: origin(env.PUBLIC_ORIGIN, 'PUBLIC_ORIGIN'),
     host: env.HOST ?? '0.0.0.0',

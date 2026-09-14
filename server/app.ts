@@ -1,3 +1,4 @@
+import { workspaceRoutes } from './routes/workspace.js';
 import { pwaAsset } from './pwa.js';
 import { transportServer } from './tls.js';
 import { foundationRoutes } from './routes/foundation.js';
@@ -14,6 +15,7 @@ import { json, proxyHttp, proxyUpgrade, refuseUpgrade, type Log } from './proxy/
 export function createApp(config: Config, log: Log = (event) => console.log(JSON.stringify(event))) {
   const sockets = new Set<Duplex>();
   const foundation = foundationRoutes(config);
+  const workspace = workspaceRoutes(config);
   const server = transportServer(config,
     (req, res) => {
       const raw = req.url ?? '/';
@@ -26,6 +28,7 @@ export function createApp(config: Config, log: Log = (event) => console.log(JSON
         json(res, 403, { error: { code: 'ORIGIN_REJECTED', requestId } });
         return;
       }
+      if (workspace(req, res)) return;
       if (raw === '/api/webui/access' && req.method === 'GET') {
         void localAccess(config).then(data => json(res, 200, data)).catch(() => json(res, 503, { error: { code: 'LOCAL_ACCESS_UNAVAILABLE' } }));
         return;
