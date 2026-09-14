@@ -1,4 +1,5 @@
 import type { AgentInput, Question, ToolActivity, ActivityTurn } from './agent-activity.js';
+import { ApprovalAttentionTone } from './attention-tone.js';
 import type { NativeSession } from './native-session.js';
 
 function node<K extends keyof HTMLElementTagNameMap>(tag: K, text?: string, className?: string): HTMLElementTagNameMap[K] {
@@ -35,10 +36,12 @@ export class AgentView {
   private readonly tools = node('div', '', 'agent-tools');
   private readonly inputs = new Map<string, InputCard>();
   private readonly toolCards = new Map<string, ToolCard>();
+  private readonly approvalTone = new ApprovalAttentionTone();
+  private readonly announcedApprovals = new WeakMap<NativeSession, Set<string>>();
   private unlisten?: () => void;
   private visibility = () => { if (document.visibilityState !== 'visible') this.clearCredentials(); };
   private pagehide = () => this.clearCredentials();
-  dispose(): void { this.clear(); document.removeEventListener('visibilitychange', this.visibility); window.removeEventListener('pagehide', this.pagehide); }
+  dispose(): void { this.clear(); this.approvalTone.dispose(); document.removeEventListener('visibilitychange', this.visibility); window.removeEventListener('pagehide', this.pagehide); }
   constructor(private readonly root: HTMLElement) {
     const heading = node('h2', 'Agent activity and input'); heading.id = 'agent-title';
     this.root.setAttribute('aria-labelledby', heading.id);
@@ -69,6 +72,13 @@ export class AgentView {
     const activity = owner.activity.state;
     const active = activity.inputs.filter(p => ['pending','sending'].includes(p.status));
     const count = active.length;
+    if (enabled && !historical) {
+      let announced = this.announcedApprovals.get(owner);
+      if (!announced) { announced = new Set<string>(); this.announcedApprovals.set(owner, announced); }
+      const fresh = active.filter(input => input.kind === 'approval' && input.status === 'pending' && !input.blocked && !announced!.has(input.key));
+      for (const input of fresh) announced.add(input.key);
+      if (fresh.length) this.approvalTone.notify();
+    }
     this.root.hidden = historical || !(owner.activity.archive.length || activity.inputs.length || activity.tools.length || activity.reasoning || activity.thinking || activity.recoveryGap || activity.malformed);
     if (!enabled || historical) this.clearCredentials();
     this.summary.textContent = `${count ? `${count} request${count === 1 ? '' : 's'} awaiting confirmation. ` : ''}Current turn with bounded earlier activity. Saved history stays in Hermes.`;

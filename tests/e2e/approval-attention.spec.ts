@@ -25,3 +25,32 @@ test('approval is visually prominent and explains the Hermes expiry boundary', a
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await approval.screenshot({ path: info.outputPath('permission-required.png') });
 });
+
+test('a new approval plays one short browser chime after audio has been unlocked', async ({ page }, info) => {
+  await page.addInitScript(() => {
+    Object.assign(window, { __approvalBeeps: 0 });
+    class FakeParam { setValueAtTime() {} exponentialRampToValueAtTime() {} }
+    class FakeOscillator {
+      type = 'sine'; frequency = new FakeParam(); connect() { return this; }
+      start() { (window as unknown as { __approvalBeeps: number }).__approvalBeeps += 1; }
+      stop() {}
+    }
+    class FakeGain { gain = new FakeParam(); connect() { return this; } }
+    class FakeAudioContext {
+      state: 'suspended' | 'running' | 'closed' = 'suspended'; currentTime = 0; destination = {};
+      createOscillator() { return new FakeOscillator(); }
+      createGain() { return new FakeGain(); }
+      resume() { this.state = 'running'; return Promise.resolve(); }
+      close() { this.state = 'closed'; return Promise.resolve(); }
+    }
+    Object.defineProperty(window, 'AudioContext', { configurable: true, value: FakeAudioContext });
+  });
+  await login(page);
+  expect(await page.evaluate(() => (window as unknown as { __approvalBeeps: number }).__approvalBeeps)).toBe(0);
+  await send(page, `[agent-test] approval chime ${info.project.name}`);
+  await expect(page.getByRole('article', { name: 'Operation approval', exact: true })).toBeVisible();
+  await expect.poll(() => page.evaluate(() => (window as unknown as { __approvalBeeps: number }).__approvalBeeps)).toBe(1);
+  await page.setViewportSize({ width: page.viewportSize()!.width, height: Math.max(420, page.viewportSize()!.height - 1) });
+  await page.waitForTimeout(100);
+  expect(await page.evaluate(() => (window as unknown as { __approvalBeeps: number }).__approvalBeeps)).toBe(1);
+});
