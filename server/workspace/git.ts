@@ -9,7 +9,7 @@ export class WorkspaceGit {
   private closed = false;
   async read(root: WorkspaceRoot, repo: string, action: GitRequest['action'], path?: string, staged = false): Promise<unknown> {
     if (this.closed || this.workers.size >= 2) throw new WorkspaceError('WORKSPACE_BUSY', 429);
-    const worker = new Worker(new URL('./git-worker.js', import.meta.url), {
+    const worker = new Worker(new URL(import.meta.url.endsWith('.ts') ? '../../build/server/workspace/git-worker.js' : './git-worker.js', import.meta.url), {
       workerData: { root, repo, action, path, staged } satisfies GitRequest,
       env: {}, resourceLimits: { maxOldGenerationSizeMb: 128, maxYoungGenerationSizeMb: 16, stackSizeMb: 4 },
     });

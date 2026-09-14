@@ -1,3 +1,4 @@
+import { DocumentRequests } from './hermes/document-requests.js';
 import { DashboardClient } from './hermes/dashboard-client.js';
 import { GatewayClient } from './hermes/gateway-client.js';
 import { ChatController } from './hermes/chat-controller.js';
@@ -14,7 +15,8 @@ function element<T extends HTMLElement>(id: string): T {
   return node as T;
 }
 const diagnostics = new DiagnosticsRing();
-const dashboard = new DashboardClient(location.origin, fetch, 15_000, diagnostics);
+const documentRequests = new DocumentRequests(window);
+const dashboard = new DashboardClient(location.origin, documentRequests.fetch, 15_000, diagnostics);
 const gateway = new GatewayClient(new WsAuthClient(dashboard, (signal) => foundation.verifyAdmission(signal)), { diagnostics });
 const foundation: ConnectionStore = new ConnectionStore(dashboard, gateway, diagnostics);
 const chat = new ChatController(dashboard, gateway, (error) => gateway.suspend(error));
