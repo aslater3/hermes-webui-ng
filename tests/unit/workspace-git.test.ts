@@ -1,3 +1,5 @@
+import git from 'isomorphic-git';
+import { contentStatus } from '../../server/workspace/git-status.js';
 import test, { type TestContext } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
@@ -92,4 +94,25 @@ test('Git discovery is bounded and labels external-worktree gitdirs unsupported'
   const result = await service.read(root, '', 'repos') as { repos: { path: string; supported: boolean }[] };
   assert.ok(result.repos.some(repo => repo.path === 'nested' && !repo.supported));
   await assert.rejects(service.read(root, '../', 'repos'));
+});
+
+test('equal-size edits with identical stat-cache metadata still compare real worktree contents', async t => {
+  const { path, root, command } = await fixture(t);
+  await writeFile(join(path, 'example.txt'), 'version A\n'); command('add', 'example.txt'); command('commit', '-m', 'same-size baseline');
+  await writeFile(join(path, 'example.txt'), 'version B\n'); command('add', 'example.txt');
+  const boundary = gitFileSystem(root);
+  const cached = await boundary.fs.promises.lstat('/project/example.txt');
+  const index = await readFile(join(path, '.git/index'));
+  await writeFile(join(path, 'example.txt'), 'version C\n');
+  // Model precisely the metadata match that the library treats as a cache hit.
+  // Reads still go through the actual constrained descriptor filesystem.
+  const fs = { promises: { ...boundary.fs.promises,
+    lstat: async (input: string) => input === '/project/example.txt' ? cached : boundary.fs.promises.lstat(input),
+  } };
+  const options = { fs, dir: '/project', gitdir: '/project/.git' };
+  const old = await git.statusMatrix({ ...options, refresh: false });
+  assert.deepEqual(old.find(row => row[0] === 'example.txt'), ['example.txt', 1, 2, 2]);
+  const current = await contentStatus(options);
+  assert.deepEqual(current.find(row => row[0] === 'example.txt'), ['example.txt', 1, 2, 3]);
+  boundary.check(); assert.deepEqual(await readFile(join(path, '.git/index')), index);
 });

@@ -1,3 +1,4 @@
+import { contentStatus } from './git-status.js';
 import { parentPort, workerData } from 'node:worker_threads';
 import { join } from 'node:path';
 import { opendir } from 'node:fs/promises';
@@ -5,7 +6,7 @@ import git from 'isomorphic-git';
 import { createTwoFilesPatch } from 'diff';
 import { allowedName, relativeParts } from './files.js';
 import { contained, openChecked, WorkspaceError, type WorkspaceRoot } from './safe-open.js';
-import { gitFileSystem, GIT_LIMITS, projectPath } from './git-fs.js';
+import { gitFileSystem, GIT_LIMITS } from './git-fs.js';
 
 export interface GitRequest { root: WorkspaceRoot; repo: string; action: 'repos' | 'status' | 'diff'; path?: string; staged?: boolean }
 async function repoRoot(root: WorkspaceRoot, path: string) {
@@ -58,7 +59,7 @@ async function run(request: GitRequest) {
   const before = await signature();
   let result: unknown;
   if (action === 'status') {
-    const rows = await git.statusMatrix({ ...options, refresh: false, filter: projectPath });
+    const rows = await contentStatus(options);
     boundary.check();
     const changes = rows.filter(([, head, work, stage]) => head !== work || work !== stage);
     const branch = await git.currentBranch({ ...options, fullname: false });
