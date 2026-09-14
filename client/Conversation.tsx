@@ -1,3 +1,4 @@
+import './m3-activity.css';
 import { HermesMark } from './HermesMark.js';
 import { AgentControls } from './AgentControls.js';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
@@ -70,7 +71,7 @@ export function Conversation({ runtime: rt, revision }: { runtime: AppRuntime; r
       {messages.slice(activityAt).map((message, index) => <Message key={`${scope}:${activityAt + index}`} {...message}/>)}
       {streaming && <div className="message message-assistant streaming"><div className="message-label"><span className="assistant-mark"><HermesMark size={15}/></span>Hermes <span className="working-label">Working</span></div><pre className="plain-message">{streaming}<span className="stream-cursor"/></pre></div>}
       {busy && !streaming && !pending && <div className="thinking-indicator" role="status"><span/><span/><span/>Hermes is working</div>}
-      {state.phase === 'waiting' && !pending && <Notice>Hermes is waiting for input, but no recoverable request is available. Refresh or use the original client.</Notice>}
+      {state.phase === 'waiting' && !pending && <Notice>Hermes is waiting for input, but no recoverable request is available. Use Stop response to cancel this turn, then ask again for a fresh request.</Notice>}
       <span className="sr-only" role="status" aria-live="polite">{state.phase === 'idle' && messages.length ? 'Response complete.' : pending ? 'Hermes needs your input.' : ''}</span>
     </div></div>
     <div className="composer-dock">

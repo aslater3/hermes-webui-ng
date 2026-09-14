@@ -7,7 +7,7 @@
 .active-session-row { display: flex; align-items: center; gap: 10px; min-height: 52px; text-align: left; border-radius: 9px; width: 100%; padding: 9px; color: var(--text); }
 .active-session-row:hover:not(:disabled) { background: var(--surface-hover); }
 .active-session-row > svg { flex-shrink: 0; color: var(--muted); }
-.active-session-row > span { min-width: 0; }
+.active-session-row > span { min-width: 0; flex: 1; }
 .active-session-row strong { display: block; font-size: 12px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .active-session-row small { display: block; color: var(--muted); margin-top: 3px; font-size: 11px; }
 .active-more { min-height: 44px; color: var(--muted); font-size: 12px; text-align: left; padding: 8px; }

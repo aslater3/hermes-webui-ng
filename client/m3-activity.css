@@ -1,0 +1,7 @@
+.agent-activity .agent-input-controls button, .agent-activity .agent-input-controls label, .agent-activity summary { min-height: 44px; }
+.agent-earlier { margin-top: 18px !important; }
+.agent-archive { padding-bottom: 6px; }
+.agent-archive .hint { line-height: 1.6; color: var(--muted); }
+.agent-archived-turn > summary { color: var(--text); }
+.agent-archive pre { max-height: 300px; overflow: auto; }
+@media (max-width: 430px) { .agent-archive pre { max-height: 36dvh; } }
