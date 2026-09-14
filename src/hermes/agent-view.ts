@@ -133,7 +133,7 @@ export class AgentView {
     const interactive = input.status === 'pending' && enabled && !input.blocked;
     card.root.dataset.status = input.status;
     card.status.textContent = input.blocked ? 'Response disabled — incomplete or unsupported request details' :
-      input.kind === 'approval' && input.status === 'pending' ? 'Action paused — choose Allow once or Deny' : labels[input.status];
+      input.kind === 'approval' && input.status === 'pending' ? 'Action paused — choose an approval scope, YOLO, or Deny' : labels[input.status];
     if (['answered','expired','unknown','unsupported'].includes(input.status) || input.blocked) this.erase(card);
     for (const control of card.controls.querySelectorAll<HTMLInputElement | HTMLButtonElement | HTMLTextAreaElement>('button,input,textarea')) control.disabled = !interactive;
     for (const [qid, fieldset] of card.questions) {
@@ -160,8 +160,17 @@ export class AgentView {
     if(input.kind==='approval') {
       root.append(node('p','Hermes is paused until you decide. Requests can expire in Hermes; the supported baseline defaults to five minutes.','agent-attention-copy'));
       root.append(node('pre',input.command??'No complete command supplied'));
-      root.append(node('p','Review the exact operation. Allow once applies only to this request; it does not change your saved approval policy.','hint'));
-      for(const choice of input.choices) controls.append(button(choice==='once'?'Allow once':'Deny',()=>respond(choice)));
+      root.append(node('p','Allow once approves only this request. Approve for session allows this operation pattern for this conversation. YOLO enables the session approval bypass and approves this request; Hermes hardline blocks and explicit deny rules still apply.','hint'));
+      if (input.choices.includes('once')) controls.append(button('Allow once',()=>respond('once')));
+      if (input.choices.includes('session')) controls.append(button('Approve for session',()=>respond('session')));
+      if (input.choices.includes('once')) controls.append(button('YOLO',()=>{
+        error.hidden=true;
+        void owner.enableYoloAndApprove(input.key).catch(() => {
+          if(this.owner!==owner || !root.isConnected)return;
+          error.textContent='Hermes did not confirm YOLO and this approval. Refresh the conversation before trying another action; nothing is replayed automatically.'; error.hidden=false;
+        });
+      }));
+      if (input.choices.includes('deny')) controls.append(button('Deny',()=>respond('deny')));
     } else if(input.kind==='clarify') {
       input.questions.forEach((q,i)=>{
         const fieldset=node('fieldset'); fieldset.append(node('legend',q.text)); const note=node('p','','question-status');
