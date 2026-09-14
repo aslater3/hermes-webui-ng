@@ -41,7 +41,7 @@ export function AgentControls({ runtime: rt }: { runtime: AppRuntime }) {
     <button type="button" className="agent-chip" aria-label={`Reasoning: ${effortLabel(effort)}`} title="Reasoning effort for this conversation" disabled={locked} onClick={() => open('reasoning')}><Brain size={14}/><span>{effortLabel(effort)}</span><ChevronDown size={12}/></button>
     <label className={`yolo-toggle${yolo ? ' yolo-active' : ''}`} title="YOLO mode bypasses routine approval prompts for this conversation. Explicit deny rules and Hermes hardline blocks still apply.">
       <Zap size={14}/><span>YOLO</span>
-      <input type="checkbox" role="switch" aria-label="YOLO mode for this conversation" checked={yolo} disabled={blocked} onChange={event => rt.run(() => native.setYolo(event.target.checked))}/>
+      <input type="checkbox" role="switch" aria-label="YOLO mode for this conversation" checked={yolo} disabled={blocked} onChange={event => rt.run(() => rt.changeYolo(event.target.checked))}/>
       <span className="yolo-slider" aria-hidden="true"/>
     </label>
     {settings.busy && <span className="settings-working" role="status"><LoaderCircle size={14} className="spin"/>Applying…</span>}
