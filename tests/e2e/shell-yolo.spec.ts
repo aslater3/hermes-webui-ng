@@ -3,9 +3,6 @@ import { login, send, idle } from './shell-fixture.js';
 
 test.use({ baseURL: 'http://127.0.0.1:8787' });
 
-const yoloSwitch = (page: Parameters<typeof test>[0] extends never ? never : any) =>
-  page.getByRole('switch', { name: 'YOLO mode for this conversation', exact: true });
-
 test('composer YOLO switch is session scoped and survives authoritative reload', async ({ page }) => {
   await login(page);
   const yolo = page.getByRole('switch', { name: 'YOLO mode for this conversation', exact: true });
