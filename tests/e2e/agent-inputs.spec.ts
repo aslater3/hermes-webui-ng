@@ -9,9 +9,12 @@ async function start(page:Page,scenario=''){
 test('tool activity and all four input types work without exposing credentials',async({page},info)=>{
   const errors:string[]=[];page.on('pageerror',e=>errors.push(e.message));await start(page);
   const approval=page.getByRole('article',{name:'Operation approval'});
-  await expect(approval).toContainText('printf');await expect(approval.getByRole('button',{name:'Allow once',exact:true})).toBeEnabled();
-  await expect(approval.getByRole('button',{name:/Always|Session/})).toHaveCount(0);
-  await approval.getByRole('button',{name:'Allow once',exact:true}).click();
+  await expect(approval).toContainText('printf');
+  await expect(approval.getByRole('button',{name:'Allow once',exact:true})).toBeEnabled();
+  await expect(approval.getByRole('button',{name:'Approve for session',exact:true})).toBeEnabled();
+  await expect(approval.getByRole('button',{name:'YOLO',exact:true})).toBeEnabled();
+  await expect(approval.getByRole('button',{name:/Always/})).toHaveCount(0);
+  await approval.getByRole('button',{name:'Approve for session',exact:true}).click();
   const clarify=page.getByRole('article',{name:'Question from Hermes'});
   await clarify.getByLabel('Blue',{exact:true}).check();await clarify.getByLabel('Green',{exact:true}).check();
   await clarify.getByLabel('Your answer',{exact:true}).fill('Keep this second answer while confirming the first');
@@ -33,9 +36,19 @@ test('tool activity and all four input types work without exposing credentials',
 });
 test('approval is recoverable after reload and can be explicitly denied',async({page})=>{
   await start(page,'approval');await expect(page.getByRole('button',{name:'Allow once',exact:true})).toBeEnabled();
+  await expect(page.getByRole('button',{name:'Approve for session',exact:true})).toBeEnabled();
   await page.reload();await expect(page.getByRole('button',{name:'Deny',exact:true})).toBeEnabled();
   await page.getByRole('button',{name:'Deny',exact:true}).click();await expect(page.locator('#transcript')).toContainText('Operation denied');
   await expect(page.locator('#session-state')).toHaveText('idle');
+});
+test('YOLO approval enables the session switch and the composer can disable it again',async({page})=>{
+  await start(page,'approval');
+  const yolo=page.getByRole('switch',{name:'YOLO mode for this conversation'});
+  await expect(yolo).not.toBeChecked();await expect(yolo).toBeDisabled();
+  await page.getByRole('button',{name:'YOLO',exact:true}).click();
+  await expect(page.locator('#session-state')).toHaveText('idle');
+  await expect(yolo).toBeEnabled();await expect(yolo).toBeChecked();
+  await yolo.uncheck();await expect(yolo).not.toBeChecked();
 });
 test('disconnect clears a masked field and does not resurrect a credential prompt',async({page})=>{
   await start(page,'secret');await page.getByLabel('Secret value',{exact:true}).fill('DO_NOT_RETAIN');
