@@ -47,6 +47,8 @@ jobs:
         run: bash scripts/m3-live-gate.sh dashboard
       - name: Full Phase 3 trusted-local workflows
         run: bash scripts/m3-live-gate.sh trusted-local
+      - name: Verified HTTPS and WSS against vanilla Hermes in both modes
+        run: bash scripts/tls-live-gate.sh
       - uses: actions/upload-artifact@v4
         if: always()
         with:
