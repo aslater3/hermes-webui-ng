@@ -1,11 +1,9 @@
-import { constants, realpathSync, statSync } from 'node:fs';
-import { open, opendir, readlink, type FileHandle } from 'node:fs/promises';
+import { realpathSync, statSync } from 'node:fs';
+import { opendir, type FileHandle } from 'node:fs/promises';
 import { isAbsolute, resolve, sep } from 'node:path';
 
-export class WorkspaceError extends Error {
-  constructor(readonly code: string, readonly status = 400) { super(code); }
-}
-export interface WorkspaceRoot { id: string; label: string; path: string; dev: number; ino: number }
+import { contained, openChecked, readBounded, WorkspaceError, type WorkspaceRoot } from './safe-open.js';
+export { WorkspaceError, type WorkspaceRoot } from './safe-open.js';
 export const FILE_LIMITS = { previewBytes: 262_144, downloadBytes: 10_485_760, directoryEntries: 1000, pageEntries: 200 } as const;
 const deniedNames = /^(?:\.hermes|\.git|\.ssh|\.aws|\.gnupg|\.local|\.env(?:\..*)?|state\.db(?:-.*)?|id_(?:rsa|ed25519|ecdsa)(?:\.pub)?)$/i;
 const deniedExtensions = /\.(?:pem|key|p12|pfx)$/i;
@@ -38,35 +36,9 @@ export function workspaceRoots(value: string | undefined): WorkspaceRoot[] {
     } catch { throw new Error('WORKSPACE_ROOTS must name existing project directories, not symlinks or system/Hermes directories'); }
   });
 }
-const flags = constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK;
-async function contained(handle: FileHandle, root: WorkspaceRoot) {
-  const actual = await readlink(`/proc/self/fd/${handle.fd}`);
-  if (actual !== root.path && !actual.startsWith(`${root.path}/`)) throw new WorkspaceError('WORKSPACE_PATH_REJECTED', 403);
-  if (actual.endsWith(' (deleted)')) throw new WorkspaceError('WORKSPACE_CHANGED_RETRY', 409);
-}
-/** Walk one component at a time through pinned parent descriptors; never follow a project symlink. */
-export async function openWorkspacePath(root: WorkspaceRoot, path: string, directory = false): Promise<FileHandle> {
-  const parts = relativeParts(path);
-  let handle: FileHandle | undefined;
-  try {
-    handle = await open(root.path, flags | constants.O_DIRECTORY);
-    const identity = await handle.stat();
-    if (identity.dev !== root.dev || identity.ino !== root.ino) throw new WorkspaceError('WORKSPACE_ROOT_CHANGED', 409);
-    for (let i = 0; i < parts.length; i++) {
-      await contained(handle, root);
-      const next = await open(`/proc/self/fd/${handle.fd}/${parts[i]}`, flags | (directory || i < parts.length - 1 ? constants.O_DIRECTORY : 0));
-      await handle.close(); handle = next;
-    }
-    await contained(handle, root);
-    const stat = await handle.stat();
-    if (directory ? !stat.isDirectory() : !stat.isFile() || stat.nlink !== 1) throw new WorkspaceError('WORKSPACE_FILE_TYPE_REJECTED', 403);
-    return handle;
-  } catch (error) {
-    await handle?.close().catch(() => {});
-    if (error instanceof WorkspaceError) throw error;
-    // Do not leak paths, syscall names, link targets or upstream secrets.
-    throw new WorkspaceError('WORKSPACE_PATH_UNAVAILABLE', 403);
-  }
+/** Public project reads never enter Git metadata, even when Git is enabled. */
+export function openWorkspacePath(root: WorkspaceRoot, path: string, directory = false): Promise<FileHandle> {
+  return openChecked(root, relativeParts(path), directory);
 }
 export async function tree(root: WorkspaceRoot, path: string, offset = 0) {
   if (!Number.isInteger(offset) || offset < 0 || offset >= FILE_LIMITS.directoryEntries || offset % FILE_LIMITS.pageEntries !== 0)
@@ -92,19 +64,10 @@ export async function preview(root: WorkspaceRoot, path: string) {
   try {
     const before = await handle.stat();
     if (before.size > FILE_LIMITS.previewBytes) return { path, kind: 'too-large', size: before.size, text: null };
-    const buffer = Buffer.alloc(FILE_LIMITS.previewBytes + 1);
-    let length = 0;
-    while (length < buffer.length) {
-      const { bytesRead } = await handle.read(buffer, length, buffer.length - length, length);
-      if (!bytesRead) break;
-      length += bytesRead;
-    }
-    const after = await handle.stat(); await contained(handle, root);
-    if (length !== before.size || after.mtimeMs !== before.mtimeMs || after.ctimeMs !== before.ctimeMs || after.size !== before.size)
-      throw new WorkspaceError('WORKSPACE_CHANGED_RETRY', 409);
+    const buffer = await readBounded(handle, root, FILE_LIMITS.previewBytes);
     let text: string;
     try {
-      const data = buffer.subarray(0, length);
+      const data = buffer;
       if (data.includes(0)) throw new Error();
       text = new TextDecoder('utf-8', { fatal: true }).decode(data);
     } catch { return { path, kind: 'binary', size: before.size, text: null }; }
