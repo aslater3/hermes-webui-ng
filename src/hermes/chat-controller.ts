@@ -1,3 +1,4 @@
+import { literalPrompt, slashInput } from './command-catalog.js';
 import { HttpError, type DashboardClient } from './dashboard-client.js';
 import type { GatewayClient } from './gateway-client.js';
 import { NativeSession } from './native-session.js';
@@ -44,6 +45,7 @@ export class ChatController {
     for (const view of [this.native, ...this.retained.values()]) {
       if (['running', 'waiting', 'attaching', 'unknown'].includes(view.state.phase) || view.state.deliveryUnknown)
         return 'Finish or reconcile active conversations before updating.';
+      if (view.commands.state.busy) return 'Wait for the native command to finish.';
       if (view.settings.state.busy || view.settings.state.confirmation || view.settings.state.outcome === 'unknown')
         return 'Resolve the pending settings change before updating.';
       if (view.activity.state.inputs.some(input => ['pending', 'sending', 'unknown'].includes(input.status)))
@@ -174,7 +176,8 @@ export class ChatController {
     const scope = this.scope, text = this.draft, native = this.native;
     this.error = undefined;
     try {
-      await native.submit(text);
+      if (slashInput(text)) await native.commands.execute(text);
+      else await native.submit(literalPrompt(text));
       if (scope === this.scope && this.native === native && this.draft === text) {
         this.draft = ''; this.drafts.delete(draftKey(this.selected));
       }
@@ -189,6 +192,7 @@ export class ChatController {
   async historyPage(offset: number): Promise<void> {
     if (!this.enabled || !this.selected || this.busy || ['running','waiting'].includes(this.native.state.phase)) return;
     const scope = this.scope;
+    this.native.commands.reset();
     this.busy = true; this.historical = true; this.error = undefined; this.publish();
     try { await this.browser.open(this.selected, offset); }
     finally { if (scope === this.scope) { this.busy = false; this.publish(); } }

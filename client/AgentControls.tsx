@@ -23,13 +23,20 @@ export function AgentControls({ runtime: rt }: { runtime: AppRuntime }) {
   useEffect(() => () => catalogue.dispose(), [catalogue]);
   useEffect(() => { setPanel(null); setQuery(''); setLimit(80); }, [native, generation, rt.accountGeneration]);
   useEffect(() => { if (settings.confirmation) setPanel('models'); }, [settings.confirmation]);
+  const intent = native.commands.state.action;
+  useEffect(() => {
+    if (intent && ['models', 'profiles', 'reasoning'].includes(intent.kind)) {
+      setQuery(''); setLimit(80); setPanel(intent.kind as 'models' | 'profiles' | 'reasoning');
+      native.commands.dismissAction();
+    }
+  }, [native, intent]);
   const data = catalogue.state;
   const model = state.agent?.model ?? data.models?.model;
   const provider = data.models?.provider ?? state.agent?.provider;
   const selected = data.models?.choices.find(row => row.model === model && row.provider === provider);
   const effort = state.agent?.reasoningEffort ?? data.effort;
   const yolo = state.agent?.yolo === true;
-  const locked = !rt.ready || rt.chat.busy || rt.chat.historical || settings.busy || ['attaching', 'running', 'waiting', 'unknown', 'error'].includes(state.phase);
+  const locked = !rt.ready || rt.chat.busy || rt.chat.historical || native.commands.state.busy || settings.busy || ['attaching', 'running', 'waiting', 'unknown', 'error'].includes(state.phase);
   const blocked = locked || settings.outcome === 'unknown';
   const open = (next: typeof panel) => { setQuery(''); setLimit(80); setPanel(next); };
   const close = () => { native.settings.cancelConfirmation(); setPanel(null); };

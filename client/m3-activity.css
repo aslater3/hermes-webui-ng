@@ -10,6 +10,31 @@
 .agent-card h3 { font-size: 13px; color: var(--text); margin-bottom: 6px; }
 .agent-field-label { font-size: 12px; font-weight: 600; color: var(--text); }
 
+/* Current-turn activity is one chronological stream. Reasoning remains a small card until the user expands it. */
+.agent-timeline { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.agent-timeline > .agent-tool, .agent-timeline > .agent-reasoning-card { margin: 0; }
+.agent-reasoning-card {
+  min-width: 0;
+  padding: 0;
+  border-color: color-mix(in srgb, var(--accent) 28%, var(--border));
+  background: color-mix(in srgb, var(--accent) 4%, var(--surface));
+  overflow: hidden;
+}
+.agent-reasoning-card > summary {
+  min-height: 44px;
+  padding: 10px 12px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.45;
+}
+.agent-reasoning-card[open] > summary {
+  color: var(--text);
+  border-bottom: 1px solid color-mix(in srgb, var(--accent) 18%, var(--border));
+}
+.agent-reasoning-card > pre { margin: 0 12px 12px; max-height: min(320px, 40dvh); }
+.agent-archive .agent-reasoning-card { margin: 8px 0; }
+
 /* Human permission is a blocking state, not secondary tool metadata. */
 .agent-card.agent-approval[data-status="pending"] {
   border: 2px solid var(--warning);
@@ -58,4 +83,5 @@
 @media (max-width: 430px) {
   .agent-card.agent-approval[data-status="pending"] { padding: 16px; }
   .agent-card.agent-approval[data-status="pending"] .agent-input-controls button { flex: 1 1 120px; }
+  .agent-reasoning-card > summary { font-size: 11px; }
 }

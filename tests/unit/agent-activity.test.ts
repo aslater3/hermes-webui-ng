@@ -68,12 +68,36 @@ test('stable tool identity, failed results, duration, and large output are bound
   assert.ok(a.state.tools[0]!.output.length<=ACTIVITY_LIMITS.text);assert.equal(a.state.tools[0]?.truncated,true);assert.ok(!a.state.tools[0]?.input.includes('hidden'));
   a.receive(event('tool.start',{tool_id:'t',name:'terminal'}));assert.equal(a.state.tools[0]?.state,'error');
 });
+test('reasoning segments preserve chronological tool boundaries without splitting every delta',()=>{
+  const a=new AgentActivity();
+  a.receive(event('reasoning.delta',{text:'before tool'}));
+  a.receive(event('reasoning.delta',{text:' and still before'}));
+  a.receive(event('tool.start',{tool_id:'one',name:'first'}));
+  a.receive(event('reasoning.delta',{text:'after first tool'}));
+  a.receive(event('reasoning.delta',{text:' continuing'}));
+  a.receive(event('tool.start',{tool_id:'two',name:'second'}));
+  assert.deepEqual(a.state.timeline.map(entry => entry.kind === 'tool' ? `tool:${entry.id}` : `reasoning:${entry.text}`),[
+    'reasoning:before tool and still before','tool:one','reasoning:after first tool continuing','tool:two',
+  ]);
+  assert.equal(a.state.timeline.filter(entry=>entry.kind==='reasoning').length,2);
+  a.receive(event('tool.progress',{tool_id:'two',name:'second',text:'working'}));
+  assert.deepEqual(a.state.timeline.map(entry=>entry.kind),['reasoning','tool','reasoning','tool']);
+});
+test('reasoning.available creates a card only when no streamed reasoning was observed',()=>{
+  const streamed=new AgentActivity();streamed.receive(event('reasoning.delta',{text:'streamed'}));streamed.receive(event('tool.start',{tool_id:'t',name:'tool'}));
+  streamed.receive(event('reasoning.available',{text:'complete replacement'}));
+  assert.equal(streamed.state.timeline.filter(entry=>entry.kind==='reasoning').length,1);
+  assert.equal(streamed.state.reasoning,'complete replacement');
+  const available=new AgentActivity();available.receive(event('tool.start',{tool_id:'t',name:'tool'}));available.receive(event('reasoning.available',{text:'available only'}));
+  assert.deepEqual(available.state.timeline.map(entry=>entry.kind),['tool','reasoning']);
+});
 test('tool and reasoning event storms cannot grow the projection without bounds',()=>{
   const a=new AgentActivity();for(let n=0;n<200;n++)a.receive(event('tool.start',{tool_id:String(n),name:'fixture'}));
-  assert.equal(a.state.tools.length,40);assert.equal(a.state.droppedTools,160);
+  assert.equal(a.state.tools.length,40);assert.equal(a.state.droppedTools,160);assert.ok(a.state.timeline.length<=ACTIVITY_LIMITS.timeline);
   for(let n=0;n<100;n++)a.receive(event('reasoning.delta',{text:'x'.repeat(1000)}));
-  assert.equal(a.state.reasoning.length,32768);assert.equal(a.state.truncated,true);
-  a.receive(event('message.start',{}));assert.equal(a.state.tools.length,0);
+  assert.equal(a.state.reasoning.length,32768);assert.equal(a.state.truncated,true);assert.ok(a.state.timeline.length<=ACTIVITY_LIMITS.timeline);
+  const segment=a.state.timeline.at(-1);assert.equal(segment?.kind,'reasoning');if(segment?.kind==='reasoning')assert.ok(segment.text.length<=ACTIVITY_LIMITS.reasoningSegment);
+  a.receive(event('message.start',{}));assert.equal(a.state.tools.length,0);assert.equal(a.state.timeline.length,0);
 });
 test('unknown events are ignored; malformed known events are visibly flagged',()=>{
   const a=new AgentActivity();assert.equal(a.receive(event('new.unknown',{huge:'x'})),false);

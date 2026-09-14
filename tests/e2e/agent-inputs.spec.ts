@@ -66,7 +66,7 @@ test('clarify forms preserve DOM identity and remain usable at reduced viewport 
   await page.locator('#refresh').click();await expect(note).toHaveAttribute('data-preserved','yes');await expect(note).toHaveValue('Draft for the current question');
   for(const btn of await page.locator('.agent-card button').all())expect((await btn.boundingBox())!.height).toBeGreaterThanOrEqual(44);
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
-  await page.locator('.agent-card').screenshot({path:info.outputPath('agent-reduced-height.png')});
+  await page.getByRole('article',{name:'Question from Hermes',exact:true}).screenshot({path:info.outputPath('agent-reduced-height.png')});
   await page.getByRole('button',{name:'Cancel question request',exact:true}).click();await expect(page.locator('#session-state')).toHaveText('idle');
 });
 test('changing selection and signing out remove pending secrets and tool content',async({page})=>{

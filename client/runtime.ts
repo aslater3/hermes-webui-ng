@@ -81,6 +81,7 @@ export class AppRuntime {
     this.cleanup.push(this.workspaceMutations.subscribe(this.notify));
     this.cleanup.push(this.pwa.subscribe(this.notify)); void this.pwa.start();
     this.cleanup.push(this.attention.subscribe(this.notify), this.chat.subscribe(() => {
+      this.chat.native.commands.setVisible(document.visibilityState === 'visible');
       const state = this.chat.native.state;
       if (state.runtimeId && state.storedId) this.attention.bind(state.runtimeId, { id: state.storedId, profile: state.profile });
       this.attention.select(state.runtimeId); this.notify();
@@ -101,6 +102,7 @@ export class AppRuntime {
     const resume = () => {
       const visible = document.visibilityState === 'visible';
       this.connection.poll(visible ? 30_000 : 0); this.attention.setVisible(visible);
+      this.chat.native.commands.setVisible(visible); this.notify();
       if (visible) this.run(() => this.connection.resume());
     };
     const listen = (target: EventTarget, event: string, callback: () => void) => {
@@ -160,6 +162,13 @@ export class AppRuntime {
     }
     return this.chat.native;
   }
+  /** A deliberate catalogue action, independent of the unsent composer draft. */
+  async command(text: string): Promise<void> {
+    const account = this.accountGeneration;
+    let native = this.chat.native;
+    try { native = await this.settingsSession(); await native.commands.execute(text); }
+    catch (error) { if (native === this.chat.native && account === this.accountGeneration) throw error; }
+  }
   async changeModel(choice: ModelChoice): Promise<void> {
     const native = await this.settingsSession();
     await native.settings.changeModel(choice);
@@ -174,7 +183,7 @@ export class AppRuntime {
   }
   async newProfile(profile: string): Promise<void> {
     profileIdentifier(profile);
-    if (!this.ready || this.chat.busy || this.chat.native.settings.state.busy ||
+    if (!this.ready || this.chat.busy || this.chat.native.settings.state.busy || this.chat.native.commands.state.busy ||
       ['running', 'waiting'].includes(this.chat.native.state.phase))
       throw new ClientError('protocol', 'Wait for the current turn before changing profile');
     // A profile is a new conversation boundary. Keep the previous draft with its owner.

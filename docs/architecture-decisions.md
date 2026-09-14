@@ -35,3 +35,7 @@ Reduced-height tests exposed sticky composer overlap; the alpha uses normal flow
 ## Recovery discipline
 
 Every completed recovery or implementation slice must be committed AND pushed to the remote branch before starting the next slice. A local commit or unreferenced Git object is not a checkpoint. Verify the remote ref after publishing. Never accumulate a monolithic end-of-session push. Record current test evidence separately from historical results; milestone sign-off requires the relevant real-upstream and browser gates, not synthetic tests alone.
+
+## ADR-P7-001 — Parallel native session polish
+
+Accepted 14 September 2026 for the requested Phase 7 branch. Phase 7 depends on existing native session/settings contracts, not Phase 6 workspace writes. Selected-session usage/context is allowlisted and generation-scoped, with no new persistence or polling. Commands and destructive rewind remain separately gated. Full decision: `adr-phase7-parallel-session-polish.md`. Existing phase acceptance and physical-device requirements are unchanged.

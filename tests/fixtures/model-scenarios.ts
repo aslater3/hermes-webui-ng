@@ -1,3 +1,4 @@
+import { commandFixture } from './commands.js';
 /** SYNTHETIC inventory/config fixture; live acceptance is separate. */
 export class ModelScenarios {
   private sessions = new Map<string, { model: string; provider: string; reasoning_effort: string; profile_name: string; yolo: boolean }>();
@@ -8,6 +9,14 @@ export class ModelScenarios {
   handle(method: string, params: Record<string, unknown>, reply: (data: unknown) => void,
     error: () => void, emit: (type: string, id?: string, payload?: unknown) => void): boolean {
     const id = String(params.session_id ?? ''), session = this.sessions.get(id);
+    if (method === 'commands.catalog') {
+      reply(commandFixture(String(params.profile ?? session?.profile_name ?? 'default'))); return true;
+    }
+    if (method === 'slash.exec') {
+      if (!session || params.profile !== session.profile_name || !['/usage', '/status', '/history'].includes(String(params.command))) error();
+      else reply({ output: `Native ${session.profile_name} ${String(params.command)}\nModel: ${session.model}\nThis is a synthetic native command readout.` });
+      return true;
+    }
     if (method === 'profiles.list') {
       reply({ profiles: [{ name: 'default', display_name: 'Default', path: '/private/default' }, { name: 'work', display_name: 'Work', path: '/private/work', description: 'A separate work profile' }] }); return true;
     }

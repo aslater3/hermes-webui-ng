@@ -13,12 +13,20 @@ export interface ToolActivity {
   id: string; name: string; state: 'running' | 'complete' | 'error' | 'unknown';
   input: string; output: string; context: string; duration?: number; truncated: boolean;
 }
-export interface ActivityTurn { id: number; reasoning: string; thinking: string; tools: ToolActivity[]; truncated: boolean; }
+export interface ReasoningActivity { kind: 'reasoning'; id: string; text: string; truncated: boolean; }
+export interface ToolTimelineActivity { kind: 'tool'; id: string; }
+export type ActivityTimelineEntry = ReasoningActivity | ToolTimelineActivity;
+export interface ActivityTurn {
+  id: number; reasoning: string; thinking: string; tools: ToolActivity[]; timeline: ActivityTimelineEntry[]; truncated: boolean;
+}
 export interface ActivityState {
-  reasoning: string; thinking: string; tools: ToolActivity[]; inputs: AgentInput[];
+  reasoning: string; thinking: string; tools: ToolActivity[]; timeline: ActivityTimelineEntry[]; inputs: AgentInput[];
   truncated: boolean; droppedTools: number; recoveryGap: boolean; malformed: boolean;
 }
-export const ACTIVITY_LIMITS = { tools: 40, inputs: 16, text: 32768, input: 16384, questions: 12 } as const;
+export const ACTIVITY_LIMITS = {
+  tools: 40, timeline: 96, inputs: 16, text: 32768, reasoningSegment: 8192, archiveReasoning: 4096, archiveTimeline: 24,
+  input: 16384, questions: 12,
+} as const;
 const KINDS: InputKind[] = ['approval', 'clarify', 'sudo', 'secret'];
 const clean = (value: string) => value.replace(/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/g, '');
 const text = (value: unknown, max: number = ACTIVITY_LIMITS.text): string => typeof value === 'string' ? clean(value).slice(0, max) : '';
@@ -108,23 +116,33 @@ export class AgentActivity {
   state: ActivityState = this.empty();
   archive: ActivityTurn[] = [];
   private turn = 0;
+  private timelineSequence = 0;
   private terminal = new Set<string>();
   private archiveTurn(): void {
     const s = this.state;
-    if (s.tools.length || s.reasoning || s.thinking) this.archive = [...this.archive, {
-      id: ++this.turn, reasoning: s.reasoning.slice(-8192), thinking: s.thinking.slice(-2048),
-      tools: s.tools.slice(-10).map(tool => ({ ...tool, input: tool.input.slice(0, 8192), output: tool.output.slice(0, 8192),
+    if (s.tools.length || s.reasoning || s.thinking) {
+      const tools = s.tools.slice(-10).map(tool => ({ ...tool, input: tool.input.slice(0, 8192), output: tool.output.slice(0, 8192),
         state: tool.state === 'running' ? 'unknown' as const : tool.state,
-        truncated: tool.truncated || tool.input.length > 8192 || tool.output.length > 8192 })),
-      truncated: s.truncated || s.droppedTools > 0 || s.tools.length > 10 || s.reasoning.length > 8192 || s.thinking.length > 2048,
-    }].slice(-6);
+        truncated: tool.truncated || tool.input.length > 8192 || tool.output.length > 8192 }));
+      const toolIds = new Set(tools.map(tool => tool.id));
+      const observed = s.timeline.filter(entry => entry.kind === 'reasoning' || toolIds.has(entry.id));
+      const timeline = observed.slice(-ACTIVITY_LIMITS.archiveTimeline).map(entry => entry.kind === 'reasoning' ? {
+        ...entry, text: entry.text.slice(-ACTIVITY_LIMITS.archiveReasoning),
+        truncated: entry.truncated || entry.text.length > ACTIVITY_LIMITS.archiveReasoning,
+      } : { ...entry });
+      this.archive = [...this.archive, {
+        id: ++this.turn, reasoning: s.reasoning.slice(-8192), thinking: s.thinking.slice(-2048), tools, timeline,
+        truncated: s.truncated || s.droppedTools > 0 || s.tools.length > 10 || s.reasoning.length > 8192 || s.thinking.length > 2048 ||
+          observed.length > timeline.length || timeline.some(entry => entry.kind === 'reasoning' && entry.truncated),
+      }].slice(-6);
+    }
   }
   private remember(key: string): void {
     this.terminal.add(key);
     if (this.terminal.size > 256) this.terminal.delete(this.terminal.values().next().value!);
   }
-  private empty(): ActivityState { return { reasoning: '', thinking: '', tools: [], inputs: [], truncated: false, droppedTools: 0, recoveryGap: false, malformed: false }; }
-  reset(): void { this.state = this.empty(); this.archive = []; this.terminal.clear(); this.turn = 0; }
+  private empty(): ActivityState { return { reasoning: '', thinking: '', tools: [], timeline: [], inputs: [], truncated: false, droppedTools: 0, recoveryGap: false, malformed: false }; }
+  reset(): void { this.state = this.empty(); this.archive = []; this.terminal.clear(); this.turn = 0; this.timelineSequence = 0; }
   disconnect(): void {
     this.state = { ...this.state, recoveryGap: this.state.inputs.some((p) => ['pending','sending','unknown'].includes(p.status) && ['sudo','secret'].includes(p.kind)),
       inputs: this.state.inputs.map((p) => ['pending','sending'].includes(p.status) ? {...p, status:'unknown'} : p),
@@ -165,10 +183,31 @@ export class AgentActivity {
         this.state.inputs.forEach(input => this.remember(input.key));
         this.state = this.empty(); return true;
       }
-      if (['reasoning.delta','reasoning.available','thinking.delta'].includes(event.type)) {
-        const p = record(event.payload), field = event.type === 'thinking.delta' ? 'thinking' : 'reasoning';
-        const next = event.type === 'reasoning.available' ? text(p.text) : this.state[field] + text(p.text);
-        this.state = {...this.state, [field]:next.slice(-ACTIVITY_LIMITS.text), truncated:this.state.truncated || next.length >= ACTIVITY_LIMITS.text}; return true;
+      if (event.type === 'thinking.delta') {
+        const p = record(event.payload), next = this.state.thinking + text(p.text);
+        this.state = {...this.state, thinking:next.slice(-ACTIVITY_LIMITS.text), truncated:this.state.truncated || next.length >= ACTIVITY_LIMITS.text}; return true;
+      }
+      if (['reasoning.delta','reasoning.available'].includes(event.type)) {
+        const p = record(event.payload), fragment = text(p.text);
+        const available = event.type === 'reasoning.available';
+        const next = available ? fragment : this.state.reasoning + fragment;
+        let timeline = [...this.state.timeline], timelineTruncated = false;
+        if (fragment && (!available || !timeline.some(entry => entry.kind === 'reasoning'))) {
+          const last = timeline.at(-1);
+          if (!available && last?.kind === 'reasoning') {
+            const segment = last.text + fragment;
+            timeline[timeline.length - 1] = { ...last, text: segment.slice(-ACTIVITY_LIMITS.reasoningSegment),
+              truncated: last.truncated || segment.length > ACTIVITY_LIMITS.reasoningSegment };
+            timelineTruncated ||= segment.length > ACTIVITY_LIMITS.reasoningSegment;
+          } else {
+            timeline.push({ kind:'reasoning', id:`reasoning-${++this.timelineSequence}`,
+              text:fragment.slice(-ACTIVITY_LIMITS.reasoningSegment), truncated:fragment.length > ACTIVITY_LIMITS.reasoningSegment });
+            timelineTruncated ||= fragment.length > ACTIVITY_LIMITS.reasoningSegment;
+          }
+        }
+        if (timeline.length > ACTIVITY_LIMITS.timeline) { timeline = timeline.slice(-ACTIVITY_LIMITS.timeline); timelineTruncated = true; }
+        this.state = {...this.state, reasoning:next.slice(-ACTIVITY_LIMITS.text), timeline,
+          truncated:this.state.truncated || next.length >= ACTIVITY_LIMITS.text || timelineTruncated}; return true;
       }
       if (['tool.start','tool.progress','tool.complete'].includes(event.type)) {
         const p = record(event.payload), toolId = id(p.tool_id);
@@ -188,7 +227,14 @@ export class AgentActivity {
           truncated:input.length >= ACTIVITY_LIMITS.input || output.length >= ACTIVITY_LIMITS.text || !!old?.truncated };
         let tools = this.state.tools.filter((t) => t.id !== toolId); tools.push(tool);
         const dropped = Math.max(0,tools.length - ACTIVITY_LIMITS.tools); tools = tools.slice(-ACTIVITY_LIMITS.tools);
-        this.state = {...this.state, tools, droppedTools:this.state.droppedTools + dropped}; return true;
+        const liveToolIds = new Set(tools.map(item => item.id));
+        let timeline = this.state.timeline.some(entry => entry.kind === 'tool' && entry.id === toolId)
+          ? [...this.state.timeline] : [...this.state.timeline, { kind:'tool', id:toolId } as ToolTimelineActivity];
+        timeline = timeline.filter(entry => entry.kind === 'reasoning' || liveToolIds.has(entry.id));
+        const timelineDropped = Math.max(0, timeline.length - ACTIVITY_LIMITS.timeline);
+        timeline = timeline.slice(-ACTIVITY_LIMITS.timeline);
+        this.state = {...this.state, tools, timeline, droppedTools:this.state.droppedTools + dropped,
+          truncated:this.state.truncated || timelineDropped > 0}; return true;
       }
       return false;
     } catch { this.state = {...this.state, malformed:true}; return true; }
