@@ -31,7 +31,7 @@ export function UsageDetails({ usage, historical = false }: { usage?: SessionUsa
 /** Unmounted/keyed by the caller at session, profile, account and connection boundaries. */
 export function UsageButton({ usage }: { usage?: SessionUsage }) {
   const [open, setOpen] = useState(false), percent = contextPercent(usage);
-  return <><button type="button" className="usage-button" aria-label="View session usage and context" aria-haspopup="dialog" onClick={() => setOpen(true)}>
+  return <><button type="button" className="usage-button" aria-label="View session usage and context" aria-haspopup="dialog" onClick={event => { event.currentTarget.focus({ preventScroll: true }); setOpen(true); }}>
     <Gauge size={14}/><span>{percent === undefined ? 'Usage & context' : `Context ${percentage(percent)}`}{usage?.contextEstimated === true && percent !== undefined ? ' · est.' : ''}</span>
   </button>{open && <Modal title="Usage & context" kind="usage" onClose={() => setOpen(false)}><UsageDetails usage={usage}/></Modal>}</>;
 }

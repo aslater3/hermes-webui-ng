@@ -6,7 +6,7 @@ Updated: 14 September 2026. **Phase 5 / M5 Read-only Workspace Beta has passed i
 
 The owner requested Phase 7 to start independently of the in-flight Phase 6. Branch `phase7-session-polish` starts from main `c237ebdff73729612637322e8faa2e57e7e99766`; ADR-P7-001 records that native profiles/models/commands/usage do not depend on workspace writes. The first slice implements generation-scoped native usage/context, a compact inspector and details, with race/isolation tests. Existing Phase 4B profile/model/reasoning controls are preserved; command completion/dispatch and optional rewind remain outstanding.
 
-Local build/typechecks/lint, 204 unit tests and 34 wire contracts pass. Local Chromium navigation was blocked by environment policy, so browser, HTTPS/PWA, production-image and extended native-Hermes CI are pending on the published branch. No Phase 7 sign-off or Phase 6/deployment change is claimed. See `phase7-session-polish.md` for scope and verification; the accepted Phase 5 evidence below remains unchanged.
+The usage slice passed local build/typechecks/lint, 204 unit tests and 34 wire contracts. Integration checkpoint `ee3f3d0e067021b3195b6397b39409502a8899fc` also preserves all concurrent activity-timeline changes through `9babc4d`; the combined source passes build/lint, 206 unit tests and 34 wire contracts. Draft PR #16 remains in progress. Local Chromium navigation was blocked by environment policy, so browser, HTTPS/PWA, production-image and extended native-Hermes CI are pending on the published branch. No Phase 7 sign-off or Phase 6/deployment change is claimed. See `phase7-session-polish.md` for scope and verification; the accepted Phase 5 evidence below remains unchanged.
 
 ## Exact accepted source and evidence
 

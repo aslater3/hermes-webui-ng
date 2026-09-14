@@ -24,3 +24,9 @@ Local Node 22.16.0: production build, server/frontend typechecks, lint, **204 un
 The local system-Chromium browser attempt was blocked at navigation by `ERR_BLOCKED_BY_ADMINISTRATOR`, before the app could load; all 39 selected cases were blocked and none is claimed as passed. Repository Playwright CI, trusted HTTPS/PWA, image smoke and pinned vanilla-Hermes gates must run on the published commit. The new native usage assertions have not yet run locally. No physical iPhone/Android run, actual keyboard/PWA installation, operator deployment or Phase 6 certification is claimed.
 
 Pinned runtime: `b6b53c69a6ed49cb099cf1bfe76b5e6edd718e5a`. Source-only comparison: `498abb677ec39ea3ae9f8f5ed60e7def6bc47e70`. Existing Phase 5 evidence and Phase 4 physical-device gaps remain unchanged. Each coherent implementation checkpoint is committed and published before a subsequent slice begins.
+
+## Concurrent activity integration checkpoint
+
+Published `ee3f3d0e067021b3195b6397b39409502a8899fc` combines this slice (`5370da1`) with all nine concurrently published activity-timeline commits through `9babc4d`. None of the changed paths overlap. The integrated tree `77c35898655bed61c42bc12ff05c4048cb3f182f` passed local production build, lint, **206 unit tests** and **34 wire contracts**. No existing history was force-pushed or discarded. Draft PR #16 contains both slices. Its push-triggered CI has started; no result is implied by queue admission.
+
+A follow-up explicitly focuses the usage inspector trigger before opening its modal, so focus restoration does not depend on whether the browser focuses pointer-clicked buttons. The usage-only scroll test now awaits a distinct rendered percentage to prove the event was processed before asserting unchanged reading position. These changes retain all existing browser assertions.

@@ -101,7 +101,7 @@ test('usage-only events do not move a reader or create a false new-message indic
   await page.locator('#conversation-scroll').evaluate(node => { node.scrollTop = 0; node.dispatchEvent(new Event('scroll')); });
   await expect(page.locator('#conversation-scroll')).toHaveAttribute('data-following', 'false');
   const top = await page.locator('#conversation-scroll').evaluate(node => node.scrollTop);
-  fixture.update({ ...sample, total: 401 }); await expect(inspector(page)).toContainText('Context 5%');
+  fixture.update({ ...sample, total: 401, context_percent: 6 }); await expect(inspector(page)).toContainText('Context 6%');
   await expect(page.getByRole('button', { name: 'Jump to latest', exact: true })).toHaveCount(0);
   expect(await page.locator('#conversation-scroll').evaluate(node => node.scrollTop)).toBe(top);
 });
