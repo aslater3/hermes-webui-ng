@@ -11,7 +11,7 @@ test('approval is visually prominent and explains the Hermes expiry boundary', a
   await expect(approval.getByRole('heading', { name: 'Permission required', exact: true })).toBeVisible();
   await expect(approval).toContainText('Hermes is paused until you decide');
   await expect(approval).toContainText('defaults to five minutes');
-  await expect(approval.locator('.agent-input-status')).toHaveText('Action paused — choose Allow once or Deny');
+  await expect(approval.locator('.agent-input-status')).toHaveText('Action paused — choose an approval scope, YOLO, or Deny');
   await expect(page.locator('.attention-strip')).toContainText('request need your input');
   const style = await approval.evaluate(element => {
     const computed = getComputedStyle(element);
@@ -20,7 +20,7 @@ test('approval is visually prominent and explains the Hermes expiry boundary', a
   expect(style.borderWidth).toBeGreaterThanOrEqual(2);
   expect(style.borderColor).not.toBe('rgba(0, 0, 0, 0)');
   expect(style.background).not.toBe('rgba(0, 0, 0, 0)');
-  for (const name of ['Allow once', 'Deny']) {
+  for (const name of ['Allow once', 'Approve for session', 'YOLO', 'Deny']) {
     const box = await approval.getByRole('button', { name, exact: true }).boundingBox();
     expect(box?.height).toBeGreaterThanOrEqual(44);
   }
