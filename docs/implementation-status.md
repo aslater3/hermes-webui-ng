@@ -1,54 +1,54 @@
 # Implementation Status
 
-Updated: 13 September 2026. **Phase 4B native composer controls and transcript-repair automated acceptance passed.** Delivery is through PR #5 with individual remote checkpoints preserved. M0, M1, M2 and Phase 4A retain their sign-offs. Full M3, physical-device/PWA and release gates remain open; the known upstream reasoning-scope race below is not declared solved.
+Updated: 14 September 2026. **Phase 4B combined acceptance passed:** functional model/profile/reasoning controls, typed transcript recovery, and the concurrent HermesUI NG branding are reconciled in PR #5. M0, M1, M2 and Phase 4A retain their earlier sign-offs. Full M3, installed PWA, physical-device and release gates remain open.
 
-## Delivered scope
+## Current application
 
-The modern React application at `/` has actual profile, configured-model and reasoning-effort controls instead of static `default` / `Native agent` labels. The native Gateway is the authority. Profile selection creates a fresh conversation under that profile; history and drafts retain their owner. Model changes explicitly request session scope, handle upstream cost confirmation and read back native state. Reasoning effort is capability-gated, explicitly session-scoped and read back separately. Controls lock during runs/mutations and offer read-only recovery after an unknown outcome. Desktop/mobile pickers and at least 44px composer hit areas are implemented together.
+The default React application at `/` has actual Profile, Model and Reasoning controls in its composer. Configured model inventory and confirmed current values come from native Hermes RPC, not browser preferences. Profile selection starts a separate native conversation; old history and unsent drafts keep their original owner. A pre-first-prompt model selection retains the draft while creating the necessary upstream session. Cost confirmation is a separate action, and unknown acknowledgements require read-only reconciliation rather than a repeated setter.
 
-Saved native tool summaries are distinct expandable cards, not generic assistant placeholders. Known structured REST/native text and public assistant sidecar/reasoning content survive history recovery. Empty/hidden envelopes are omitted. Tool output absent from Hermes is not fabricated; arbitrary objects, binary media and encrypted reasoning are not dumped into chat. Decorative message SVGs are hidden from accessibility text, while legitimate literal SVG content remains intact.
+Settings now respect native `status:starting` and `info.lazy:true`. The client performs bounded, generation-scoped readiness reads before sending a setting once. It does not equate an allocated idle session with a constructed agent, replay a failed setter, or build an agent itself. Disconnect or selection changes cancel the pending operation. The new browser regression explicitly delays readiness and verifies one setter and no prompt submission.
 
-Client and BFF diagnostics identify phase 4 / milestone 4B, with matching labels covered by tests. The ring includes allowlisted native settings method names without params/selected values. The retained `/diagnostic` route includes the new reasoning capability row; a regression ensures a newly added capability cannot abort its chat rendering.
+Saved tool history has its own expandable cards, rather than `[Non-text entry]` assistant bubbles. Known REST/native text parts, public reasoning and assistant sidecar replies survive recovery. Hidden/empty envelopes are omitted without changing raw pagination counts. Missing tool result bodies are not invented, and arbitrary objects, binary data and encrypted reasoning are not dumped into chat. Legitimate SVG words/code are preserved; decorative icons are excluded from accessibility text.
 
-## Exact accepted application checkpoint
+The HermesUI NG name and supplied Hermes mark from main are retained in the shell, welcome view, streaming and saved assistant messages, Settings and diagnostic titles. Model and reasoning dialogs share desktop/mobile behaviour with minimum 44px composer targets. The previous diagnostic remains at `/diagnostic`; its new reasoning capability row is regression-tested. Client and BFF reports identify phase 4 / milestone 4B and exclude settings arguments, selected values, credentials and transcripts.
 
-**`addf8708bd3d850c9489af0e57cddc570fc388b3`**. Its source-checkpoint archive identifies that exact commit and matches the locally tested code. Subsequent README, ADR, status and evidence changes are documentation only. Permanent results: **`evidence/phase4b-acceptance.json`**.
+## Exact combined verification
+
+Application commit **`d820aa8e15f972735d441bca8653b2905c8b62ed`**. PR CI checked out **`6c413f5b3978804f1f9b209cbabac4c29ecd1855`**; GitHub comparison reports identical files. Subsequent acceptance-document changes do not alter application code. Permanent evidence: **`evidence/phase4b-combined-acceptance.json`**.
 
 | Gate | Result | Actions run |
 |---|---|---|
-| Build, server/web typecheck, lint, unit and socket contracts | 134 unit + 18 wire tests passed | `34788588530` |
-| Browser acceptance | 240 passed; 0 failed, skipped or flaky | `34788588532` |
-| Non-root/read-only Docker image smoke | Passed | `34788588531` |
-| Unmodified Hermes gated + trusted-local acceptance | Passed | `34788588524` |
+| Build, server/web typecheck, lint, unit and socket tests | 139 unit + 18 wire tests passed | `34804862113` |
+| Browser acceptance | 248 passed; 0 failed, skipped or flaky | `34804862044` |
+| Non-root/read-only production Docker smoke | Passed | `34804862000` |
+| Unmodified Hermes, gated and trusted-local modes | Passed | `34804862085` |
 
-Local checks also passed build/typecheck/lint and all 134 unit/18 wire tests on Node 22.16.0. Browser/Docker execution occurred in repository CI, not the recovery container. Source, browser and live artifact SHA-256 values were checked against GitHub metadata.
+Fresh local build/typecheck/lint and all 139 unit/18 wire tests also passed on Node 22.16.0. Every code file matches the downloaded CI source archive. Browser and Docker execution occurred in GitHub Actions; local browser navigation was blocked by the execution environment and is not claimed as a pass. Source, browser and native-acceptance ZIP hashes were verified against GitHub metadata.
 
-Browser coverage is 60 cases in each desktop Chromium, iPhone WebKit, Android Chromium and 320px project. Modern and diagnostic tests remain distinct. Cases cover native model/effort selection, costly-model confirmation, profile/draft isolation, unsupported RPCs, locked controls during runs, reconnect/reload, non-text tool summaries, content arrays/public sidecars, hostile content, theme, scrolling and input lifecycle. Fifty-six screenshots are retained; final desktop model-picker, iPhone reasoning-picker and structured-history screenshots were inspected. These are actual fixture-browser captures, not generated designs or physical-phone certification.
+The browser suite has 62 cases in each desktop Chromium, iPhone WebKit emulation, Android Chromium emulation and 320px project. It includes model/effort selection, profile and draft isolation, startup readiness, no-replay recovery, saved tools/structured replies, branding, input lifecycle, scrolling and accessibility checks. Fifty-six screenshots are retained; the final desktop model dialog, iPhone reasoning dialog and iPhone recovered conversation were inspected. These are actual fixture-browser captures, not physical-device or installed-PWA certification.
 
-## Actual vanilla-Hermes proof
+## Native Hermes evidence
 
-Runtime pin: **`NousResearch/hermes-agent@b6b53c69a6ed49cb099cf1bfe76b5e6edd718e5a`**. The production WebUI image runs against unmodified official Hermes in isolated homes configured through its supported CLI. Only the model endpoint is controlled.
+Runtime baseline remains **`NousResearch/hermes-agent@b6b53c69a6ed49cb099cf1bfe76b5e6edd718e5a`**. The production WebUI image uses unmodified official Hermes, with isolated homes configured through Hermes' own CLI. Only the model endpoint is a deterministic fixture.
 
-The new settings suite passes in both gated Dashboard and explicit trusted-local deployments. It confirms native profile/model inventory; model and reasoning-effort application; unchanged profile defaults and a second session; a real agent request reaching the selected alternate model; reconnect and fresh-client metadata/history recovery; and no automatic prompt replay. Native reads verify defaults without opening Hermes files. Existing M0–M2, initial M3 clarification and local-token regressions remain mandatory and passed.
+Both authentication modes passed inventory discovery, model change, reasoning-effort readback, unchanged profile defaults and a second session, a real request reaching the selected alternate model, reconnect/fresh-client recovery and no prompt replay. The original M0–M2, initial M3 clarification and trusted-local regression gates also passed. Normal-flow tests do not certify every provider or the cross-client deletion race below.
 
-Normal-flow defaults/isolation results are not proof of the adversarial runtime-deletion race below. The provider fixture proves transport and settings flow, not compatibility with every commercial or local provider.
+## Recovery history and an observed failure
 
-## Remote recovery checkpoints
+The interrupted attempt had preserved Phase 4B at `c0b0984` and independent main branding at `6f42dc1`. Two-parent checkpoint `8cf021f` reconciles both histories; nothing was force-pushed or squashed. Its first combined native run `34804127178` failed with RPC 5001 during the settings stage. The diagnostic-only follow-up `73eee380` passed both modes, so the original exception's precise cause was not conclusively captured.
 
-Recovered model/profile/reasoning implementation: `c75e9b7`. Typed history: `46e0473`. Saved tool/reasoning UI: `1230b92`. Diagnostic render repair: `ed54b1b`. Real settings gate: `b040c8f`. Uncertain setter replies and touch targets: `6eae9c5`. Current metadata and upstream warning: `addf870`. Each completed increment was committed, pushed and its remote ref verified before proceeding. The original failed/cancelled browser run was not treated as a pass; the missing diagnostic capability row was repaired before the final full suite.
+Source inspection and deterministic tests independently exposed a missing startup-readiness guard: native session allocation can precede agent construction. `d820aa8` adds that guard and its regressions. The live harness now records fixed error classifications and separate model/effort stage labels, never raw upstream messages. The final combined acceptance passed with empty failure classifications. The earlier failed run is retained as a failure, not relabelled a pass. Original standalone acceptance in `phase4b-acceptance.json` is historical; the combined report above supersedes it for deployment.
 
-Prior Phase 4A evidence remains in `evidence/phase4-shell-final-checkpoint.json`. No later code has been substituted for the tested ref in this report.
+## Known limits and remaining phases
 
-## Known boundaries
+**Reasoning scope race:** the pinned Hermes setter can fall back to the profile default if another client removes the referenced runtime after preflight. The WebUI requests session scope and blocks observed stale state, but cannot make the upstream operation atomic. Avoid deleting/closing that live session in another client while applying effort. The dialog, README and ADR-019 disclose this; an upstream fail-closed setter remains the permanent remedy.
 
-**Reasoning scope race:** the pinned upstream setter can fall back to the profile default if another client deletes the referenced runtime after preflight. The client blocks observed stale/missing sessions, rechecks after capability discovery and never requests global scope. It cannot make the upstream existence check atomic. The reasoning dialog, README and `phase4b-composer-controls.md` disclose this. Avoid deleting the same live conversation from another client while applying effort; an upstream fail-closed setter is the permanent remedy.
+**Transcript evidence:** the operator diagnostic contained metadata, not message payloads. Confirmed tool-summary and structured-content defects are repaired, but every literal SVG string in the unseen private transcript has not been independently reproduced. Provider reasoning flags and accepted effort names likewise do not guarantee every provider/level combination.
 
-**SVG report:** the supplied diagnostic contains no message payloads. The confirmed tool-summary/structured-content bugs are repaired and decorative icons hidden. There is no claim to have reproduced every literal SVG string in the unseen operator transcript; legitimate SVG words/code are not stripped.
-
-**M3:** full native approval/sudo/secret execution acceptance, broader historical activity and off-selection attention remain open. **PWA/release:** installed PWA, physical keyboards, workspace/Git, attachments/voice, OAuth, multi-architecture publication, comprehensive accessibility/performance and security hardening remain open. Global provider/profile configuration, slash-command polish and rewind/regenerate are outside this composer slice.
+**M3 still open:** full native approval/sudo/secret execution acceptance, broader historical activity and attention for unselected conversations. **PWA/release still open:** installed service-worker/update flow, physical iPhone/Android keyboards, workspace/Git, attachments/voice, OAuth, global provider/profile management, slash-command polish, rewind/regenerate, multi-architecture publication and broader accessibility/performance/security hardening.
 
 ## Deployment and architecture
 
-Gated browser authentication and explicit trusted-local token bridging remain separate and tested. Retain the existing private `.env`, standalone `compose.host.yaml`, correct NG project name and LAN/8788 settings. No operator host, unrelated 8787 container, Docker storage or Hermes configuration has been changed by this work. Follow `local-testing-upgrade.md` rather than resetting a locally modified checkout.
+Retain the existing private `.env`, standalone `compose.host.yaml`, the correct NG Compose project and LAN/8788 settings. Gated auth and explicit trusted-local token bridging remain separate. No operator host, unrelated 8787 service, Docker storage or Hermes configuration was modified by this work. Follow `local-testing-upgrade.md` for an uncommitted checkout instead of resetting it.
 
-There are no production Hermes Python imports, direct state/config access, Relay, durable local transcript database or duplicate agent runtime. Hermes owns durable settings and conversations. See ADRs 017–019 and `phase4b-composer-controls.md` for scope and limitations.
+No production Hermes Python imports, direct state/config access, Relay, durable local conversation store or duplicate runtime were added. Hermes owns settings and conversations. Every completed implementation checkpoint was committed, pushed and remotely verified before the next slice. See ADRs 017–019 and `phase4b-composer-controls.md` for scope and limitations.

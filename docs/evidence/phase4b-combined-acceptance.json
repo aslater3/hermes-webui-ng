@@ -1,0 +1,50 @@
+{
+  "milestone": "Phase 4B combined with HermesUI NG branding",
+  "dateUtc": "2026-09-14",
+  "applicationCommit": "d820aa8e15f972735d441bca8653b2905c8b62ed",
+  "testedMergeCommit": "6c413f5b3978804f1f9b209cbabac4c29ecd1855",
+  "testedMergeHasIdenticalFiles": true,
+  "upstreamRef": "b6b53c69a6ed49cb099cf1bfe76b5e6edd718e5a",
+  "local": {
+    "node": "22.16.0", "build": "pass", "typecheck": "pass", "lint": "pass",
+    "unitPassed": 139, "wirePassed": 18, "matchesArchivedCode": true,
+    "browser": "Blocked by local navigation policy; no local browser pass claimed"
+  },
+  "ci": {
+    "checkpoint": { "runId": 34804862113, "conclusion": "success" },
+    "browsers": {
+      "runId": 34804862044, "conclusion": "success",
+      "passed": 248, "failed": 0, "skipped": 0, "flaky": 0, "screenshots": 56,
+      "projects": ["desktop-chromium", "iphone-webkit", "android-chromium", "narrow-320"]
+    },
+    "image": { "runId": 34804862000, "conclusion": "success" },
+    "vanillaHermes": { "runId": 34804862085, "conclusion": "success", "modes": ["dashboard", "trusted-local"], "failures": [] }
+  },
+  "artifacts": [
+    { "name": "source-checkpoint", "id": 10332193814, "sha256": "ade34978cd21c10d09e1e8a44287ba863b2fc07e03072faf1997058091905263" },
+    { "name": "diagnostic-browser-results", "id": 10332348881, "sha256": "2cef61b2fe6c4b9c383cd81fe30db56a471febffb1f5a81292ee91aa9f336a24" },
+    { "name": "vanilla-hermes-acceptance", "id": 10333151530, "sha256": "28013b3dc19bddb57a09cab9730594c8a87f111dc4a9021dbc853e248eeb9633" }
+  ],
+  "nativeSettingsGates": {
+    "gated": ["native-profiles-and-configured-model-inventory", "native-model-change-confirmed", "confirmed-session-model-and-reasoning-effort", "profile-defaults-and-second-session-unchanged", "real-agent-request-uses-selected-model", "reconnect-restores-settings-without-replay", "fresh-client-native-recovery-and-redacted-report"],
+    "local": ["native-profiles-and-configured-model-inventory", "native-model-change-confirmed", "confirmed-session-model-and-reasoning-effort", "profile-defaults-and-second-session-unchanged", "real-agent-request-uses-selected-model", "reconnect-restores-settings-without-replay", "fresh-client-native-recovery-and-redacted-report"]
+  },
+  "history": {
+    "brandingMerge": "8cf021fda5f7f6b38f24d67e3c22ab8a941d62b3",
+    "failedCombinedNativeRun": 34804127178,
+    "failureCode": 5001,
+    "diagnosticFollowup": "73eee380b244699f04575cbdb3aa41730ade523e",
+    "diagnosticFollowupNativeRun": 34804523201,
+    "diagnosticFollowupPassed": true,
+    "startupGuard": "d820aa8e15f972735d441bca8653b2905c8b62ed",
+    "failureQualification": "Original precise exception was not captured. The failed run remains a failure; the readiness defect was separately established from supported source and deterministic regressions."
+  },
+  "inspected": ["desktop model picker", "iPhone reasoning picker", "iPhone recovered structured conversation"],
+  "limits": [
+    "Unmodified Hermes and real production WebUI image; only model endpoint is deterministic.",
+    "Browser fixtures and mobile emulation are not physical-device/PWA certification.",
+    "Known upstream reasoning setter may fall back to profile default after concurrent runtime removal.",
+    "Provider effort support and every literal SVG string from the private transcript are not certified.",
+    "Full M3 execution acceptance, off-selection activity, PWA/workspace and release hardening remain open."
+  ]
+}
