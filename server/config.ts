@@ -66,6 +66,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   };
   config.tls = tlsFiles(env, config.publicOrigin);
   config.writePolicy = writePolicy(env, config.workspaceRoots ?? [], config.publicOrigin);
+  if (config.writePolicy.enabled && !config.tls) throw new Error('Workspace writes require configured TLS certificate and key');
   if (config.writePolicy.enabled) nativeBoundary();
   configureAccess(config, env);
   return config;
