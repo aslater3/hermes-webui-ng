@@ -1,29 +1,28 @@
 # Phase 4C — PWA and mobile completion
 
-Started 14 September 2026 from main `9febb50530ff469342a720b0ebcecefc94d613ca`. Preserve accepted M0–M3, the modern HermesUI NG shell/mark and native composer controls. Each coherent tested increment is committed and pushed before the next.
+Updated 14 September 2026. Software and automated acceptance passed at `93f2ff0360ff504d711e4cf49de3ff18f951b517`. The original physical-device exit gate remains open.
 
-## Implementation checklist
+## Delivered and tested
 
-- [ ] Standalone manifest, standard/maskable icons and Apple metadata.
-- [ ] Versioned static-only service worker; no API, auth, transcript, workspace or credential caching.
-- [ ] Offline shell with explicit disconnected state and no send queue.
-- [ ] Deliberate updates with draft/run/input safeguards; no surprise reload in another tab.
-- [ ] Honest install/secure-context UI, including iOS guidance and private LAN HTTPS deployment notes.
-- [ ] Mobile navigation, safe areas, viewport/rotation and resume regressions.
-- [ ] Functional optional conversation-details right pane and mobile sheet; workspace remains Phase 5.
-- [ ] Browser cache/update/offline tests, build/unit/contracts and existing Docker/native gates.
-- [ ] Retained code/evidence references and physical-device smoke template.
+- [x] Standalone manifest, standard/maskable icons derived from the supplied Hermes mark, Apple metadata.
+- [x] Native HTTPS/WSS and operator-owned self-signed CA setup; both Compose modes use mounted TLS files.
+- [x] Versioned static-only service worker; no API, auth, transcript, workspace or credential caching.
+- [x] Offline shell with explicit disconnected state and no send queue; reconnect restores upstream history.
+- [x] Deliberate updates with draft/run/input/settings safeguards and refusal while other app windows remain open.
+- [x] Honest install/secure-context UI, iOS/Android guidance and private LAN HTTPS migration notes.
+- [x] Mobile navigation, safe areas, responsive/rotated/reduced-height viewport and resume regressions.
+- [x] Functional optional native conversation-details right pane and mobile sheet; file/Git workspace remains Phase 5.
+- [x] Real worker cache/update/auth-expiry tests and existing build/unit/contracts/Docker/native regressions.
+- [x] Additional trusted-private-CA browser suite without certificate-verification bypasses.
+- [x] Physical-device smoke template identifying all tests as not yet run.
+- [ ] Actual physical iPhone and Android scenarios 1–5, and installed-PWA/keyboard testing.
 
-## Acceptance boundary
+## Verification boundary
 
-The original Phase 4 exit gate requires scenarios 1–5 in `03-mobile-ios-android.md` on physical iPhone and Android. Browser emulation, synthetic viewport tests and a successful service-worker install are not physical-device evidence. This record must keep physical acceptance pending until real results exist; do not relabel or waive that gate.
+The exact code passes 166 unit tests, 22 HTTP/WS contracts, 296 general browser cases, 5 additional trusted-HTTPS browser cases, production-image smoke and pinned unmodified-Hermes integration. Native HTTPS tests pass in gated and trusted-local modes. Browser fixtures, actual native runtime tests and physical-device results are different claims.
 
-The current operator LAN origin is HTTP. Service workers require a secure context; ordinary LAN HTTP is not eligible. Preserve working HTTP chat, explain HTTPS requirements and never imply a Home Screen bookmark grants offline/PWA capabilities. Do not change the operator host, existing token, Docker storage or unrelated service on port 8787.
+The original Phase 4 exit gate requires scenarios 1–5 in `03-mobile-ios-android.md` on physical iPhone and Android. Those results do not exist yet. See `phase4-device-smoke.md`; do not relabel or waive the gate. WebKit's automated offline-switch failures are retained as failures; final cache tests additionally exercise real listener shutdown with controlled browser connectivity state, and Chromium's browser-wide offline mode.
 
-## Sources
+## Deployment
 
-- W3C Service Workers: https://www.w3.org/TR/service-workers/ (secure contexts and lifecycle)
-- WebKit Home Screen web apps: https://webkit.org/blog/13878/web-push-for-web-apps-on-ios-and-ipados/
-- Chrome update lifecycle guidance: https://developer.chrome.com/docs/workbox/handling-service-worker-updates
-
-These are browser-platform references, not a change to the pinned native Hermes contract.
+The operator requested self-signed HTTPS. Run `scripts/setup-https.sh` before recreating the same NG Compose project, install only the public CA certificate on devices, and use the new HTTPS address. Never publish signing/server keys or the private `.env`. The loopback Hermes hop and unrelated service on 8787 are unchanged. See `phase4-https-pwa.md` and ADR-021.
