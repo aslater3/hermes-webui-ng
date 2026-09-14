@@ -1,7 +1,7 @@
 import { test, expect, type Page } from '@playwright/test';
 import { login, send, idle, settings } from './shell-fixture.js';
 
-test.use({ baseURL: 'http://127.0.0.1:8787' });
+test.use({ baseURL: 'http://127.0.0.1:8787', serviceWorkers: 'allow' });
 const appSettings = async (page: Page) => { await settings(page); await page.getByRole('tab',{name:'App',exact:true}).click(); };
 
 test('PWA cache holds only static shell; offline relaunch has no transcript or send queue', async ({page,context}) => {
@@ -21,7 +21,7 @@ test('PWA cache holds only static shell; offline relaunch has no transcript or s
   await expect(page.locator('[data-role="user"]')).toHaveCount(1);
 });
 
-test('install settings are accessible and a waiting update cannot discard an unsent draft', async ({page},info) => {
+test('install settings are accessible and checking for updates preserves an unsent draft', async ({page},info) => {
   await login(page);await page.waitForFunction(()=>!!navigator.serviceWorker.controller);
   await page.locator('#shell-prompt').fill('Unsaved draft survives update check');
   await appSettings(page);await expect(page.getByTestId('pwa-state')).toHaveText('ready');
@@ -40,4 +40,14 @@ test('SW failure explains certificate trust without preventing ordinary chat', a
   await expect(page.getByTestId('pwa-state')).toHaveText('failed');
   await expect(page.getByText('Offline setup failed.',{exact:false})).toBeVisible();
   await page.getByRole('button',{name:'Close settings',exact:true}).click();await send(page,'Chat survives a PWA setup error');await idle(page);
+});
+
+test('cookie expiry with a real active worker clears the private view, not just a routed mock', async ({page, context}) => {
+  await login(page); await send(page, 'PRIVATE_BEFORE_COOKIE_EXPIRY'); await idle(page);
+  await page.waitForFunction(() => !!navigator.serviceWorker.controller);
+  await context.clearCookies();
+  await page.evaluate(() => window.dispatchEvent(new PageTransitionEvent('pageshow')));
+  await expect(page.getByLabel('Username', { exact: true })).toBeVisible();
+  await expect(page.locator('body')).not.toContainText('PRIVATE_BEFORE_COOKIE_EXPIRY');
+  expect(new URL(page.url()).hash).toBe('');
 });

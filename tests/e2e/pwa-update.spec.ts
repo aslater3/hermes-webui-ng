@@ -7,6 +7,7 @@ import { loadConfig } from '../../server/config.js';
 import { startFixture } from '../fixtures/dashboard.js';
 import { send, idle, settings } from './shell-fixture.js';
 
+test.use({ serviceWorkers: 'allow' });
 test('a real waiting worker protects drafts and other tabs, then deliberately reloads once', async ({ page, context }) => {
   const root = await mkdtemp(join(tmpdir(), 'ng-update-')); await cp('dist', root, { recursive: true });
   const fixture = await startFixture();

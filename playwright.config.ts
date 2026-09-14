@@ -5,8 +5,8 @@ export default defineConfig({
   timeout: 45_000,
   workers: 4,
   fullyParallel: true,
-  // Existing diagnostic regressions use their test-only origin; shell.spec.ts overrides to :8787.
-  use: { baseURL: 'http://127.0.0.1:8788', trace: 'retain-on-failure' },
+  // Route-mocked protocol tests have no worker. PWA suites explicitly allow real workers.
+  use: { baseURL: 'http://127.0.0.1:8788', trace: 'retain-on-failure', serviceWorkers: 'block' },
   webServer: { command: 'npm run dev:fixture', url: 'http://127.0.0.1:8787/healthz', reuseExistingServer: false },
   projects: [
     { name: 'desktop-chromium', use: { ...devices['Desktop Chrome'] } },

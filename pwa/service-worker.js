@@ -22,7 +22,6 @@ self.addEventListener('install', event => {
 });
 self.addEventListener('activate', event => {
   event.waitUntil((async () => {
-    // Retain the previous build for any still-open document's lazy chunks.
     const old = (await caches.keys()).filter(name => name.startsWith(PREFIX) && name !== CACHE);
     const clients = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
     if (clients.length <= 1) for (const name of (clients.length ? old.slice(0, -1) : old)) await caches.delete(name);
@@ -32,7 +31,7 @@ self.addEventListener('activate', event => {
 const offline = () => new Response('Offline shell unavailable. Reconnect and reload HermesUI NG.', { status: 503, headers: { 'Content-Type': 'text/plain', 'Cache-Control': 'no-store' } });
 self.addEventListener('fetch', event => {
   const request = event.request, url = new URL(request.url);
-  if (request.method !== 'GET' || url.origin !== self.location.origin || url.search || url.hash || !allowed.has(url.pathname)) return;
+  if (request.method !== 'GET' || url.origin !== self.location.origin || url.search || (url.hash && request.mode !== 'navigate') || !allowed.has(url.pathname)) return;
   if (request.mode === 'navigate' && url.pathname === '/') {
     event.respondWith(fetch(request).then(response => response.ok ? response : caches.match('/' , {cacheName:CACHE}).then(cached => cached || response)).catch(async () => await caches.match('/', {cacheName:CACHE}) || offline()));
   } else {
