@@ -1,0 +1,147 @@
+{
+  "milestone": "Phase 7 — Profiles/models/commands polish",
+  "dateUtc": "2026-09-14",
+  "status": "software-exit-gate-passed",
+  "pullRequest": 16,
+  "branch": "phase7-session-polish",
+  "featureCommit": "4e4641ebb030c10592c512e8228aac0fd5f804d9",
+  "verifiedSourceTree": "411a353b7ecf314ef2cf66011b13124497683398",
+  "baseMainCommit": "c237ebdff73729612637322e8faa2e57e7e99766",
+  "upstreamRef": "b6b53c69a6ed49cb099cf1bfe76b5e6edd718e5a",
+  "ci": {
+    "checkpoint": {
+      "runId": 34886859347,
+      "conclusion": "success"
+    },
+    "browsers": {
+      "runId": 34886859336,
+      "conclusion": "success",
+      "passed": 404,
+      "failed": 0,
+      "skipped": 0,
+      "flaky": 0,
+      "perProject": {
+        "desktop-chromium": 101,
+        "iphone-webkit": 101,
+        "android-chromium": 101,
+        "narrow-320": 101
+      }
+    },
+    "image": {
+      "runId": 34886859351,
+      "conclusion": "success"
+    },
+    "https": {
+      "runId": 34886859477,
+      "conclusion": "success",
+      "passed": 8,
+      "webkitRepeatPassed": 10,
+      "failed": 0,
+      "skipped": 0,
+      "flaky": 0
+    },
+    "nativeHermes": {
+      "runId": 34886859337,
+      "conclusion": "success",
+      "modes": [
+        "dashboard",
+        "trusted-local"
+      ]
+    }
+  },
+  "localVerification": {
+    "node": "22.16.0",
+    "productionBuild": "pass",
+    "typecheck": "pass",
+    "lint": "pass",
+    "unitPassed": 229,
+    "wirePassed": 34,
+    "failed": 0,
+    "skipped": 0,
+    "sourceTreeMatchesGitHub": true,
+    "dockerExecutedLocally": false,
+    "browsersExecutedLocally": false
+  },
+  "verifiedArtifacts": [
+    {
+      "name": "source-checkpoint",
+      "id": 10365460961,
+      "sha256": "9dd0bb446c534f686fc7fb310cf1ae88801affbdd3e43e41a06d140a312e544c"
+    },
+    {
+      "name": "diagnostic-browser-results",
+      "id": 10366041240,
+      "sha256": "428f58183d0b3eaac2eaff1d402bbce18fd503cbedb423429fcfbda40f01944c"
+    },
+    {
+      "name": "trusted-https-browser-results",
+      "id": 10365251598,
+      "sha256": "1bbd5cd41db962d5f2a202351225b698e5d8103ce586d0d68989271454f70f1b"
+    },
+    {
+      "name": "vanilla-hermes-acceptance",
+      "id": 10364938221,
+      "sha256": "960e995d537c4a716d20fd3464e7d03906e94f6a5caf6ef1abc72ea425cef6c6"
+    }
+  ],
+  "nativeSessionReports": {
+    "dashboard": {
+      "upstream": "b6b53c69a6ed49cb099cf1bfe76b5e6edd718e5a",
+      "commit": "4e4641ebb030c10592c512e8228aac0fd5f804d9",
+      "success": true,
+      "gates": [
+        "native-profiles-and-configured-model-inventory",
+        "native-model-change-confirmed",
+        "confirmed-session-model-and-reasoning-effort",
+        "profile-defaults-and-second-session-unchanged",
+        "real-agent-request-uses-selected-model",
+        "phase7-native-usage-context-and-session-isolation",
+        "phase7-native-catalogue-readonly-dispatch-no-prompt-fallback-and-isolation",
+        "reconnect-restores-settings-without-replay",
+        "fresh-client-native-recovery-and-redacted-report"
+      ],
+      "stage": "phase7-native-commands",
+      "failures": [],
+      "mode": "dashboard",
+      "scope": "Unmodified Hermes, production WebUI image, deterministic model endpoint; session settings, not global mutations."
+    },
+    "trusted-local": {
+      "upstream": "b6b53c69a6ed49cb099cf1bfe76b5e6edd718e5a",
+      "commit": "4e4641ebb030c10592c512e8228aac0fd5f804d9",
+      "success": true,
+      "gates": [
+        "native-profiles-and-configured-model-inventory",
+        "native-model-change-confirmed",
+        "confirmed-session-model-and-reasoning-effort",
+        "profile-defaults-and-second-session-unchanged",
+        "real-agent-request-uses-selected-model",
+        "phase7-native-usage-context-and-session-isolation",
+        "phase7-native-catalogue-readonly-dispatch-no-prompt-fallback-and-isolation",
+        "reconnect-restores-settings-without-replay",
+        "fresh-client-native-recovery-and-redacted-report"
+      ],
+      "stage": "phase7-native-commands",
+      "failures": [],
+      "mode": "trusted-local",
+      "scope": "Unmodified Hermes, production WebUI image, deterministic model endpoint; session settings, not global mutations."
+    }
+  },
+  "screenshotsInspected": [
+    "desktop Chromium slash-completion",
+    "iPhone WebKit command-catalogue",
+    "Android Chromium slash-completion"
+  ],
+  "supersededFailedRuns": [
+    34874908195,
+    34885765118
+  ],
+  "limits": [
+    "Browser fixtures and emulated mobile browsers are not physical-device certification.",
+    "Native tests use an unmodified pinned Hermes runtime and a deterministic model endpoint, not arbitrary current upstream.",
+    "Only advertised UI picker shortcuts and argument-free usage/status/history native reads are enabled.",
+    "Generic, global, quick/plugin/skill commands, compression and destructive rewind/edit/regenerate remain unavailable.",
+    "ADR-019 documents the independent upstream reasoning-setter concurrent-runtime-deletion race.",
+    "Phase 6, operator deployment and physical Phase 4 / release-wide gates are unchanged.",
+    "This documentation-only acceptance checkpoint does not itself merge or deploy the feature."
+  ]
+}

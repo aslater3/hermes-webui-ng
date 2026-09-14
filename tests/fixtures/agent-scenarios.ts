@@ -17,6 +17,7 @@ export class AgentScenarios {
     emit('thinking.delta', {text:'Waiting for operator input.'});
     emit('tool.start', {tool_id:'fixture-tool',name:'fixture_operation',args:{purpose:'Synthetic browser contract'}});
     emit('tool.progress', {tool_id:'fixture-tool',name:'fixture_operation',text:'Requesting confirmation…'});
+    if (prompt.includes('reasoning timeline')) emit('reasoning.delta', {text:'Reviewing the tool activity before continuing.'});
     const steps: Kind[] = prompt.includes('secret') || prompt.includes('expire') ? ['secret'] : prompt.includes('clarify') ? ['clarify'] : prompt.includes('approval') ? ['approval'] : ['approval','clarify','sudo','secret'];
     const current:Case={kind:steps[0]!,steps,at:0,payload:{},emit,finish,answers:new Set()};
     this.cases.set(sid,current);this.issue(current);

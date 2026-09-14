@@ -1,0 +1,18 @@
+.session-usage { min-width: 0; overflow-wrap: anywhere; }
+.session-usage h3 { font-size: 14px; margin: 0 0 16px; }
+.usage-context, .usage-counters > div { display: flex; justify-content: space-between; align-items: baseline; gap: 16px; }
+.usage-context { font-size: 13px; }
+.session-usage progress { display: block; width: 100%; height: 7px; margin: 12px 0; accent-color: var(--accent); }
+.usage-counters { font-size: 12px; margin: 18px 0; }
+.usage-counters > div { padding: 7px 0; border-bottom: 1px solid var(--border); }
+.usage-counters dt { color: var(--muted); }
+.usage-counters dd { margin: 0; max-width: 60%; text-align: right; font-variant-numeric: tabular-nums; }
+.usage-button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 44px; padding: 4px 8px; color: var(--muted); background: transparent; border: none; border-radius: 8px; font-size: 11px; cursor: pointer; }
+.usage-button:hover { color: var(--text); background: var(--surface); }
+.modal-usage .session-usage { padding: 20px max(20px, var(--safe-right)) max(24px, var(--safe-bottom)) max(20px, var(--safe-left)); }
+.composer-caption:has(.usage-button) { align-items: center; margin-top: 0; gap: 8px; }
+.composer-caption:has(.usage-button) > span { min-width: 0; }
+@media (max-width: 600px) {
+  .composer-caption:has(.usage-button) > .composer-privacy { display: none; }
+  .composer-caption:has(.usage-button) { justify-content: flex-end; }
+}

@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { AgentActivity, inputRpc } from '../../src/hermes/agent-activity.js';
+import { AgentActivity, ACTIVITY_LIMITS, inputRpc } from '../../src/hermes/agent-activity.js';
 const event = (type: string, payload: unknown = {}) => ({ type, session_id: 'live', payload });
 
 test('earlier tool/reasoning turns are bounded and exclude request descriptors and submitted answers', () => {
@@ -12,7 +12,8 @@ test('earlier tool/reasoning turns are bounded and exclude request descriptors a
     for (let tool = 0; tool < 50; tool++) activity.receive(event('tool.complete', { tool_id: `t${tool}`, name: 'read_file', args: { password: 'NEVER_ARCHIVE' }, result: 'x'.repeat(20000) }));
   }
   assert.equal(activity.archive.length, 6);
-  assert.ok(activity.archive.every(turn => turn.tools.length <= 10 && turn.reasoning.length <= 8192 && turn.truncated));
+  assert.ok(activity.archive.every(turn => turn.tools.length <= 10 && turn.reasoning.length <= 8192 && turn.timeline.length <= ACTIVITY_LIMITS.archiveTimeline && turn.truncated));
+  assert.ok(activity.archive.every(turn => turn.timeline.every(entry => entry.kind !== 'reasoning' || entry.text.length <= ACTIVITY_LIMITS.archiveReasoning)));
   assert.ok(activity.archive.every(turn => turn.tools.every(tool => tool.output.length <= 8192)));
   assert.ok(!JSON.stringify(activity.archive).includes('PRIVATE_REQUEST'));
   assert.ok(!JSON.stringify(activity.archive).includes('NEVER_ARCHIVE'));

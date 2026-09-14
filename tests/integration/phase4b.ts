@@ -6,6 +6,7 @@ import { GatewayClient } from '../../src/hermes/gateway-client.js';
 import { NativeSession } from '../../src/hermes/native-session.js';
 import { WsAuthClient } from '../../src/hermes/ws-auth.js';
 import { ConnectionStore } from '../../src/hermes/connection-store.js';
+import { sessionUsage } from '../../src/hermes/session-usage.js';
 import { modelCatalogue, profileCatalogue } from '../../src/hermes/model-catalog.js';
 import { record, ClientError } from '../../src/hermes/protocol.js';
 import { browserAuth } from '../helpers/browser-auth.js';
@@ -97,11 +98,43 @@ try {
   assert.ok(Array.isArray(health.selections));
   assert.ok(health.selections.some(selection => record(selection).model === alternate.model));
   pass('real-agent-request-uses-selected-model');
+  const usage = sessionUsage(await current.gateway.call('session.usage', { session_id: current.session.state.runtimeId }));
+  assert.ok(usage && (usage.calls ?? 0) > 0 && (usage.total ?? 0) > 0, 'Real Hermes reports completed-call counters');
+  await current.session.refresh();
+  assert.deepEqual(current.session.state.usage, usage, 'Native info projection matches the official usage RPC');
+  assert.equal(second.state.usage?.total ?? 0, 0, 'The untouched second session does not inherit usage');
+  pass('phase7-native-usage-context-and-session-isolation');
+  stage = 'phase7-native-commands';
+  const beforeHistory = JSON.stringify(current.session.state.messages);
+  await current.session.commands.load();
+  const nativeChoices = current.session.commands.state.catalogue?.choices;
+  for (const command of ['/usage', '/status', '/history']) {
+    assert.ok(nativeChoices?.some(choice => choice.name === command && choice.action === 'native'), `Hermes advertises ${command}`);
+    await current.session.commands.execute(command);
+    assert.equal(current.session.commands.state.result?.command, command);
+    assert.ok(current.session.commands.state.result?.output.length);
+    if (command === '/usage') assert.ok(current.session.commands.state.result?.output.includes('Session Token Usage'));
+    if (command === '/history') assert.ok(current.session.commands.state.result?.output.includes(prompt));
+  }
+  for (const command of ['/usage reset', '/model other --global', '/phase7-unknown'])
+    await assert.rejects(current.session.commands.execute(command));
+  await current.session.refresh();
+  assert.equal(JSON.stringify(current.session.state.messages), beforeHistory, 'Read-only commands add no model turn or transcript row');
+  const afterCommands = modelCatalogue(await current.gateway.call('model.options', {}));
+  assert.equal(afterCommands.model, defaults.model); assert.equal(afterCommands.provider, defaults.provider);
+  assert.deepEqual(record(await current.gateway.call('config.get', { key: 'reasoning' })), reasoningDefault);
+  await second.commands.execute('/history');
+  assert.ok(!second.commands.state.result?.output.includes(prompt), 'A second native session cannot read the selected session history');
+  await current.session.commands.execute('/usage');
+  pass('phase7-native-catalogue-readonly-dispatch-no-prompt-fallback-and-isolation');
   await current.gateway.reconnect();
+  assert.equal(current.session.commands.state.result, undefined);
+  assert.equal(current.session.commands.state.catalogue, undefined);
   await until(() => current.session.state.phase === 'idle');
   assert.equal(current.session.state.agent?.model, alternate.model);
   assert.equal(current.session.state.agent?.reasoningEffort, 'high');
   assert.equal(current.session.state.messages.filter(message => message.role === 'user' && message.text === prompt).length, 1);
+  assert.deepEqual(current.session.state.usage, usage, 'Usage rehydrates on reconnect without a local ledger');
   pass('reconnect-restores-settings-without-replay');
   otherSessions.forEach(session => session.dispose()); current.dispose(); current = client();
   await connect(); await current.session.resume(key, 'default');
@@ -110,6 +143,7 @@ try {
   assert.equal(current.session.state.messages.filter(message => message.role === 'user' && message.text === prompt).length, 1);
   const report = JSON.stringify(current.connection.report());
   assert.ok(!report.includes(prompt)); assert.ok(!report.includes(alternate.model));
+  assert.deepEqual(current.session.state.usage, usage);
   pass('fresh-client-native-recovery-and-redacted-report');
   success = true;
 } catch (error) {
