@@ -53,6 +53,7 @@ export class AgentView {
     this.summary.setAttribute('role', 'status'); this.warning.setAttribute('role', 'status');
     this.requests.setAttribute('role', 'group');
     this.requests.setAttribute('aria-label', 'Agent requests');
+    this.timeline.setAttribute('role', 'group');
     this.timeline.setAttribute('aria-label', 'Chronological Hermes activity');
     this.earlier.append(this.earlierLabel, this.earlierBody);
     this.earlier.addEventListener('toggle', () => this.renderArchive());

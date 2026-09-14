@@ -1,3 +1,4 @@
+import { NativeCommands } from './native-commands.js';
 import { displayMessage, type DisplayMessage } from './history-message.js';
 import { infoUsage, type SessionUsage } from './session-usage.js';
 import { NativeSettings } from './native-settings.js';
@@ -29,6 +30,7 @@ export interface SessionState {
 export class NativeSession {
   readonly activity = new AgentActivity();
   readonly settings: NativeSettings;
+  readonly commands: NativeCommands;
   state: SessionState = { phase: 'empty', messages: [], streaming: '', deliveryUnknown: false };
   private epoch = 0;
   private revision = 0;
@@ -46,8 +48,15 @@ export class NativeSession {
   constructor(private readonly gateway: Transport) {
     this.settings = new NativeSettings(gateway, {
       read: () => ({ runtimeId: this.state.runtimeId, profile: this.state.profile, starting: this.state.agentStarting,
-        idle: this.foreground && !this.disposed && gateway.state.phase === 'ready' && this.state.phase === 'idle' && !this.submission, agent: this.state.agent }),
+        idle: this.foreground && !this.disposed && gateway.state.phase === 'ready' && this.state.phase === 'idle' && !this.submission && !this.commands?.state.busy, agent: this.state.agent }),
       refresh: () => this.refresh(), notify: () => this.publish({}),
+    });
+    this.commands = new NativeCommands(gateway, {
+      read: () => ({ runtimeId: this.state.runtimeId, profile: this.state.profile,
+        ready: this.foreground && !this.disposed && gateway.state.phase === 'ready',
+        idle: this.state.phase === 'idle' && !this.submission && !this.yoloFlight &&
+          !this.settings.state.busy && this.settings.state.outcome !== 'unknown' && !this.settings.state.confirmation }),
+      notify: () => this.publish({}),
     });
     this.unsubscribe = [
       gateway.onEvent((event) => this.event(event)),
@@ -58,7 +67,7 @@ export class NativeSession {
   setForeground(value: boolean): void {
     if (value !== this.foreground) { ++this.revision; ++this.usageRevision; }
     this.foreground = value;
-    if (!value) { this.settings.reset(); this.publish({ messages: [], streaming: '', usage: undefined }); }
+    if (!value) { this.commands.reset(); this.settings.reset(); this.publish({ messages: [], streaming: '', usage: undefined }); }
   }
   subscribe(listener: (state: SessionState) => void): () => void {
     this.listeners.add(listener);
@@ -78,6 +87,7 @@ export class NativeSession {
   }
   private connection(connection: ConnectionState): void {
     if (connection.phase !== 'ready') {
+      this.commands.reset();
       this.settings.reset();
       this.activity.disconnect();
       ++this.epoch;
@@ -98,6 +108,7 @@ export class NativeSession {
   }
   private async attach(method: string, storedId?: string, profile?: string, reconnect = false): Promise<void> {
     const epoch = ++this.epoch;
+    this.commands.reset();
     this.settings.reset();
     if (!reconnect) this.activity.reset();
     this.flight = undefined; this.yoloFlight = undefined;
@@ -237,7 +248,7 @@ export class NativeSession {
     }
   }
   async submit(text: string): Promise<void> {
-    if (!this.foreground || this.state.phase !== 'idle' || this.settings.state.busy || this.settings.state.outcome === 'unknown' || this.settings.state.confirmation || this.submission || !this.state.runtimeId || !text.trim() || text.length > 32768)
+    if (!this.foreground || this.state.phase !== 'idle' || this.commands.state.busy || this.settings.state.busy || this.settings.state.outcome === 'unknown' || this.settings.state.confirmation || this.submission || !this.state.runtimeId || !text.trim() || text.length > 32768)
       throw new ClientError('protocol', 'Wait for an idle native session before submitting');
     const epoch = this.epoch;
     this.settings.cancelConfirmation();
@@ -286,7 +297,7 @@ export class NativeSession {
     const promise = (async () => {
       this.valid(epoch);
       const runtimeId = this.state.runtimeId;
-      if (!this.foreground || !runtimeId || !['idle', 'waiting'].includes(this.state.phase) || this.state.interrupting || this.state.submitting || this.settings.state.busy)
+      if (!this.foreground || !runtimeId || !['idle', 'waiting'].includes(this.state.phase) || this.state.interrupting || this.state.submitting || this.commands.state.busy || this.settings.state.busy)
         throw new ClientError('protocol', 'YOLO can be changed only for the selected idle or approval-waiting conversation');
       const raw = record(await this.gateway.call('config.set', yoloSetParams(runtimeId, this.state.profile, enabled)));
       this.valid(epoch);
@@ -350,6 +361,7 @@ export class NativeSession {
   dispose(): void {
     this.disposed = true;
     this.state = { ...this.state, usage: undefined };
+    this.commands.reset();
     this.settings.reset();
     this.activity.reset();
     ++this.epoch;

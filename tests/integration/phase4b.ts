@@ -104,7 +104,32 @@ try {
   assert.deepEqual(current.session.state.usage, usage, 'Native info projection matches the official usage RPC');
   assert.equal(second.state.usage?.total ?? 0, 0, 'The untouched second session does not inherit usage');
   pass('phase7-native-usage-context-and-session-isolation');
+  stage = 'phase7-native-commands';
+  const beforeHistory = JSON.stringify(current.session.state.messages);
+  await current.session.commands.load();
+  const nativeChoices = current.session.commands.state.catalogue?.choices;
+  for (const command of ['/usage', '/status', '/history']) {
+    assert.ok(nativeChoices?.some(choice => choice.name === command && choice.action === 'native'), `Hermes advertises ${command}`);
+    await current.session.commands.execute(command);
+    assert.equal(current.session.commands.state.result?.command, command);
+    assert.ok(current.session.commands.state.result?.output.length);
+    if (command === '/usage') assert.ok(current.session.commands.state.result?.output.includes('Session Token Usage'));
+    if (command === '/history') assert.ok(current.session.commands.state.result?.output.includes(prompt));
+  }
+  for (const command of ['/usage reset', '/model other --global', '/phase7-unknown'])
+    await assert.rejects(current.session.commands.execute(command));
+  await current.session.refresh();
+  assert.equal(JSON.stringify(current.session.state.messages), beforeHistory, 'Read-only commands add no model turn or transcript row');
+  const afterCommands = modelCatalogue(await current.gateway.call('model.options', {}));
+  assert.equal(afterCommands.model, defaults.model); assert.equal(afterCommands.provider, defaults.provider);
+  assert.deepEqual(record(await current.gateway.call('config.get', { key: 'reasoning' })), reasoningDefault);
+  await second.commands.execute('/history');
+  assert.ok(!second.commands.state.result?.output.includes(prompt), 'A second native session cannot read the selected session history');
+  await current.session.commands.execute('/usage');
+  pass('phase7-native-catalogue-readonly-dispatch-no-prompt-fallback-and-isolation');
   await current.gateway.reconnect();
+  assert.equal(current.session.commands.state.result, undefined);
+  assert.equal(current.session.commands.state.catalogue, undefined);
   await until(() => current.session.state.phase === 'idle');
   assert.equal(current.session.state.agent?.model, alternate.model);
   assert.equal(current.session.state.agent?.reasoningEffort, 'high');

@@ -1,3 +1,4 @@
+import { useCommands } from './Commands.js';
 import './m3-activity.css';
 import { HermesMark } from './HermesMark.js';
 import { UsageButton } from './SessionUsage.js';
@@ -33,7 +34,8 @@ export function Conversation({ runtime: rt, revision }: { runtime: AppRuntime; r
   const following = useRef(true), [unread, setUnread] = useState(false), [draft, setDraft] = useState(chat.draft);
   const scope = `${draftKey(chat.selected)}:${historical ? saved.page?.offset ?? 0 : 'live'}`;
   const busy = ['running', 'waiting'].includes(state.phase), loading = chat.busy || state.phase === 'attaching';
-  const writable = rt.ready && !chat.native.settings.state.busy && chat.native.settings.state.outcome !== 'unknown' && !chat.native.settings.state.confirmation && !loading && !historical && (!chat.selected || state.phase === 'idle');
+  const writable = rt.ready && !chat.native.commands.state.busy && !chat.native.settings.state.busy && chat.native.settings.state.outcome !== 'unknown' && !chat.native.settings.state.confirmation && !loading && !historical && (!chat.selected || state.phase === 'idle');
+  const commands = useCommands(rt, draft, value => { setDraft(value); rt.setDraft(value); }, composer, writable);
   const pending = chat.native.activity.state.inputs.filter(input => ['pending', 'sending'].includes(input.status)).length;
   const error = chat.error?.message || state.error?.message || saved.error?.message;
   const empty = !messages.length && !streaming && !busy && !loading && !error;
@@ -79,13 +81,15 @@ export function Conversation({ runtime: rt, revision }: { runtime: AppRuntime; r
       {unread && <button className="jump-latest" onClick={jump}><ArrowDown size={15}/>Jump to latest</button>}
       {pending > 0 && <button className="attention-strip" onClick={() => { following.current = false; content.current?.querySelector('.agent-requests')?.scrollIntoView({ block: 'center', behavior: 'instant' }); }}><span className="attention-dot"/>{pending} request{pending === 1 ? '' : 's'} need your input<ArrowUpRight size={15}/></button>}
       <form className="composer" id="shell-composer" onSubmit={event => { event.preventDefault(); send(); }}>
+        {commands.popup}
         <label className="sr-only" htmlFor="shell-prompt">Message Hermes</label>
-        <textarea id="shell-prompt" ref={composer} rows={2} placeholder={historical ? 'Return to latest to continue this conversation' : !rt.ready ? 'Connect to Hermes to send a message' : 'Message Hermes…'} value={draft} maxLength={32768} disabled={!writable} onChange={event => { setDraft(event.target.value); rt.chat.setDraft(event.target.value); }}
-          onKeyDown={event => { if (enterSends(event.nativeEvent, navigator.maxTouchPoints > 0 || matchMedia('(pointer:coarse)').matches)) { event.preventDefault(); send(); } }}/>
+        <textarea id="shell-prompt" ref={composer} {...commands.aria} rows={2} placeholder={historical ? 'Return to latest to continue this conversation' : !rt.ready ? 'Connect to Hermes to send a message' : 'Message Hermes…'} value={draft} maxLength={32768} disabled={!writable} onChange={event => { setDraft(event.target.value); rt.chat.setDraft(event.target.value); }}
+          onKeyDown={event => { if (commands.keyDown(event)) return; if (enterSends(event.nativeEvent, navigator.maxTouchPoints > 0 || matchMedia('(pointer:coarse)').matches)) { event.preventDefault(); send(); } }}/>
         <div className="composer-toolbar"><AgentControls runtime={rt}/>
           <div className="composer-right">{draft.length > 30000 && <span className="small muted">{draft.length.toLocaleString()} / 32,768</span>}{busy ? <button type="button" className="send-button stop-button" aria-label="Stop response" title="Stop response" disabled={!rt.ready || !!state.submitting || !!state.interrupting} onClick={() => rt.run(() => chat.interrupt())}>{state.interrupting ? <LoaderCircle size={18} className="spin"/> : <Square size={15} fill="currentColor"/>}</button> : <button type="submit" className="send-button" aria-label="Send message" title="Send message" disabled={!writable || !draft.trim()}><ArrowUp size={20}/></button>}</div>
         </div>
-      </form><div className="composer-caption"><span className="composer-privacy">Your conversations stay in Hermes.</span>{!historical && rt.ready && state.runtimeId && <UsageButton key={`${rt.accountGeneration}:${scope}:${state.runtimeId}`} usage={state.usage}/>}<span className="desktop-hint">Enter to send · Shift + Enter for a new line</span></div>
+      </form><div className="composer-caption"><span className="composer-privacy">Your conversations stay in Hermes.</span>{commands.button}{!historical && rt.ready && state.runtimeId && <UsageButton key={`${rt.accountGeneration}:${scope}:${state.runtimeId}`} usage={state.usage}/>}<span className="desktop-hint">Enter to send · Shift + Enter for a new line</span></div>
     </div>
+    {commands.overlay}
   </>;
 }
