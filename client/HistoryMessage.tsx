@@ -1,5 +1,6 @@
+import { HermesMark } from './HermesMark.js';
 import { lazy, memo, Suspense, useState } from 'react';
-import { Brain, Check, Copy, Sparkles, Wrench } from 'lucide-react';
+import { Brain, Check, Copy, Wrench } from 'lucide-react';
 import type { DisplayMessage } from '../src/hermes/history-message.js';
 import './history-message.css';
 
@@ -16,7 +17,7 @@ export const HistoryMessage = memo(function HistoryMessage({ role, text, toolNam
     </details>
   </article>;
   return <article className={`message message-${user ? 'user' : 'assistant'}`} data-role={role}>
-    <div className="message-label">{role === 'assistant' && <span className="assistant-mark" aria-hidden="true"><Sparkles size={15} aria-hidden="true" focusable="false"/></span>}<span>{user ? 'You' : role === 'assistant' ? 'Hermes' : role}</span></div>
+    <div className="message-label">{role === 'assistant' && <span className="assistant-mark" aria-hidden="true"><HermesMark size={15}/></span>}<span>{user ? 'You' : role === 'assistant' ? 'Hermes' : role}</span></div>
     {reasoning && <details className="history-reasoning"><summary><Brain size={15} aria-hidden="true" focusable="false"/>Reasoning from Hermes</summary><pre className="plain-message">{reasoning}</pre></details>}
     {text && <div className="message-content">{user ? <div className="user-text">{text}</div> : <Suspense fallback={<pre className="plain-message">{text}</pre>}><Markdown text={text}/></Suspense>}</div>}
     {limit}

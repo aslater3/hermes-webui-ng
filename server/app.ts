@@ -82,11 +82,11 @@ export function createApp(config: Config, log: Log = (event) => console.log(JSON
       }
       const path = raw.split('?')[0] ?? '';
       const asset = path === '/' ? 'index.html' : path === '/diagnostic' ? 'diagnostic.html'
-        : /^\/(?:app\.js|styles\.css|hermes\/[a-z-]+\.js|assets\/[A-Za-z0-9_-]+\.(?:js|css))$/.test(path) ? path.slice(1) : undefined;
+        : /^\/(?:app\.js|styles\.css|hermes\/[a-z-]+\.js|assets\/[A-Za-z0-9_-]+\.(?:js|css|svg))$/.test(path) ? path.slice(1) : undefined;
       if (!asset) { json(res, 404, { error: { code: 'NOT_FOUND' } }); return; }
       void readFile(join(config.staticDir, asset))
         .then((content) => {
-          const mime = asset.endsWith('.html') ? 'text/html' : asset.endsWith('.css') ? 'text/css' : 'text/javascript';
+          const mime = asset.endsWith('.html') ? 'text/html' : asset.endsWith('.css') ? 'text/css' : asset.endsWith('.svg') ? 'image/svg+xml' : 'text/javascript';
           res.writeHead(200, {
             'Content-Type': `${mime}; charset=utf-8`,
             'Cache-Control': asset.startsWith('assets/') ? 'public, max-age=31536000, immutable' : 'no-store',

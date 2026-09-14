@@ -1,6 +1,7 @@
+import { HermesMark } from './HermesMark.js';
 import { AgentControls } from './AgentControls.js';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { ArrowDown, ArrowUp, ArrowUpRight, Code2, Compass, ListChecks, LoaderCircle, Sparkles, Square, Wrench } from 'lucide-react';
+import { ArrowDown, ArrowUp, ArrowUpRight, Code2, Compass, ListChecks, LoaderCircle, Square, Wrench } from 'lucide-react';
 import type { AppRuntime } from './runtime.js';
 import type { NativeSession } from '../src/hermes/native-session.js';
 import { AgentView } from '../src/hermes/agent-view.js';
@@ -62,12 +63,12 @@ export function Conversation({ runtime: rt, revision }: { runtime: AppRuntime; r
       {historical && <Notice>Earlier messages · read-only <button onClick={() => rt.run(() => chat.latest())}>Return to latest</button></Notice>}
       {error && <Notice error>{error}<button onClick={() => rt.run(() => chat.latest())}>Refresh conversation</button></Notice>}
       {state.deliveryUnknown && <Notice>Delivery was not confirmed. Check the recovered conversation before resending. Nothing has been replayed.</Notice>}
-      {empty && <div className="welcome"><div className="welcome-mark"><Sparkles size={30} strokeWidth={1.4}/></div><p className="eyebrow">A SPACE FOR YOUR NEXT IDEA</p><h1>What are we working on?</h1><p>Think it through. Build it out. Make it happen with Hermes.</p><div className="welcome-suggestions">{starters.map(({ icon: Icon, title, subtitle, draft }) => <button key={title} onClick={() => useStarter(draft)} disabled={!writable} title={`Use “${title}” as a draft`}><Icon size={19}/><span><strong>{title}</strong><small>{subtitle}</small></span><ArrowUpRight size={15}/></button>)}</div></div>}
+      {empty && <div className="welcome"><div className="welcome-mark"><HermesMark size={30}/></div><p className="eyebrow">A SPACE FOR YOUR NEXT IDEA</p><h1>What are we working on?</h1><p>Think it through. Build it out. Make it happen with Hermes.</p><div className="welcome-suggestions">{starters.map(({ icon: Icon, title, subtitle, draft }) => <button key={title} onClick={() => useStarter(draft)} disabled={!writable} title={`Use “${title}” as a draft`}><Icon size={19}/><span><strong>{title}</strong><small>{subtitle}</small></span><ArrowUpRight size={15}/></button>)}</div></div>}
       {loading && <div className="loading-conversation" role="status"><LoaderCircle size={19} className="spin"/>Opening your conversation…</div>}
       {messages.slice(0, activityAt).map((message, index) => <Message key={`${scope}:${index}`} {...message}/>)}
       <Activity owner={chat.native} enabled={rt.ready && !loading} historical={snapshot} revision={revision}/>
       {messages.slice(activityAt).map((message, index) => <Message key={`${scope}:${activityAt + index}`} {...message}/>)}
-      {streaming && <div className="message message-assistant streaming"><div className="message-label"><span className="assistant-mark"><Sparkles size={15} aria-hidden="true" focusable="false"/></span>Hermes <span className="working-label">Working</span></div><pre className="plain-message">{streaming}<span className="stream-cursor"/></pre></div>}
+      {streaming && <div className="message message-assistant streaming"><div className="message-label"><span className="assistant-mark"><HermesMark size={15}/></span>Hermes <span className="working-label">Working</span></div><pre className="plain-message">{streaming}<span className="stream-cursor"/></pre></div>}
       {busy && !streaming && !pending && <div className="thinking-indicator" role="status"><span/><span/><span/>Hermes is working</div>}
       {state.phase === 'waiting' && !pending && <Notice>Hermes is waiting for input, but no recoverable request is available. Refresh or use the original client.</Notice>}
       <span className="sr-only" role="status" aria-live="polite">{state.phase === 'idle' && messages.length ? 'Response complete.' : pending ? 'Hermes needs your input.' : ''}</span>

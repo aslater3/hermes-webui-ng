@@ -36,6 +36,8 @@ test('native tool summaries, structured replies and public reasoning render clea
     await expect(page.locator('#conversation-scroll')).not.toContainText('PRIVATE_TOOL_ARG');
     const decorative = await page.locator('article.message svg').evaluateAll(nodes => nodes.every(node => node.getAttribute('aria-hidden') === 'true'));
     expect(decorative).toBe(true);
+    await expect(page.locator('[data-role="assistant"] .hermes-mark[aria-hidden="true"][alt=""]')).toHaveCount(2);
+    await expect(page.locator('[data-role="assistant"] .lucide-sparkles')).toHaveCount(0);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     if (!pass) { await page.reload(); await idle(page); }
   }
