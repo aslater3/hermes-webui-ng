@@ -63,3 +63,38 @@ test('transport or native failure never causes a second executor or prompt fallb
   assert.equal(h.count(), 1); assert.equal(h.calls.filter(call => call.method === 'slash.exec').length, 1);
   assert.equal(h.calls.some(call => ['command.dispatch', 'prompt.submit', 'shell.exec'].includes(call.method)), false);
 });
+
+
+test('fresh lazy runtimes wait for authoritative profile metadata before one native dispatch', async () => {
+  const h = harness(), call = h.rpc.call; let snapshots = 0;
+  h.rpc.call = async (method, params) => {
+    if (method === 'session.activate' && snapshots++ < 2) {
+      h.calls.push({ method, params: params ?? {} }); return { running: false, status: 'starting', info: { lazy: true } };
+    }
+    return call(method, params);
+  };
+  await dispatchCommand(h.rpc, { name: '/plan', argument: 'a task', category: 'Session' }, h.owner, h.current, h.issued);
+  assert.equal(h.count(), 1); assert.equal(h.calls.filter(call => call.method === 'session.activate').length, 3);
+  assert.equal(h.calls.at(-1)?.method, 'command.dispatch');
+});
+
+test('lazy readiness never guesses an absent profile on a settled snapshot or accepts a different profile', async () => {
+  for (const info of [{}, { profile_name: 'work', lazy: true }]) {
+    const h = harness(), call = h.rpc.call;
+    h.rpc.call = async (method, params) => method === 'session.activate' ? { running: false, info } : call(method, params);
+    await assert.rejects(dispatchCommand(h.rpc, { name: '/plan', argument: 'task', category: 'Session' }, h.owner, h.current, h.issued));
+    assert.equal(h.count(), 0);
+  }
+});
+
+test('selection change during a lazy-start wait cancels before any native effect', async () => {
+  const h = harness(), call = h.rpc.call;
+  h.rpc.call = async (method, params) => {
+    if (method === 'session.activate') {
+      setTimeout(h.invalidate, 1); return { running: false, info: { lazy: true } };
+    }
+    return call(method, params);
+  };
+  await assert.rejects(dispatchCommand(h.rpc, { name: '/plan', argument: 'task', category: 'Session' }, h.owner, h.current, h.issued));
+  assert.equal(h.count(), 0);
+});

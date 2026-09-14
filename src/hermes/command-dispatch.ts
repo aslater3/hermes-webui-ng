@@ -39,6 +39,28 @@ export async function verifyCommandProfile(rpc: CommandRpc, owner: CommandOwner,
     throw new ClientError('protocol', 'This Hermes version cannot safely run generic commands for the selected profile. Connect to a gateway launched for this profile. Nothing was executed.');
 }
 
+/** A newly created runtime may be idle while its lazy agent has no profile metadata yet.
+ * Retry read-only snapshots only; an actual run, malformed identity or different owner fails closed. */
+export async function waitForCommandOwner(rpc: CommandRpc, owner: CommandOwner, current: () => void): Promise<void> {
+  const deadline = Date.now() + 10_000;
+  for (let attempt = 0; attempt < 100 && Date.now() < deadline; attempt++) {
+    current();
+    const live = record(await rpc.call('session.activate', { session_id: owner.runtimeId, omit_messages: true }));
+    current();
+    const info = record(live.info);
+    if (live.running !== false || (info.profile_name !== undefined && info.profile_name !== owner.profile))
+      throw new ClientError('protocol', 'The native session changed or is busy. Nothing was executed.');
+    if (info.lazy !== true && live.status !== 'starting') {
+      if (info.profile_name !== owner.profile)
+        throw new ClientError('protocol', 'Hermes did not confirm the native session profile. Nothing was executed.');
+      return;
+    }
+    await new Promise<void>(resolve => setTimeout(resolve, 100));
+  }
+  current();
+  throw new ClientError('timeout', 'Hermes is still preparing this agent. No command was executed; try again once it is ready.');
+}
+
 /** One deliberate operation. Never try another executor after a failure: it may already have had effects. */
 export async function dispatchCommand(rpc: CommandRpc, command: CommandInvocation, owner: CommandOwner,
   current: () => void, issued: () => void): Promise<CommandResult> {
@@ -47,10 +69,7 @@ export async function dispatchCommand(rpc: CommandRpc, command: CommandInvocatio
   if (!readOnly) {
     await verifyCommandProfile(rpc, owner, current);
     // Resolve an existing attached runtime before invoking handlers that have an unsafe missing-session fallback.
-    const live = record(await rpc.call('session.activate', { session_id: owner.runtimeId, omit_messages: true }));
-    current();
-    if (live.running !== false || record(live.info).profile_name !== owner.profile)
-      throw new ClientError('protocol', 'The native session changed or is busy. Nothing was executed.');
+    await waitForCommandOwner(rpc, owner, current);
   }
   const method = nativeCommandMethod(command);
   current(); issued();
