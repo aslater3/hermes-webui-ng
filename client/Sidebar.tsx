@@ -5,6 +5,7 @@ import type { AppRuntime } from './runtime.js';
 import { Brand, IconButton } from './primitives.js';
 import { dateGroup } from './preferences.js';
 import { draftKey } from '../src/hermes/chat-controller.js';
+import './sidebar-attention.css';
 
 export function Sidebar({ runtime: rt, onChoose, onSettings, onCommands, onCollapse, compact = false }: {
   runtime: AppRuntime; onChoose: () => void; onSettings: () => void; onCommands: () => void; onCollapse?: () => void; compact?: boolean;
@@ -33,9 +34,11 @@ export function Sidebar({ runtime: rt, onChoose, onSettings, onCommands, onColla
           const selected = draftKey(row) === draftKey(rt.chat.selected), view = rt.chat.viewFor(row), active = rt.attention.forSession(row);
           const waiting = rt.ready && (active?.status === 'waiting' || view?.state.phase === 'waiting' || view?.activity.state.inputs.some(input => input.status === 'pending'));
           const working = rt.ready && (view?.state.phase === 'running' || active?.status === 'working');
+          const newActivity = !waiting && !working && !!active?.review;
           return <li key={draftKey(row)}>{heading && <h2 className="list-group">{group}</h2>}<button className={`session-row${selected ? ' selected' : ''}`} aria-current={selected ? 'page' : undefined}
+            data-attention={waiting ? 'required' : newActivity ? 'new' : undefined}
             aria-label={`Open conversation: ${row.title || row.preview || 'Untitled conversation'}`} disabled={!rt.readable || rt.chat.busy} onClick={() => { rt.open(row); onChoose(); }}>
-            <MessageSquare size={16}/><span className="row-copy"><span className="row-title">{row.title || row.preview || 'Untitled conversation'}</span>{waiting ? <span className="row-state">Needs your input</span> : working ? <span className="row-state">Working…</span> : active?.review ? <span className="row-state">New activity</span> : <span className="row-meta">{row.profile || 'default'} · {row.messageCount} messages</span>}</span></button></li>;
+            <MessageSquare size={16}/><span className="row-copy"><span className="row-title">{row.title || row.preview || 'Untitled conversation'}</span>{waiting ? <span className="row-state">Needs your input</span> : working ? <span className="row-state">Working…</span> : newActivity ? <span className="row-state">New activity</span> : <span className="row-meta">{row.profile || 'default'} · {row.messageCount} messages</span>}</span></button></li>;
         })}</ul>
       </div>
       <div className="sidebar-pagination"><span>{index.query ? `${index.rows.length} results` : index.total ? `${index.offset + 1}–${index.offset + index.rows.length} of ${index.total}` : 'Conversations'}</span>

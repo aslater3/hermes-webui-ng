@@ -14,7 +14,13 @@ test('an unselected pending credential stays discoverable without keeping the en
   await conversations(page);
   const active = page.getByRole('region', { name: 'Active agent sessions' });
   await expect(active).toContainText('Needs your input');
-  await page.getByRole('button', { name: `Open active session: ${prompt}`, exact: true }).click();
+  const activeButton = page.getByRole('button', { name: `Open active session: ${prompt}`, exact: true });
+  await expect(activeButton).toHaveAttribute('data-attention', 'required');
+  expect(await activeButton.evaluate(element => getComputedStyle(element).boxShadow)).not.toBe('none');
+  const savedButton = page.getByRole('button', { name: `Open conversation: ${prompt}`, exact: true });
+  await expect(savedButton).toHaveAttribute('data-attention', 'required');
+  expect(await savedButton.evaluate(element => getComputedStyle(element).boxShadow)).not.toBe('none');
+  await activeButton.click();
   await expect(field).toBeVisible(); await expect(field).toHaveValue('');
   await field.fill('SYNTHETIC_RESPONSE_VALUE'); await page.getByRole('button', { name: 'Save in Hermes', exact: true }).click();
   await idle(page); await expect(page.locator('[data-role="assistant"]').last()).toContainText('SYNTHETIC_AGENT_COMPLETE');
@@ -38,13 +44,19 @@ test('native completion in another conversation produces a review badge without 
     await newChat(page); await send(page, 'Current foreground response'); await idle(page);
     await conversations(page);
     const button = page.getByRole('button', { name: `Open active session: ${prompt}`, exact: true });
+    const savedButton = page.getByRole('button', { name: `Open conversation: ${prompt}`, exact: true });
     // Prove the prerequisite: this native session is still working AND unselected.
     // A fixed 3.1s fixture timer can finish before a slower mobile UI switches away.
     await expect(button).toContainText('Working');
     await expect(button).not.toContainText('New activity');
+    await expect(button).not.toHaveAttribute('data-attention', 'new');
     await expect(userMessages).toHaveText(['Current foreground response']);
     release();
     await expect(button).toContainText('New activity');
+    await expect(button).toHaveAttribute('data-attention', 'new');
+    expect(await button.evaluate(element => getComputedStyle(element).boxShadow)).not.toBe('none');
+    await expect(savedButton).toHaveAttribute('data-attention', 'new');
+    expect(await savedButton.evaluate(element => getComputedStyle(element).boxShadow)).not.toBe('none');
     await expect(userMessages).toHaveText(['Current foreground response']);
     await button.click(); await idle(page);
     await expect(userMessages).toHaveText([prompt]);
