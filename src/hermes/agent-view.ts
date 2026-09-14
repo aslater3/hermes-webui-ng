@@ -122,7 +122,8 @@ export class AgentView {
     }
     const interactive = input.status === 'pending' && enabled && !input.blocked;
     card.root.dataset.status = input.status;
-    card.status.textContent = input.blocked ? 'Response disabled — incomplete or unsupported request details' : labels[input.status];
+    card.status.textContent = input.blocked ? 'Response disabled — incomplete or unsupported request details' :
+      input.kind === 'approval' && input.status === 'pending' ? 'Action paused — choose Allow once or Deny' : labels[input.status];
     if (['answered','expired','unknown','unsupported'].includes(input.status) || input.blocked) this.erase(card);
     for (const control of card.controls.querySelectorAll<HTMLInputElement | HTMLButtonElement | HTMLTextAreaElement>('button,input,textarea')) control.disabled = !interactive;
     for (const [qid, fieldset] of card.questions) {
@@ -135,8 +136,9 @@ export class AgentView {
     const root=node('article','',`agent-card agent-${input.kind}`); root.dataset.requestKey=input.key;
     root.setAttribute('aria-label',names[input.kind]);
     const status=node('p','','agent-input-status'), error=node('p','','agent-input-error'); status.setAttribute('role','status'); error.setAttribute('role','alert'); error.hidden=true;
+    if (input.kind === 'approval') status.setAttribute('aria-live', 'assertive');
     const controls=node('div','','agent-input-controls'); const questions=new Map<string,HTMLFieldSetElement>();
-    root.append(node('h3',names[input.kind]),status);
+    root.append(node('h3',input.kind === 'approval' ? 'Permission required' : names[input.kind]),status);
     if(input.prompt) root.append(node('p',input.prompt));
     const respond = (value: string, questionId?: string) => {
       error.hidden=true;
@@ -146,6 +148,7 @@ export class AgentView {
       });
     };
     if(input.kind==='approval') {
+      root.append(node('p','Hermes is paused until you decide. Requests can expire in Hermes; the supported baseline defaults to five minutes.','agent-attention-copy'));
       root.append(node('pre',input.command??'No complete command supplied'));
       root.append(node('p','Review the exact operation. Allow once applies only to this request; it does not change your saved approval policy.','hint'));
       for(const choice of input.choices) controls.append(button(choice==='once'?'Allow once':'Deny',()=>respond(choice)));
