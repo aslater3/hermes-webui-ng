@@ -1,5 +1,6 @@
 import { RefreshCw, X } from 'lucide-react';
 import type { AppRuntime } from './runtime.js';
+import { UsageDetails } from './SessionUsage.js';
 import { IconButton } from './primitives.js';
 import './conversation-details.css';
 
@@ -19,6 +20,7 @@ export function ConversationDetails({ runtime: rt, onClose, pane = false }: { ru
       <div><dt>Gateway</dt><dd>{rt.gateway.state.phase}</dd></div>
       <div><dt>View</dt><dd>{rt.chat.historical ? 'Earlier history · read-only' : 'Latest conversation'}</dd></div>
     </dl>
+    <UsageDetails usage={state.usage} historical={rt.chat.historical}/>
     <button className="secondary" disabled={!rt.ready || rt.chat.busy || !state.runtimeId || rt.pwa.state.updating} onClick={() => rt.run(() => rt.chat.latest())}><RefreshCw size={16}/>Refresh native state</button>
     <p className="small muted">These values are reported by Hermes. Use the composer controls to request a model or reasoning change.</p>
     {!rt.ready && <p className="small muted" role="status">Disconnected. Previously displayed values may be stale.</p>}

@@ -1,5 +1,6 @@
 import './m3-activity.css';
 import { HermesMark } from './HermesMark.js';
+import { UsageButton } from './SessionUsage.js';
 import { AgentControls } from './AgentControls.js';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { ArrowDown, ArrowUp, ArrowUpRight, Code2, Compass, ListChecks, LoaderCircle, Square, Wrench } from 'lucide-react';
@@ -41,7 +42,7 @@ export function Conversation({ runtime: rt, revision }: { runtime: AppRuntime; r
   const jump = () => { following.current = true; setUnread(false); if (scroller.current) { scroller.current.dataset.following = 'true'; scroller.current.scrollTop = scroller.current.scrollHeight; } };
   useLayoutEffect(() => {
     if (following.current) jump(); else setUnread(true);
-  }, [messages, streaming, state.phase, revision]);
+  }, [messages, streaming, state.phase, chat.native.activity.state]);
   useEffect(() => {
     if (!content.current || !scroller.current) return;
     const observer = new ResizeObserver(() => { if (following.current && scroller.current) scroller.current.scrollTop = scroller.current.scrollHeight; });
@@ -84,7 +85,7 @@ export function Conversation({ runtime: rt, revision }: { runtime: AppRuntime; r
         <div className="composer-toolbar"><AgentControls runtime={rt}/>
           <div className="composer-right">{draft.length > 30000 && <span className="small muted">{draft.length.toLocaleString()} / 32,768</span>}{busy ? <button type="button" className="send-button stop-button" aria-label="Stop response" title="Stop response" disabled={!rt.ready || !!state.submitting || !!state.interrupting} onClick={() => rt.run(() => chat.interrupt())}>{state.interrupting ? <LoaderCircle size={18} className="spin"/> : <Square size={15} fill="currentColor"/>}</button> : <button type="submit" className="send-button" aria-label="Send message" title="Send message" disabled={!writable || !draft.trim()}><ArrowUp size={20}/></button>}</div>
         </div>
-      </form><div className="composer-caption"><span>Your conversations stay in Hermes.</span><span className="desktop-hint">Enter to send · Shift + Enter for a new line</span></div>
+      </form><div className="composer-caption"><span className="composer-privacy">Your conversations stay in Hermes.</span>{!historical && rt.ready && state.runtimeId && <UsageButton key={`${rt.accountGeneration}:${scope}:${state.runtimeId}`} usage={state.usage}/>}<span className="desktop-hint">Enter to send · Shift + Enter for a new line</span></div>
     </div>
   </>;
 }

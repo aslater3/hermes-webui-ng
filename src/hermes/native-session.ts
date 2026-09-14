@@ -1,4 +1,5 @@
 import { displayMessage, type DisplayMessage } from './history-message.js';
+import { infoUsage, type SessionUsage } from './session-usage.js';
 import { NativeSettings } from './native-settings.js';
 import { agentMetadata, yoloSetParams, type AgentMetadata } from './model-catalog.js';
 import { AgentActivity, inputRpc } from './agent-activity.js';
@@ -21,6 +22,7 @@ export interface SessionState {
   error?: ClientError;
   agent?: AgentMetadata;
   agentStarting?: boolean;
+  usage?: SessionUsage;
 }
 
 /** Disposable view of upstream state. Nothing is written to browser or server storage. */
@@ -31,6 +33,7 @@ export class NativeSession {
   private epoch = 0;
   private revision = 0;
   private streamRevision = 0;
+  private usageRevision = 0;
   private disposed = false;
   private foreground = true;
   private flight?: { epoch: number; promise: Promise<void> };
@@ -53,9 +56,9 @@ export class NativeSession {
   }
   /** Keep live descriptors, not hidden transcripts, while the operator views another conversation. */
   setForeground(value: boolean): void {
-    if (value !== this.foreground) ++this.revision;
+    if (value !== this.foreground) { ++this.revision; ++this.usageRevision; }
     this.foreground = value;
-    if (!value) { this.settings.reset(); this.publish({ messages: [], streaming: '' }); }
+    if (!value) { this.settings.reset(); this.publish({ messages: [], streaming: '', usage: undefined }); }
   }
   subscribe(listener: (state: SessionState) => void): () => void {
     this.listeners.add(listener);
@@ -79,7 +82,7 @@ export class NativeSession {
       this.activity.disconnect();
       ++this.epoch;
       this.flight = undefined; this.yoloFlight = undefined;
-      if (this.state.storedId) this.publish({ phase: 'unknown', runtimeId: undefined, agentStarting: undefined,
+      if (this.state.storedId) this.publish({ phase: 'unknown', runtimeId: undefined, agentStarting: undefined, usage: undefined,
         deliveryUnknown: this.state.deliveryUnknown || !!this.submission, submitting: false, interrupting: false });
       this.submission = undefined; this.interruption = undefined;
     } else if (this.state.storedId) {
@@ -101,7 +104,7 @@ export class NativeSession {
     this.submission = undefined; this.interruption = undefined;
     this.publish({
       phase: 'attaching',
-      agent: undefined, agentStarting: undefined,
+      agent: undefined, agentStarting: undefined, usage: undefined,
       storedId,
       profile,
       runtimeId: undefined,
@@ -127,7 +130,7 @@ export class NativeSession {
       if (typeof key !== 'string' || !key)
         throw new ClientError('protocol', 'Hermes omitted the durable session key');
       const info = typeof result.info === 'object' && result.info !== null ? record(result.info) : {};
-      this.publish({ runtimeId, storedId: key, agent: agentMetadata(info), agentStarting: info.lazy === true, profile: typeof info.profile_name === 'string' ? info.profile_name : profile });
+      this.publish({ runtimeId, storedId: key, usage: this.foreground ? infoUsage(info) : undefined, agent: agentMetadata(info), agentStarting: info.lazy === true, profile: typeof info.profile_name === 'string' ? info.profile_name : profile });
       await this.refresh();
     } catch (error) {
       this.failure(epoch, error);
@@ -138,7 +141,7 @@ export class NativeSession {
     if (epoch !== this.epoch || this.disposed) return;
     const safe =
       error instanceof ClientError ? error : new ClientError('protocol', 'Session recovery failed');
-    this.publish({ phase: 'error', error: safe });
+    this.publish({ phase: 'error', error: safe, usage: undefined });
   }
   refresh(): Promise<void> {
     const epoch = this.epoch;
@@ -161,6 +164,7 @@ export class NativeSession {
       if (!runtimeId) throw new ClientError('disconnected', 'No attached native session');
       const revision = this.revision;
       const streamRevision = this.streamRevision;
+      const usageRevision = this.usageRevision;
       const [rawHistory, rawLive] = await Promise.all([
         this.foreground ? this.gateway.call('session.history', { session_id: runtimeId }) : Promise.resolve({ messages: [] }),
         this.gateway.call('session.activate', { session_id: runtimeId, omit_messages: true }),
@@ -188,6 +192,9 @@ export class NativeSession {
       this.activity.snapshot(live);
       this.publish({
         messages: this.foreground ? messages : [],
+        // A usage ticker must not invalidate/retry the entire transcript snapshot.
+        // Preserve a newer event while a slower history/activate pair is in flight.
+        usage: !this.foreground ? undefined : usageRevision === this.usageRevision ? infoUsage(live.info) : this.state.usage,
         totalMessages: history.messages.length,
         agent: { ...this.state.agent, ...agentMetadata(live.info) },
         agentStarting: live.status === 'starting' || (live.info !== null && typeof live.info === 'object' && !Array.isArray(live.info) && record(live.info).lazy === true),
@@ -201,6 +208,13 @@ export class NativeSession {
   }
   private event(event: GatewayEvent): void {
     if (!this.state.runtimeId || event.session_id !== this.state.runtimeId) return;
+    if (this.foreground && ['session.usage', 'session.info', 'message.complete'].includes(event.type)) {
+      const payload = event.payload;
+      if (payload && typeof payload === 'object' && !Array.isArray(payload) && 'usage' in payload) {
+        ++this.usageRevision;
+        this.publish({ usage: infoUsage(payload) });
+      }
+    }
     if (this.activity.receive(event)) this.publish({});
     if (event.type === 'message.delta') {
       if (!this.foreground) return;
@@ -335,6 +349,7 @@ export class NativeSession {
   }
   dispose(): void {
     this.disposed = true;
+    this.state = { ...this.state, usage: undefined };
     this.settings.reset();
     this.activity.reset();
     ++this.epoch;
