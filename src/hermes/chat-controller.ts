@@ -53,7 +53,9 @@ export class ChatController {
   private newNative(): NativeSession {
     const native = new NativeSession(this.gateway);
     let previousPhase = native.state.phase;
+    let initial = true;
     native.subscribe((state) => {
+      if (initial) { initial = false; return; }
       if (this.disposed) return;
       if (this.native !== native) {
         if (state.phase === 'idle' && previousPhase !== 'idle') this.refreshIndexSoon();
@@ -136,7 +138,6 @@ export class ChatController {
     finally { if (scope === this.scope) { this.busy = false; this.publish(); } }
   }
   async attachIfReady(): Promise<void> {
-    // Run outside the synchronous gateway state dispatch: NativeSession may already be resuming.
     if (!this.ready() || this.busy || !this.selected || this.native.state.storedId || this.browser.history.phase !== 'ready') return;
     const scope = this.scope; this.busy = true; this.publish();
     try { await this.native.resume(this.selected.id, this.selected.profile); }

@@ -66,3 +66,11 @@ test('opening the selected conversation reuses its projection and never duplicat
   for (let n = 0; n < 6; n++) await chat.open(chat.selected!);
   assert.equal(chat.native, first); assert.equal(wire.events.size, 1); assert.equal(wire.sessions.size, 1);
 });
+
+test('clearing an account never publishes the disposed account view during replacement construction', async t => {
+  const wire = new Wire(), chat = new ChatController(reader, wire); t.after(() => chat.dispose()); chat.setEnabled(true);
+  await chat.create(); let clearing = false; const observed: (string | undefined)[] = [];
+  chat.subscribe(() => { if (clearing) observed.push(chat.native.state.runtimeId); });
+  clearing = true; chat.clear();
+  assert.ok(observed.length > 0); assert.ok(observed.every(id => id === undefined));
+});
