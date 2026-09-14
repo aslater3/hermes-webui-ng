@@ -2,67 +2,74 @@
 
 A standalone, modern web client for **vanilla Hermes Agent**. Hermes owns the agent and durable conversations; the WebUI owns the browser experience.
 
-> Development build. The modern React shell is the default application at `/`; the former diagnostic interface remains available at `/diagnostic`. Phase 4B adds native composer controls and typed history rendering, and Phase 3 / M3 native interaction acceptance is complete. This is not full PWA or production-release certification. See `docs/implementation-status.md` for the exact verified commit and remaining gates.
+> Development build. The modern application is at `/`; troubleshooting remains at `/diagnostic`. M0–M3 are accepted for the pinned Hermes baseline. Phase 4C adds HTTPS/WSS, a static-only PWA, guarded updates and a conversation-details pane. Physical iPhone/Android acceptance and production-release certification remain open. `docs/implementation-status.md` records the exact tested revision and current gates.
 
 ## The application
 
-The chat-first interface provides a full-height desktop workspace and mobile conversation drawer, searchable session history, streaming messages, and an anchored Send/Stop composer. Connection state is compact; authentication, appearance and diagnostics live in Settings rather than above the conversation.
+The React chat workspace has a searchable/collapsible conversation sidebar, mobile drawer, streaming messages, anchored Send/Stop composer, light/dark/system themes and a keyboard/touch command palette. Connection, authentication, appearance, app installation and diagnostics live in Settings. The optional conversation-details pane has an equivalent mobile sheet; it displays supported native metadata and refresh, not a fictional file/Git workspace.
 
-Light, dark and system themes, a keyboard/touch-accessible command palette, safe GFM Markdown/tables, highlighted code, and code copy/wrap controls are implemented. Tables and code scroll within their own regions instead of widening the phone viewport. Remote images do not load automatically, raw HTML is not injected, and unusually large messages use a plain-text fallback.
+Safe GFM Markdown/tables, highlighted code, copy/wrap controls and bounded transcript rendering are implemented. Tables/code scroll within their own regions rather than widening phone layouts. Remote images do not load automatically, raw HTML is not injected, and unusually large messages use plain text. Saved tools have expandable summaries instead of generic `[Non-text entry]` bubbles. Known structured text, public reasoning and assistant sidecars are restored; missing output and encrypted reasoning are not fabricated. Decorative icons are excluded from accessibility text without deleting legitimate SVG words or code.
 
-The composer has **Profile, Model and Reasoning** controls backed by native Hermes RPC. Models come from the configured provider inventory, with separate confirmation when Hermes flags additional cost. Settings apply to an attached idle conversation and are read back from Hermes; unknown acknowledgements require read-only recovery, not automatic replay. A profile pick starts a separate conversation and retains old history/drafts under their owner. Choosing a model before the first prompt preserves the draft. Unsupported reasoning is explained rather than guessed; Hermes effort names are not a guarantee of every provider's support.
+**Profile, Model and Reasoning controls use native Hermes RPC.** Models come from configured provider inventory, with separate cost confirmation where Hermes requests it. Settings require a ready idle native session and authoritative readback; uncertain acknowledgements require read-only recovery, not automatic replay. A profile pick starts a separate conversation and keeps old history/drafts with their owner. Selecting a model before the first prompt preserves the draft. Unknown reasoning capability is explained rather than guessed; Hermes effort words do not guarantee every provider's support.
 
-**Reasoning compatibility caveat:** the tested Hermes setter can fall back to the profile default if another client deletes the live runtime during a setting change. The WebUI preflights the session and blocks observed stale state, but cannot make that upstream operation atomic. Avoid deleting the same conversation in another client while applying effort. The dialog and `docs/phase4b-composer-controls.md` disclose this remaining limitation.
+**Reasoning compatibility caveat:** on the tested Hermes revision, deleting the live session from another client during an effort change can cause its setter to fall back to the profile default. Client preflight is not an atomic upstream fix. Avoid deleting/closing the same runtime elsewhere while applying effort. The dialog and ADR-019 disclose this limitation.
 
-The existing native workflow remains: new/open/resume, repeated turns, interrupt, read-only saved history while the Gateway is disconnected, authoritative recovery after reload and no automatic replay of unacknowledged prompts. Drafts are bounded tab-memory only. Appearance may persist in the browser; transcripts, credentials, model preferences and drafts do not.
+Native create/open/resume, repeated turns, interrupt, read-only saved history during Gateway disconnection, reload recovery and no automatic prompt replay remain central. Drafts are bounded tab-memory only. Appearance may persist; transcripts, credentials, model choices and drafts are not stored by the WebUI.
 
-Saved native tool summaries have their own expandable cards rather than `[Non-text entry]` assistant bubbles. Known structured text, sidecar replies and public reasoning are recovered from history; missing tool output and encrypted reasoning are not fabricated or dumped into chat. Decorative message SVGs are hidden from the accessibility tree without stripping legitimate SVG words or code from message content.
+**M3 Agent Interaction Beta is accepted.** Reasoning/tool activity and approval/clarify/sudo/secret controls include allow/deny/skip, expiry and validated outcomes. Desktop/mobile conversation navigation indicates working, needs-input and new-activity states. Up to five live client views retain bounded pending-request descriptors across selection changes while clearing hidden transcripts and entered credentials. Earlier observed tool/reasoning activity is expanded on demand, not persisted as a second history database.
 
-**Phase 3 / M3 Agent Interaction Beta is complete for the supported baseline.** Reasoning/tool activity and approval/clarify/sudo/secret controls are integrated, including allow/deny/skip, exact expiry and validated response outcomes. The desktop sidebar and mobile drawer indicate work and requests needing attention in other conversations. Up to five live conversation projections retain bounded pending-request descriptors across same-tab selection changes, but clear hidden transcripts and entered credential values. Earlier observed tool/reasoning activity is bounded and expanded on demand, not persisted as a second history database.
+Approval/clarification have native recovery snapshots. This Hermes revision cannot reconstruct pending sudo/secret snapshots after disconnect: old credential forms remain non-actionable. Use **Stop response**, review settlement and explicitly request a fresh turn. This recovery is tested; credentials/prompts are not automatically replayed and interruption does not reverse prior effects. Values clear on submission and selection/lifecycle/account boundaries. Native approval allow/deny/expiry, restricted sudo execution/skip and secret capture/skip are tested through the production image in both authentication modes. See `docs/phase3-interactions.md` and its acceptance record.
 
-Approval and clarification recover from supported native snapshots. This Hermes revision does not expose pending sudo/secret snapshots after a disconnect: old credential forms therefore become non-actionable. Use **Stop response**, review the settled turn and explicitly request a fresh turn when needed. This in-WebUI recovery is tested; credentials and prompts are never replayed automatically, and interruption does not undo prior tool effects. Values clear on submission and selection/lifecycle/account boundaries.
+## HTTPS and PWA
 
-M3 acceptance includes real approval allow/deny/expiry, restricted sudo execution/skip, secret capture/skip and recovery against unmodified Hermes through the production container in both auth modes. See `docs/phase3-interactions.md`, `docs/phase3-completion-checklist.md` and the retained completion evidence for limits and exact results. Physical-device/PWA and release hardening remain separate gates.
+Both supplied Compose files require mounted TLS certificates. `scripts/setup-https.sh` generates an operator-owned reusable self-signed root CA and SAN-bearing server certificate. The signing key stays outside the container; devices explicitly trust only the public CA certificate. Browser traffic is **HTTPS/WSS**. The existing server-to-Hermes connection remains **HTTP on private host loopback**, not encrypted LAN traffic. HTTPS upstreams retain ordinary Node certificate verification.
 
-The runtime-tested Hermes baseline is **`NousResearch/hermes-agent@b6b53c69a6ed49cb099cf1bfe76b5e6edd718e5a`**. Newer upstream source inspections are not runtime certifications. Tests separately cover the browser fixture, the actual Docker image and unmodified Hermes with a deterministic model endpoint. Evidence and verification limitations are recorded under `docs/evidence/`.
+Settings → App offers install guidance, update checks and deliberate **Update and reload**. A build-generated allowlist caches public HTML, manifest, icons and hashed JS/CSS/SVG only. No API/auth response, transcript, credential, workspace file or offline send queue is persisted. Fresh offline launches show the public shell; reconnect verifies access and reads native history. Updates are blocked by unsent drafts, active/uncertain runs, agent inputs, pending settings/auth work and other open app windows. Another tab is never force-reloaded.
+
+The HTTPS tests use a disposable CA installed in normal browser/OS trust stores, with certificate checking enabled. They distinguish service-worker readiness from native Gateway admission; the sign-in helper waits for connected state and an enabled composer. A delayed-ticket regression and repeated iPhone WebKit scenarios protect that ordering without skipping WebKit or retrying failed tests. Automated browser projects do not prove physical installation, OS suspension or keyboard behaviour.
 
 ## Deploy
 
-### Default: authenticated Hermes Dashboard
+**Existing deployments: prepare TLS before recreating the service.** Preserve `.env` and local changes; do not replace a working token file with an example. The HTTPS upgrade guide is `docs/phase4-https-pwa.md`; the non-destructive worktree procedure is `docs/local-testing-upgrade.md`.
 
-Configure Hermes authentication through Hermes itself. From a new, clean checkout:
+### Authenticated Dashboard, bridge network
+
+For a new clean checkout only:
 
 ```sh
 cp .env.example .env
-# Set HERMES_DASHBOARD_URL and the exact browser-facing PUBLIC_ORIGIN.
+# Set HERMES_DASHBOARD_URL and configure authentication in Hermes itself.
+bash scripts/setup-https.sh localhost 8787
 docker compose up --build -d
 ```
 
-The default Compose file publishes only on host loopback. The browser signs in through the supported Hermes flow; each WebSocket connection uses a fresh one-use ticket. `Disconnect` is not logout. `Sign out` reports success only after Hermes rejects the old identity. OAuth is not implemented yet.
+The bridge file publishes on host loopback. Sign in through Hermes' supported browser flow; each WS admission uses a fresh one-use ticket. Disconnect is not logout. Sign out succeeds only after Hermes rejects the old identity. OAuth is not implemented yet.
 
-### Linux: an upstream bound to host loopback
+### Existing Linux host-loopback/LAN deployment
 
-Use the **standalone** host-network file, not a merge with the bridge-network configuration:
+Preserve the existing `.env`, including its Hermes URL, auth mode and operator token, then run as the normal deployment user:
 
 ```sh
-docker compose -f compose.host.yaml up --build -d
+bash scripts/setup-https.sh 192.168.0.63 8788
+# Replace EXISTING_NG_PROJECT with the existing NG container's Compose project label.
+docker compose -p EXISTING_NG_PROJECT -f compose.host.yaml up --build -d
+curl --fail --cacert .local/tls/ca/ca.crt https://192.168.0.63:8788/healthz
+curl --fail --cacert .local/tls/ca/ca.crt https://192.168.0.63:8788/readyz
 ```
 
-`compose.host.yaml` defaults to a WebUI loopback bind on port 8788. Set `WEBUI_HOST`, `WEBUI_PORT` and `PUBLIC_ORIGIN` deliberately for the desired browser-facing address. Host networking does not use a `ports` mapping. It allows the WebUI to reach a Hermes backend at `127.0.0.1:9119` without changing Hermes' bind.
+Use `compose.host.yaml` alone, not merged with the bridge file. It reaches Hermes at `127.0.0.1:9119` without changing its bind and uses no port mapping. Setup explicitly selects the LAN bind and HTTPS origin/port, records non-root key ownership, privately backs up `.env`, and preserves authentication settings. Use the new HTTPS address and update old HTTP bookmarks/Home Screen shortcuts. There is no plaintext listener on that port. Do not change Docker storage, delete volumes or stop the unrelated legacy service on 8787.
 
-### Explicit trusted-LAN access without browser login
+Install **only `.local/tls/ca/ca.crt`** on your devices and verify its printed fingerprint. Never distribute `ca.key` or `server.key`. On iPhone/iPad, manually installed root certificates also need SSL trust enabled under Settings → General → About → Certificate Trust Settings. Open the exact HTTPS address without a warning before installing the Home Screen app. Merely bypassing a warning is not PWA setup. Android and desktop trust instructions and certificate renewal are documented in `docs/phase4-https-pwa.md`.
 
-An intentionally ungated loopback Hermes instance can be bridged only with **`HERMES_AUTH_MODE=trusted-local`** and an operator-supplied **`HERMES_DASHBOARD_SESSION_TOKEN`** matching Hermes. This is opt-in; `auth_required:false` cannot silently downgrade the default authenticated mode. The upstream must be literal loopback and the public origin a permitted private/loopback address.
+### Explicit trusted-local mode
 
-The server retains the token and uses the supported loopback REST/WS boundary. It does not invent a local user, provider or WS ticket, expose the token in browser URLs/configuration, or weaken the gated-mode protocol checks. The interface explicitly states **Trusted LAN · No login** and does not offer a fictional logout. Readiness truthfully reports `authenticatedMode:false`.
+An intentionally ungated loopback Hermes instance requires **`HERMES_AUTH_MODE=trusted-local`** and an operator-supplied **`HERMES_DASHBOARD_SESSION_TOKEN`** matching Hermes. This is opt-in; an ungated backend cannot silently downgrade the default authenticated mode. The upstream must be literal loopback and the public origin a permitted private/loopback address.
 
-**Anyone who can reach this address can use the agent and its tools.** Keep it restricted to a trusted LAN/VPN, not the public Internet. Origin checks and read-only REST filtering are not authentication or a restriction on native agent tools. Keep `.env` private; do not publish expanded Compose configuration or upstream logs that may contain query credentials. Full trust boundaries are in `docs/adr-018-trusted-local-access.md`.
+The server retains the token. It does not fabricate a user, provider or ticket, expose the token in browser configuration/URLs, or weaken gated-mode checks. The UI states **Trusted LAN · No login**, has no fictional logout and reports `authenticatedMode:false` truthfully.
 
-### Preserve an existing locally modified deployment
+**TLS is not authentication. Anyone who can reach a trusted-local listener can use the agent and its tools.** Restrict it to a trusted LAN/VPN. Do not publish `.env`, expanded Compose configuration, signing keys or raw upstream logs that may contain query credentials. See ADR-018 for the full boundary.
 
-Do not reset a working checkout, overwrite its `.env`, or blindly apply diagnostic-era auth patches. Follow **`docs/local-testing-upgrade.md`** to retain private patch backups, create a clean worktree, preserve the token file with mode 0600, and reuse the correct NG Compose project. That guide includes the reported LAN/8788 deployment and leaves the unrelated legacy service on 8787 untouched. No Docker storage, volume or disk cleanup is part of a WebUI upgrade.
-
-The runtime image is non-root and supports a read-only root filesystem. There is no runtime `apt-get` layer or disabled signature verification; Compose supplies the init process. `/healthz` is process liveness, while `/readyz` reports upstream readiness. The legacy local image alias `phase0` is retained for harness compatibility and is not a published release tag.
+The runtime remains non-root, read-only capable and a single WebUI image. No runtime `apt-get` layer or signature-verification bypass is introduced; Compose supplies init. `/healthz` is liveness and `/readyz` is upstream readiness. The legacy local image alias `phase0` is retained for harness compatibility, not presented as a release tag.
 
 ## Develop and verify
 
@@ -70,6 +77,7 @@ Use Node 22:
 
 ```sh
 npm ci
+npm ci --prefix pwa --ignore-scripts
 npm run build
 npm run typecheck
 npm run lint
@@ -79,60 +87,27 @@ npx playwright install --with-deps chromium webkit
 npm run test:e2e:critical
 ```
 
-`npm run dev:fixture` starts explicitly synthetic loopback fixtures for browser development. They are test-only and not copied into the runtime image. The modern root route and retained diagnostic route have separate browser coverage. Every completed implementation increment is committed and pushed remotely; CI retains source checkpoints and test evidence.
+`npm run dev:fixture` is explicitly synthetic and test-only. Real-worker suites and route-mocked protocol suites are separated. For the trusted-HTTPS suite, prepare and trust a disposable CA as shown in `.github/workflows/https-pwa.yml`, then run:
 
-Diagnostics retain the phase 4 / milestone 4B shell identifier. They contain only bounded metadata: no prompt bodies, settings arguments, selected model values or credentials. The identifier is not a full-roadmap completion counter; `docs/implementation-status.md` records the now-accepted M3 gate and remaining mobile/PWA work.
-
-**Not yet delivered or certified:** installed PWA/service worker, physical-phone keyboard testing, workspace/Git, global provider/profile management, slash-command polish, voice/attachments, broader management, OAuth, multi-architecture publication and public-internet release hardening. Unsupported actions are omitted rather than presented as decorative controls. Browser emulation and automated accessibility checks are not full physical-device or WCAG certification.
-
-## Architecture
-
-```text
-Browser
-  |
-  v
-HermesUI NG container :8787 (configurable)
-  |-- React/TypeScript application at /
-  |-- troubleshooting interface at /diagnostic
-  |-- Node BFF + same-origin reverse proxy
-  |
-  +----> vanilla Hermes Dashboard
-           |-- /api/ws       native Gateway JSON-RPC/WebSocket
-           |-- /api/*        sessions and supported management APIs
-           `-- /api/auth/*   browser auth + one-use tickets (gated mode)
+```sh
+npx playwright test -c playwright.https.config.ts
 ```
 
-No Hermes Python imports, `AIAgent`, `SessionDB`, direct `state.db`/config/profile access, second agent loop, Relay dependency or local conversation database. The production image does not contain a Hermes runtime. Optional future workspace features must act only on configured WebUI-owned mounts, never Hermes state.
+CI additionally repeats both iPhone WebKit HTTPS scenarios five times with no test retries, retaining separate reports. Build-only icon tooling is excluded from the runtime. Current reports identify phase 4 / milestone 4C; this is not a full-roadmap completion counter. Diagnostics remain bounded metadata without payloads, identities, credentials or settings arguments.
 
-REST health, authentication and Gateway readiness are independent. A feature is enabled only when its supported contract and implementation exist. Late responses must remain scoped to the active account/session/connection generation; losses must not result in automatic prompt, settings or secret-response replay.
+Runtime-tested Hermes baseline: **`NousResearch/hermes-agent@b6b53c69a6ed49cb099cf1bfe76b5e6edd718e5a`**. Newer source inspection is not runtime certification. Tests distinguish synthetic browser fixtures, the production Docker image and unmodified Hermes with a deterministic model endpoint. Exact refs, outcomes and remaining gates are under `docs/implementation-status.md` and `docs/evidence/`.
 
-## Design and implementation pack
+**Still open:** physical iPhone/Android Home Screen, keyboard and background testing; workspace/Git; global provider/profile management; slash-command polish; attachments/voice; management surfaces; OAuth; multi-architecture publication; broader accessibility/performance/security and release certification. Browser emulation does not close the original physical-device Phase 4 exit gate. The unsigned device-smoke checklist remains in `docs/phase4-device-smoke.md`.
 
-Read `AGENTS.md` and `BUILD-BRIEF.md` before changes. The original product, architecture and full delivery plan remain in:
+## Architecture and implementation contract
 
-| Document | Purpose |
-|---|---|
-| `docs/01-core-principles.md` | Product and engineering invariants |
-| `docs/02-product-ux-design.md` | Product UX and component behaviour |
-| `docs/03-mobile-ios-android.md` | Binding mobile/PWA expectations |
-| `docs/04-system-architecture.md` | Runtime and state ownership |
-| `docs/05-hermes-protocol.md` | REST/JSON-RPC/auth contract |
-| `docs/06-bff-workspace-git-api.md` | BFF and planned workspace API |
-| `docs/07-security-auth.md` | Threat model and authentication |
-| `docs/08-frontend-implementation.md` | Frontend architecture |
-| `docs/09-docker-deployment.md` | Deployment topology |
-| `docs/10-testing-quality.md` | Quality and verification strategy |
-| `docs/11-observability-operations.md` | Health and sanitised diagnostics |
-| `docs/12-phased-delivery-plan.md` | Original milestone sequence |
-| `docs/13-acceptance-criteria.md` | Release-level definition of done |
-| `docs/14-architecture-decisions.md` | Original ADRs |
-| `docs/15-repo-layout-standards.md` | Repository conventions |
+Browser → HTTPS/WSS WebUI container → supported vanilla Hermes Dashboard REST/native Gateway. There are no production Hermes Python imports, `AIAgent`, `SessionDB`, direct `state.db`/config/profile access, Relay dependency, second agent loop or durable local conversation database. Future workspace features act only on configured WebUI-owned mounts, never Hermes state.
 
-Delivered behaviour and deviations are documented in `phase1-foundation.md`, `phase2-chat.md`, `phase3-interactions.md`, `phase4-modern-shell.md`, `phase4b-composer-controls.md`, `architecture-decisions.md` and ADRs 017–020 under `docs/`. **`docs/implementation-status.md` is the current gate/evidence record.**
+REST health, authentication, service-worker readiness and native Gateway readiness are independent. Features require both supported upstream contracts and implementation. Late work stays scoped to account/session/profile/connection generations. Prompt, settings and credential responses are never automatically replayed to conceal an uncertain result.
 
-## Required upstream references
+Before changes read `AGENTS.md`, `BUILD-BRIEF.md` and all `docs/` files. The original design pack remains numbered 01–15: core principles, UX, mobile, architecture, protocol, workspace/Git API, security, frontend, Docker, testing, observability, phased plan, acceptance, ADRs and repository standards. `docs/12-phased-delivery-plan.md` is the original roadmap, not a count of phases. Later phase documents and ADRs 017–021 record delivered behaviour and explicit deviations; the implementation status is the current evidence index.
 
-Inspect supported upstream Hermes sources before protocol/auth changes, recording the exact ref. At minimum:
+Required upstream references in `NousResearch/hermes-agent`:
 
 - `website/docs/developer-guide/programmatic-integration.md`
 - `tui_gateway/AGENTS.md`
@@ -143,6 +118,4 @@ Inspect supported upstream Hermes sources before protocol/auth changes, recordin
 - `web/src/lib/gatewayClient.ts`
 - `website/docs/user-guide/features/web-dashboard.md`
 
-For the composer controls also inspect `tui_gateway/methods_complete.py`, `methods_profiles.py`, `methods_config.py`, `methods_config_set.py`, `methods_session.py`, `model_switch.py`, `session_history.py` and `hermes_cli/inventory.py`.
-
-These paths are in `NousResearch/hermes-agent`. Preserve the architecture while adapting to supported upstream changes; do not fill API gaps with internal imports or direct filesystem access.
+For composer settings inspect `tui_gateway/methods_complete.py`, `methods_profiles.py`, `methods_config.py`, `methods_config_set.py`, `methods_session.py`, `model_switch.py`, `session_history.py` and `hermes_cli/inventory.py`. Record exact upstream refs and do not fill API gaps with internal imports or direct filesystem access. Commit and push each coherent increment, verifying the remote branch before proceeding; do not defer all work to a final monolithic push.

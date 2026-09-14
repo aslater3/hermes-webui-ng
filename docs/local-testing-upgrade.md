@@ -1,6 +1,6 @@
-# Upgrading a locally modified diagnostic deployment
+# Upgrading an existing deployment to the HTTPS/PWA build
 
-The modern React interface is served at `/`. The diagnostic remains at `/diagnostic`. Do not discard a working local checkout or its uncommitted deployment fixes to try the new interface.
+The modern React interface is served at `/`. The diagnostic remains at `/diagnostic`. **The supplied Compose configurations now require TLS files and an HTTPS public origin. Run certificate setup before recreating the container.** Do not discard a working local checkout or its uncommitted deployment fixes to try the new interface.
 
 ## Preserve the old checkout
 
@@ -11,14 +11,14 @@ umask 077
 git diff --binary > ../hermes-ng-local-before-shell.patch
 git diff --cached --binary > ../hermes-ng-staged-before-shell.patch
 git fetch origin
-git worktree add --detach ../hermes-webui-ng-modern origin/phase4-modern-shell
+git worktree add --detach ../hermes-webui-ng-modern origin/main
 install -m 600 .env ../hermes-webui-ng-modern/.env
 cd ../hermes-webui-ng-modern
 ```
 
 This leaves tracked and untracked files in the old checkout untouched. Do not apply the deployment patch blindly to the modern tree: the supported local-access implementation replaces the former synthetic provider, identity and ticket workarounds.
 
-Once the shell is merged, `origin/main` may be used instead of the feature branch when creating a new worktree. A detached worktree deliberately pins the tested revision; changing it later is an explicit operator action.
+This uses the merged `origin/main`. A detached worktree deliberately pins the fetched revision; updating it later is an explicit operator action. The new directory name must be unused; do not overwrite a previously created worktree.
 
 ## Linux host-network configuration
 
@@ -28,7 +28,7 @@ Edit the copied `.env` and retain the already configured operator token without 
 
 ```dotenv
 HERMES_DASHBOARD_URL=http://127.0.0.1:9119
-PUBLIC_ORIGIN=http://192.168.0.63:8788
+PUBLIC_ORIGIN=https://192.168.0.63:8788
 WEBUI_HOST=0.0.0.0
 WEBUI_PORT=8788
 HERMES_AUTH_MODE=trusted-local
@@ -38,6 +38,18 @@ HERMES_AUTH_MODE=trusted-local
 `HERMES_DASHBOARD_SESSION_TOKEN` is required in this explicit mode. It is held only by the server, never supplied in browser configuration or a browser WebSocket URL. The upstream must be the literal loopback address and intentionally report `auth_required:false`; a missing or rejected token fails readiness. This mode does not invent a browser account or pretend a successful local connection is an authenticated login.
 
 The default `dashboard` mode still requires Hermes browser authentication and fresh one-use WS tickets. Supplying a server token without explicitly selecting `trusted-local` is an error; an ungated backend cannot silently downgrade a gated deployment.
+
+## Prepare self-signed HTTPS
+
+From the new checkout, after preserving `.env`, run as your normal deployment user:
+
+```sh
+bash scripts/setup-https.sh 192.168.0.63 8788
+```
+
+It creates a reusable self-signed private CA, a SAN-bearing server certificate and a mode-0600 server key. It privately backs up `.env`, retains the Hermes token/auth mode/upstream URL, and records the HTTPS origin, TLS mount and runtime UID/GID. Only the server certificate directory is mounted read-only; the CA signing key stays outside the container. Do not run setup from another directory or overwrite a protected `.env` with an example.
+
+Install **only `.local/tls/ca/ca.crt`** on your devices and verify its fingerprint. On iPhone/iPad, manually installed roots also need SSL trust enabled under Settings → General → About → Certificate Trust Settings. Never distribute `ca.key` or `server.key`. Use the new HTTPS bookmark/Home Screen shortcut without certificate warnings; merely bypassing a warning is not reliable PWA setup. Full instructions and renewal are in `phase4-https-pwa.md`.
 
 ## Build and start
 
@@ -55,10 +67,12 @@ The reported Compose 1.29.2 `ContainerConfig` exception is a legacy client/recre
 ## Check the result
 
 ```sh
-curl --fail http://192.168.0.63:8788/healthz
-curl --fail http://192.168.0.63:8788/readyz
+curl --fail --cacert .local/tls/ca/ca.crt https://192.168.0.63:8788/healthz
+curl --fail --cacert .local/tls/ca/ca.crt https://192.168.0.63:8788/readyz
 ```
 
 In trusted-local mode, readiness must truthfully report `authenticatedMode:false`. Open the root URL, check the visible no-login/trusted-LAN notice, submit a harmless prompt, reload and confirm the conversation is recovered from Hermes. Test Disconnect then Reconnect; there is intentionally no Sign out button for an account that does not exist.
 
 Keep this address restricted to a trusted LAN or VPN. Anyone who can reach it can use the agent and its tools; same-origin request guards are not user authentication or a firewall. Do not expose it to the public Internet. The host's Docker data-root and disk-repair operations are outside this repository's upgrade process and must not be altered by WebUI deployment commands.
+
+HTTPS/WSS encrypts browser-to-WebUI traffic. The unchanged Hermes hop is HTTP on private host loopback, not encrypted LAN traffic. TLS does not authenticate trusted-local access. Physical iPhone/Android installation, keyboard and background testing are recorded separately in `phase4-device-smoke.md`; automated WebKit results do not sign those off.
