@@ -1,0 +1,47 @@
+/* Sidebar attention is additive: the existing icon/text remains the accessible status signal. */
+.session-row[data-attention='required'],
+.active-session-row[data-attention='required'] {
+  background: color-mix(in srgb, var(--warning-bg) 84%, var(--surface));
+  color: var(--text);
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--warning) 84%, transparent),
+    inset 0 0 14px color-mix(in srgb, var(--warning) 18%, transparent),
+    0 0 12px color-mix(in srgb, var(--warning) 34%, transparent);
+}
+.session-row[data-attention='new'],
+.active-session-row[data-attention='new'] {
+  background: color-mix(in srgb, var(--accent-soft) 86%, var(--surface));
+  color: var(--text);
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--accent) 72%, transparent),
+    inset 0 0 14px color-mix(in srgb, var(--accent) 14%, transparent),
+    0 0 12px color-mix(in srgb, var(--accent) 28%, transparent);
+}
+.session-row[data-attention='required']:hover:not(:disabled),
+.active-session-row[data-attention='required']:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--warning-bg) 72%, var(--surface-hover));
+}
+.session-row[data-attention='new']:hover:not(:disabled),
+.active-session-row[data-attention='new']:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--accent-soft) 72%, var(--surface-hover));
+}
+.session-row[data-attention='required'] > svg,
+.active-session-row[data-attention='required'] > svg {
+  color: var(--warning);
+  opacity: 1;
+}
+.session-row[data-attention='new'] > svg,
+.active-session-row[data-attention='new'] > svg {
+  color: var(--accent);
+  opacity: 1;
+}
+.session-row[data-attention='required'] .row-state,
+.active-session-row[data-attention='required'] small {
+  color: var(--warning);
+  font-weight: 650;
+}
+.session-row[data-attention='new'] .row-state,
+.active-session-row[data-attention='new'] small {
+  color: var(--accent);
+  font-weight: 650;
+}
