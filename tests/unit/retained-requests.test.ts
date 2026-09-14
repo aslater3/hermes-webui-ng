@@ -60,3 +60,9 @@ test('attention opening a runtime resolves its real profile and bounded active v
   wire.request(chat.native.state.runtimeId!); await tick();
   await assert.rejects(chat.create()); assert.equal(wire.sessions.size, 5);
 });
+test('opening the selected conversation reuses its projection and never duplicates request listeners', async t => {
+  const wire = new Wire(), chat = new ChatController(reader, wire); t.after(() => chat.dispose()); chat.setEnabled(true);
+  await chat.create(); const first = chat.native;
+  for (let n = 0; n < 6; n++) await chat.open(chat.selected!);
+  assert.equal(chat.native, first); assert.equal(wire.events.size, 1); assert.equal(wire.sessions.size, 1);
+});

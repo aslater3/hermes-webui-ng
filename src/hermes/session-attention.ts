@@ -66,7 +66,7 @@ export class SessionAttention {
       this.items = this.items.map(item => item.runtimeId === event.session_id ? { ...item, status: event.type.endsWith('.request') ? 'waiting' : 'working', review: false } : item);
       this.publish();
     }
-    this.schedule(100); // settled snapshots, not a completion event alone, decide idle
+    this.schedule(100);
   }
   refresh(): Promise<void> {
     if (this.flight) return this.flight;
@@ -82,7 +82,13 @@ export class SessionAttention {
         if (!Array.isArray(result.sessions) || result.sessions.length > 10000) throw new ClientError('protocol', 'Invalid active-session inventory');
         const previous = new Map(this.items.map(item => [item.runtimeId, item]));
         const seen = new Set<string>();
-        this.items = result.sessions.slice(0, LIMIT).map(raw => {
+        const ranked = result.sessions.map(raw => record(raw)).sort((a, b) => {
+          const known = Number(this.owners.has(String(b.id))) - Number(this.owners.has(String(a.id)));
+          const active = (row: Record<string, unknown>) => ['working', 'waiting', 'starting'].includes(String(row.status)) ? 1 : 0;
+          const time = (row: Record<string, unknown>) => typeof row.last_active === 'number' && Number.isFinite(row.last_active) ? row.last_active : 0;
+          return known || active(b) - active(a) || time(b) - time(a);
+        });
+        this.items = ranked.slice(0, LIMIT).map(raw => {
           const row = record(raw), runtimeId = sessionId(String(row.id ?? '')), storedId = sessionId(String(row.session_key ?? ''));
           if (seen.has(runtimeId)) throw new ClientError('protocol', 'Duplicate live session identifier'); seen.add(runtimeId);
           const status: AttentionStatus = ['idle', 'working', 'waiting', 'starting'].includes(String(row.status)) ? row.status as AttentionStatus : 'unknown';

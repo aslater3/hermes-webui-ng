@@ -1,3 +1,4 @@
+import { ActiveSessions } from './ActiveSessions.js';
 import { useEffect, useRef, useState } from 'react';
 import { ArrowLeft, ArrowRight, MessageSquare, Plus, Search, RefreshCw, PanelLeftClose, Settings2, Command } from 'lucide-react';
 import type { AppRuntime } from './runtime.js';
@@ -23,16 +24,18 @@ export function Sidebar({ runtime: rt, onChoose, onSettings, onCommands, onColla
     {compact ? <div className="rail-actions"><IconButton label="Search conversations" onClick={onChoose}><Search size={18}/></IconButton><IconButton label="Open command palette" onClick={onCommands}><Command size={18}/></IconButton></div> : <>
       <form className="sidebar-search" role="search" onSubmit={event => { event.preventDefault(); rt.run(() => rt.chat.browser.list(query.trim())); }}><Search size={16}/><input ref={search} id="shell-session-search" type="search" aria-label="Search conversations" placeholder="Search conversations…" value={query} disabled={!rt.readable} maxLength={512} onChange={event => setQuery(event.target.value)}/></form>
       <div className="sidebar-list" aria-busy={index.phase === 'loading'}>
+        <ActiveSessions runtime={rt} onChoose={onChoose}/>
         {index.phase === 'loading' && !index.rows.length && <div className="list-loading" role="status">Loading conversations…<i/><i/><i/></div>}
         {index.phase === 'error' && <div className="sidebar-notice" role="status">Could not load conversations. <button onClick={() => rt.run(() => rt.chat.browser.refresh())}>Retry</button></div>}
         {index.phase === 'ready' && !index.rows.length && <div className="empty-list"><MessageSquare size={22}/><p>{query ? 'No matching conversations' : 'A fresh start'}</p><span>{query ? 'Try a different search.' : 'Your conversations will appear here.'}</span></div>}
         <ul aria-label="Saved conversations">{index.rows.map(row => {
           const group = index.query ? 'Search results' : dateGroup(row.lastActive), heading = group !== previous; previous = group;
-          const selected = draftKey(row) === draftKey(rt.chat.selected), state = rt.chat.native.state;
-          const waiting = selected && (state.phase === 'waiting' || rt.chat.native.activity.state.inputs.some(input => input.status === 'pending'));
+          const selected = draftKey(row) === draftKey(rt.chat.selected), view = rt.chat.viewFor(row), active = rt.attention.forSession(row);
+          const waiting = rt.ready && (active?.status === 'waiting' || view?.state.phase === 'waiting' || view?.activity.state.inputs.some(input => input.status === 'pending'));
+          const working = rt.ready && (view?.state.phase === 'running' || active?.status === 'working');
           return <li key={draftKey(row)}>{heading && <h2 className="list-group">{group}</h2>}<button className={`session-row${selected ? ' selected' : ''}`} aria-current={selected ? 'page' : undefined}
             aria-label={`Open conversation: ${row.title || row.preview || 'Untitled conversation'}`} disabled={!rt.readable || rt.chat.busy} onClick={() => { rt.open(row); onChoose(); }}>
-            <MessageSquare size={16}/><span className="row-copy"><span className="row-title">{row.title || row.preview || 'Untitled conversation'}</span>{waiting ? <span className="row-state">Needs your input</span> : selected && state.phase === 'running' ? <span className="row-state">Working…</span> : <span className="row-meta">{row.profile || 'default'} · {row.messageCount} messages</span>}</span></button></li>;
+            <MessageSquare size={16}/><span className="row-copy"><span className="row-title">{row.title || row.preview || 'Untitled conversation'}</span>{waiting ? <span className="row-state">Needs your input</span> : working ? <span className="row-state">Working…</span> : active?.review ? <span className="row-state">New activity</span> : <span className="row-meta">{row.profile || 'default'} · {row.messageCount} messages</span>}</span></button></li>;
         })}</ul>
       </div>
       <div className="sidebar-pagination"><span>{index.query ? `${index.rows.length} results` : index.total ? `${index.offset + 1}–${index.offset + index.rows.length} of ${index.total}` : 'Conversations'}</span>

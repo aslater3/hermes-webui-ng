@@ -85,7 +85,7 @@ export class ChatController {
     while (this.drafts.size > 20) this.drafts.delete(this.drafts.keys().next().value!);
   }
   private reset(ref?: SessionRef): number {
-    const reuse = ref ? this.retained.get(this.viewKey(ref)) : undefined;
+    const reuse = ref ? this.selected && this.viewKey(ref) === this.viewKey(this.selected) ? this.native : this.retained.get(this.viewKey(ref)) : undefined;
     if (this.native.state.storedId && !reuse && this.retained.size >= 4) {
       const eviction = [...this.retained].find(([, view]) => ['idle', 'empty', 'error'].includes(view.state.phase) &&
         !view.activity.state.inputs.some(input => ['pending', 'sending', 'unknown'].includes(input.status)));
@@ -93,10 +93,10 @@ export class ChatController {
       eviction[1].dispose(); this.retained.delete(eviction[0]);
     }
     this.saveDraft(); ++this.scope;
-    if (this.native.state.storedId) {
+    if (this.native.state.storedId && this.native !== reuse) {
       this.native.setForeground(false);
       this.retained.set(this.viewKey({ id: this.native.state.storedId, profile: this.native.state.profile }), this.native);
-    } else this.native.dispose();
+    } else if (this.native !== reuse) this.native.dispose();
     if (ref && reuse) this.retained.delete(this.viewKey(ref));
     this.native = reuse ?? this.newNative(); this.native.setForeground(true);
     this.browser.clearHistory(); this.selected = ref;
