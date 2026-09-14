@@ -1,6 +1,6 @@
 # Phase 7 completion checkpoints
 
-This is a progress record, not acceptance evidence. Phase 6 remains independent and unchanged.
+This is a historical progress record. **Final software acceptance passed at `4e4641ebb030c10592c512e8228aac0fd5f804d9`**; see `phase7-session-polish.md` and `evidence/phase7-acceptance.json`. Their verified results supersede the pending statements below. Phase 6 remains independent and unchanged.
 
 ## Command core — `05f13fefb0de59f7da337ea469a9f568f90bc3c8`
 

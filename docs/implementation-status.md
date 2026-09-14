@@ -1,14 +1,30 @@
 # Implementation Status
 
-Updated: 14 September 2026. **Phase 5 / M5 Read-only Workspace Beta has passed its software exit gate.** Delivered through PR #12 with individual remote checkpoints preserved. Phases 0–3, the modern shell/HTTPS/PWA software and approval-attention follow-up retain their accepted evidence. The original Phase 4 physical-device report remains open; Phase 5 does not certify physical devices or the final production release.
+Updated: 14 September 2026. **Phase 7 has passed its software exit gate; Phase 5 / M5 Read-only Workspace Beta remains accepted.** Phase 5 was delivered through PR #12 with individual remote checkpoints preserved. Phases 0–3, the modern shell/HTTPS/PWA software and approval-attention follow-up retain their accepted evidence. The original Phase 4 physical-device report remains open; Phase 5 does not certify physical devices or the final production release.
 
-## Parallel Phase 7 work (not yet accepted)
+## Phase 7 — software exit gate passed
 
-The owner requested Phase 7 to start independently of the in-flight Phase 6. Branch `phase7-session-polish` starts from main `c237ebdff73729612637322e8faa2e57e7e99766`; ADR-P7-001 records that native profiles/models/commands/usage do not depend on workspace writes. The first slice implements generation-scoped native usage/context, a compact inspector and details, with race/isolation tests. Existing Phase 4B profile/model/reasoning controls are preserved; command completion/dispatch and optional rewind remain outstanding.
+The required profiles/models/commands/usage scope is complete on `phase7-session-polish`, PR #16. The tested application commit is **`4e4641ebb030c10592c512e8228aac0fd5f804d9`**, source tree **`411a353b7ecf314ef2cf66011b13124497683398`**. The recovered Actions source archive reproduces that tree exactly. This acceptance update changes documentation/evidence only; it does not imply a merge or deployment.
 
-The usage slice passed local build/typechecks/lint, 204 unit tests and 34 wire contracts. Integration checkpoint `ee3f3d0e067021b3195b6397b39409502a8899fc` also preserves all concurrent activity-timeline changes through `9babc4d`; the combined source passes build/lint, 206 unit tests and 34 wire contracts. Draft PR #16 remains in progress. Local Chromium navigation was blocked by environment policy, so browser, HTTPS/PWA, production-image and extended native-Hermes CI are pending on the published branch. No Phase 7 sign-off or Phase 6/deployment change is claimed. See `phase7-session-polish.md` for scope and verification; the accepted Phase 5 evidence below remains unchanged.
+All five required workflows passed on that same application commit:
 
-## Exact accepted source and evidence
+| Gate | Result | Actions run |
+|---|---|---|
+| Build, lint, unit and HTTP/WebSocket contracts | Passed | `34886859347` |
+| Desktop/mobile browsers | 404 passed; zero failed/skipped/flaky | `34886859336` |
+| Production image smoke | Passed | `34886859351` |
+| Trusted HTTPS/PWA browsers | 8 passed plus 10 repeated WebKit cases; zero failed/skipped/flaky | `34886859477` |
+| Pinned vanilla Hermes | Both authentication modes passed | `34886859337` |
+
+Fresh recovery checks of the exact archived source passed production build, frontend/server typechecks, lint, **229 unit tests and 34 HTTP/WebSocket contracts** on Node 22.16.0. Build tooling was restored from the prior verified dependency archive, including its separate PWA dependencies; no dependency or lockfile change was needed. Docker/browser execution occurred in Actions, not on physical phones. Source, browser, HTTPS and native artifact digests were verified, the machine-readable reports inspected, and final desktop/iPhone/Android command screenshots visually reviewed.
+
+Implemented: official profile-scoped command catalogue/search/aliases, keyboard and touch slash completion, explicit unsupported states, safe picker shortcuts and argument-free native `/usage`, `/status`, `/history` readouts. Profile/model/reasoning controls remain authoritative and capability-gated. Usage/context is ephemeral and session-scoped. Command/result/usage generations reject stale replies and clear on relevant selection/auth/connection/visibility boundaries. Leading slash commands never silently become model prompts; `//` deliberately sends literal slash text. Concurrent chronological reasoning/tool cards are retained.
+
+Permanent evidence: **`evidence/phase7-acceptance.json`**. User-facing behaviour, support matrix and limits: **`phase7-session-polish.md`**, ADR-P7-001 and ADR-P7-002 (`phase7-commands.md`). Earlier progress documents describe historical checkpoints; this record supersedes their pending Phase 7 statements. Failed runs `34874908195` and `34885765118` remain failed; the final run verifies the actual accessibility/selector fixes without skips or retries.
+
+Phase 6 remains independent and was not modified. Rewind/edit/regenerate remain deliberately absent under the plan's conditional clause; global/quick/plugin/skill dispatch and compression are not enabled by discovery. Physical-device/PWA certification, the documented upstream reasoning-setter deletion race and Phases 8–10 remain open. This is not general current-upstream or production-release certification.
+
+## Phase 5 — preserved accepted source and evidence
 
 Feature checkpoint: **`b67c8d00039cd19b46195616495e95d8fa7de79c`**. CI tested the combined PR merge **`e6c14fb414d9af42e97cd738cf07ee9a790a8fc2`**, whose parents are that feature checkpoint and main **`f5ff2ad3e4d6603619b5f4c534149ddeb96f2b3d`**. Its archived source reconstructs Git tree **`ebf6bd71e955bb9fa85a8b26393cc0d9081f0fc9`** exactly. This includes the newer approvals/YOLO, sidebar and website work on main. Acceptance documentation after this checkpoint changes no application code.
 
@@ -56,6 +72,6 @@ The first mount test exposed a real Git-status bug: equal-size rapid edits could
 
 Preserve private `.env`, TLS and the existing NG Compose project. Set `WORKSPACE_HOST_PATH` to a dedicated existing project directory and add `compose.workspace.yaml` to exactly one base, `compose.host.yaml` or `compose.yaml`. The override mounts `/workspace` read-only; file/Git writes remain false. No host deployment, unrelated port 8787 service or Docker data-root was changed by this work. See `phase5-workspace.md` for exact commands.
 
-**Phase 5 is accepted. Phase 6 is in flight independently:** opt-in writes, atomic conflict-aware saves, file operations/uploads and separately guarded Git mutations remain disabled on this Phase 7 branch. Phase 7 retains model/profile/reasoning controls and adds the usage/context slice above; commands and optional rewind polish remain; Phases 8–10 management, attachments/voice and release-wide hardening remain. Physical iPhone/Android installation, keyboard/background and notification-volume checks remain open in `phase4-device-smoke.md`.
+**Phase 5 is accepted. Phase 6 is in flight independently:** opt-in writes, atomic conflict-aware saves, file operations/uploads and separately guarded Git mutations remain disabled on this Phase 7 branch. Phase 7 is software-complete as recorded above; optional destructive history controls remain hidden; Phases 8–10 management, attachments/voice and release-wide hardening remain. Physical iPhone/Android installation, keyboard/background and notification-volume checks remain open in `phase4-device-smoke.md`.
 
 Independent Hermes limitations remain documented: the reasoning setter deletion race, unavailable sudo/secret reconnect snapshots and no true-infinite approval wait on the tested pin. Workspace does not alter them. Prior accepted evidence remains under `evidence/`; ADRs 022–024 define the new feature boundary.
