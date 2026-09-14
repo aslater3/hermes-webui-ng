@@ -1,3 +1,4 @@
+import { writeParent } from './file-operations.js';
 import { lockedRoot, plainMetadata } from './native-boundary.js';
 import { constants } from 'node:fs';
 import { open, rename, unlink, type FileHandle } from 'node:fs/promises';
@@ -52,11 +53,11 @@ export class WorkspaceWriter {
     }
   }
   private async replace(root: WorkspaceRoot, parts: string[], text: string, expected: string, checks: SaveChecks): Promise<SaveResult> {
-    const path = parts.join('/'), parents = parts.slice(0, -1), name = parts.at(-1)!;
+    const path = parts.join('/'), name = parts.at(-1)!;
     let parent: FileHandle | undefined, temporary: FileHandle | undefined, tempPath: string | undefined;
     let committed = false;
     try {
-      parent = await openChecked(root, parents, true);
+      parent = await writeParent(root, path);
       await plainMetadata(parent, true);
       const parentStat = await parent.stat();
       const inspect = async () => {
@@ -89,7 +90,7 @@ export class WorkspaceWriter {
       // Revalidate current root/path identity and content immediately before atomic replacement.
       const latest = await inspect();
       if (latest.version !== expected) throw new WorkspaceError('WORKSPACE_VERSION_CONFLICT', 409);
-      const freshParent = await openChecked(root, parents, true);
+      const freshParent = await writeParent(root, path);
       try {
         await plainMetadata(freshParent, true);
         const stat = await freshParent.stat();
