@@ -33,6 +33,11 @@ jobs:
       - run: npx playwright test -c playwright.https.config.ts
         env:
           NODE_EXTRA_CA_CERTS: .local/tls/ca/ca.crt
+      - name: Repeat both iPhone WebKit HTTPS scenarios without retries
+        run: npx playwright test -c playwright.https.config.ts --project=https-iphone-webkit --repeat-each=5
+        env:
+          NODE_EXTRA_CA_CERTS: .local/tls/ca/ca.crt
+          PWA_HTTPS_REPORT_PATH: test-results/https-webkit-reliability.json
       - uses: actions/upload-artifact@v4
         if: always()
         with:
