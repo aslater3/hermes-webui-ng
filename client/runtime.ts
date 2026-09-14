@@ -160,6 +160,10 @@ export class AppRuntime {
     const native = await this.settingsSession();
     await native.settings.changeReasoning(effort);
   }
+  async changeYolo(enabled: boolean): Promise<void> {
+    const native = await this.settingsSession();
+    await native.setYolo(enabled);
+  }
   async newProfile(profile: string): Promise<void> {
     profileIdentifier(profile);
     if (!this.ready || this.chat.busy || this.chat.native.settings.state.busy ||
