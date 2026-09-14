@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { agentMetadata, effortValue, modelCatalogue, modelChangeResult, modelSetParams,
-  profileCatalogue, reasoningSetParams } from '../../src/hermes/model-catalog.js';
+  profileCatalogue, reasoningSetParams, yoloSetParams } from '../../src/hermes/model-catalog.js';
 const inventory = { model: 'lab/model-a', provider: 'custom:lab', secret: 'do-not-copy',
   providers: [{ slug: 'custom:lab', name: 'Lab', authenticated: true, base_url: 'private-address',
     models: ['lab/model-a', 'lab/model-a', 'model-b', 'bad --global'],
@@ -35,11 +35,20 @@ test('reasoning is effort, never a persisted display setting or implicit session
   for (const value of ['show', 'hide', 'on', 'off', 'full', 'global', '', true]) assert.throws(() => effortValue(value));
   assert.throws(() => reasoningSetParams('', 'work', 'high'));
 });
+test('YOLO setter is explicit, boolean and session scoped', () => {
+  assert.deepEqual(yoloSetParams('live', 'work', true), {
+    session_id: 'live', profile: 'work', key: 'yolo', value: '1', scope: 'session',
+  });
+  assert.deepEqual(yoloSetParams('live', undefined, false), {
+    session_id: 'live', key: 'yolo', value: '0', scope: 'session',
+  });
+  assert.throws(() => yoloSetParams('', 'work', true));
+});
 test('session info is a small authoritative metadata projection', () => {
-  assert.deepEqual(agentMetadata({ model: 'a', provider: 'custom', reasoning_effort: '', cwd: '/private' }),
-    { model: 'a', provider: 'custom', reasoningEffort: 'provider-default' });
-  assert.deepEqual(agentMetadata({ reasoning_effort: 'none' }), { reasoningEffort: 'none' });
-  assert.deepEqual(agentMetadata({ model: 'secret\nvalue', reasoning_effort: 'unknown' }), {});
+  assert.deepEqual(agentMetadata({ model: 'a', provider: 'custom', reasoning_effort: '', yolo: true, cwd: '/private' }),
+    { model: 'a', provider: 'custom', reasoningEffort: 'provider-default', yolo: true });
+  assert.deepEqual(agentMetadata({ reasoning_effort: 'none', yolo: false }), { reasoningEffort: 'none', yolo: false });
+  assert.deepEqual(agentMetadata({ model: 'secret\nvalue', reasoning_effort: 'unknown', yolo: 'yes' }), {});
 });
 test('model confirmation and deferred outcomes are not reported as applied changes', () => {
   assert.deepEqual(modelChangeResult({ key: 'model', value: 'x', scope: 'session', confirm_required: true }),
