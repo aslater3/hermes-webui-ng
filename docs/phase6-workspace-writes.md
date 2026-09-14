@@ -29,3 +29,9 @@ The first additive, unconnected primitives pass TypeScript emission, frontend/se
 Source references: docs/06-bff-workspace-git-api.md, docs/07-security-auth.md, docs/12-phased-delivery-plan.md; ADRs 022–024. Runtime-certified upstream stays `b6b53c69a6ed49cb099cf1bfe76b5e6edd718e5a`. Current upstream auth source was additionally inspected at `498abb677ec39ea3ae9f8f5ed60e7def6bc47e70`; that is source inspection only, not a new runtime certification.
 
 Primary implementation references: Node 22 filesystem API (https://nodejs.org/docs/latest-v22.x/api/fs.html), Linux rename semantics (https://man7.org/linux/man-pages/man2/rename.2.html), and OWASP CSRF prevention (https://cheatsheetseries.owasp.org/cheatsheets/Cross-Site_Request_Forgery_Prevention_Cheat_Sheet.html). Atomic replacement is not a kernel compare-and-swap against non-cooperating external writers; the save checkpoint must document that concurrency boundary precisely.
+
+## Atomic-save foundation checkpoint
+
+The internal writer now stages an exclusive same-directory temporary file, checks the original content/identity revision again, atomically renames and verifies the replacement. Competing WebUI saves are serialised; stale versions conflict. Cancellation and precommit failures preserve the original; a post-rename failure is explicitly unconfirmed, not automatically retried. Ten added tests bring the local suite to **205 unit tests plus 34 wire contracts**, with typecheck/lint passing.
+
+It is not connected to HTTP or the editor yet. ADR-025 records the exact concurrency guarantees and open ACL/xattr metadata-policy review. Read-only defaults and mounted project permissions remain unchanged. No full Phase 6 or physical-device sign-off is claimed.

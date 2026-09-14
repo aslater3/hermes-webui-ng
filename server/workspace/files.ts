@@ -9,7 +9,7 @@ const deniedNames = /^(?:\.hermes|\.git|\.ssh|\.aws|\.gnupg|\.local|\.env(?:\..*
 const deniedExtensions = /\.(?:pem|key|p12|pfx)$/i;
 const invalid = /[\x00-\x1f\x7f\\%\uFFFD]/;
 export function allowedName(name: string): boolean {
-  return !!name && !['.', '..'].includes(name) && !invalid.test(name) && !deniedNames.test(name) && !deniedExtensions.test(name);
+  return !!name && !['.', '..'].includes(name) && !invalid.test(name) && !name.startsWith('.webui-tmp-') && !deniedNames.test(name) && !deniedExtensions.test(name);
 }
 export function relativeParts(path: string): string[] {
   if (path.length > 2048 || invalid.test(path) || isAbsolute(path)) throw new WorkspaceError('WORKSPACE_INVALID_PATH');
