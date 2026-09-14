@@ -1,0 +1,26 @@
+.modal-workspace-mutation { width: min(900px, calc(100vw - 24px)); height: min(760px, calc(var(--app-height) - 24px)); max-height: calc(var(--app-height) - 24px); }
+.modal-workspace-mutation .modal-inner { height: 100%; display: flex; flex-direction: column; min-height: 0; }
+.mutation-path { margin: 0; padding: 8px 18px; font: 12px var(--mono); overflow-wrap: anywhere; color: var(--muted); flex-shrink: 0; }
+.workspace-edit-text, .mutation-fallback { flex: 1; min-height: 120px; overflow: hidden; border-block: 1px solid var(--border); }
+.mutation-fallback { width: 100%; font: 14px var(--mono); padding: 12px; resize: none; }
+.mutation-field { display: flex; flex-direction: column; gap: 10px; margin: 16px 20px; }
+.mutation-field input { font-size: 16px; min-height: 48px; width: 100%; }
+.mutation-field small, .mutation-footnote { color: var(--muted); font-size: 12px; }
+.mutation-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; padding: 12px 16px; flex-shrink: 0; }
+.mutation-actions button { min-height: 44px; padding-inline: 14px; }
+.mutation-footnote { padding: 0 16px max(8px, env(safe-area-inset-bottom)); margin: 0; }
+.mutation-current { padding: 6px 16px; max-height: 25vh; overflow: auto; }
+.mutation-current summary { min-height: 44px; cursor: pointer; }
+.mutation-current pre { white-space: pre-wrap; overflow-wrap: anywhere; }
+.modal-workspace-mutation .notice { margin: 8px 16px; flex-shrink: 0; }
+.mutation-status { padding-inline: 16px; }
+.workspace-write-tools { display: flex; flex-wrap: wrap; gap: 6px; padding: 6px 12px; }
+.workspace-write-tools button { border: 1px solid var(--border); font-size: 12px; padding-inline: 10px; min-height: 44px; }
+.workspace-item-actions { display: flex; gap: 6px; padding: 0 10px 5px; }
+.workspace-item-actions button { width: auto; font-size: 11px; color: var(--muted); min-height: 44px; }
+@media (max-width: 600px) {
+ .modal-workspace-mutation { width: 100%; height: var(--app-height); max-height: var(--app-height); border-radius: 0; }
+ .modal-workspace-mutation .modal-header { padding-top: max(14px, env(safe-area-inset-top)); }
+ .mutation-actions { padding: 8px; gap: 5px; }
+ .mutation-actions button { flex: 1; }
+}

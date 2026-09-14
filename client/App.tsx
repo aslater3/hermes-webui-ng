@@ -12,6 +12,7 @@ import { Conversation } from './Conversation.js';
 import { readTheme, applyTheme, THEME_KEY, type Theme } from './preferences.js';
 import { connectionSummary } from '../src/hermes/connection-summary.js';
 
+const MutationDialog = lazy(() => import('./workspace/MutationDialog.js'));
 const Workspace = lazy(() => import('./workspace/Workspace.js'));
 
 export default function App({ runtime: rt }: { runtime: AppRuntime }) {
@@ -71,6 +72,7 @@ export default function App({ runtime: rt }: { runtime: AppRuntime }) {
     </div>}
     {files && !wide && hasAccess && <Modal title="Workspace" kind="workspace" onClose={() => setFiles(false)}><Suspense fallback={<p role="status">Opening workspace…</p>}><Workspace runtime={rt} onClose={() => setFiles(false)}/></Suspense></Modal>}
     {details && !wide && hasAccess && <Modal title="Conversation details" kind="details" onClose={() => setDetails(false)}><ConversationDetails runtime={rt} onClose={() => setDetails(false)}/></Modal>}
+    {hasAccess && rt.workspaceMutations.state.phase !== 'closed' && <Suspense fallback={<p role="status">Opening workspace action…</p>}><MutationDialog runtime={rt}/></Suspense>}
     {panel === 'settings' && <Settings key={rt.accountGeneration} runtime={rt} theme={theme} setTheme={changeTheme} onClose={() => setPanel(null)}/>}
     {panel === 'sessions' && <Modal title="Conversations" kind="sessions" onClose={() => setPanel(null)}><Sidebar runtime={rt} onChoose={() => setPanel(null)} onSettings={() => setPanel('settings')} onCommands={commands}/></Modal>}
     {panel === 'commands' && <Modal title="Quick actions" kind="commands" onClose={() => setPanel(null)}><div className="command-search"><Search size={18}/><input data-initial-focus aria-label="Find an action" placeholder="What would you like to do?" value={commandQuery} onChange={event => setCommandQuery(event.target.value)} onKeyDown={event => { if (event.key === 'Enter') { const first = palette.find(item => !item.disabled); first?.run(); } }}/></div><div className="command-list">{palette.map(({ label, icon: Icon, disabled, run }) => <button key={label} disabled={disabled} onClick={run}><Icon size={18}/>{label}<span>↵</span></button>)}{!palette.length && <p className="muted">No matching actions.</p>}</div><footer className="command-footer"><span>Tab to navigate · Enter to select</span><span>esc to close</span></footer></Modal>}
