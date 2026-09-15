@@ -1,0 +1,22 @@
+.thinking-indicator span {
+  animation: thinking-dot-wave 1s ease-in-out infinite;
+  transform-origin: center;
+  will-change: transform;
+}
+
+.thinking-indicator span:nth-of-type(2) { animation-delay: 140ms; }
+.thinking-indicator span:nth-of-type(3) { animation-delay: 280ms; }
+
+@keyframes thinking-dot-wave {
+  0%, 60%, 100% { transform: translateY(0); opacity: .55; }
+  30% { transform: translateY(-5px); opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .thinking-indicator span {
+    animation: none;
+    transform: none;
+    opacity: 1;
+    will-change: auto;
+  }
+}
