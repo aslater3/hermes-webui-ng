@@ -52,6 +52,15 @@ test('stop interrupts the selected session before explicitly global process clea
   assert.match(legacy.result.kind === 'output' ? legacy.result.output : '', /Interrupt requested/);
   const legacyIdle = await run('/stop', '', { 'session.interrupt': { interrupted: false }, 'process.stop': { killed: 0 } });
   assert.match(legacyIdle.result.kind === 'output' ? legacyIdle.result.output : '', /No active turn was interrupted/);
+  const accepted = await run('/stop', '', { 'session.interrupt': { ok: true }, 'process.stop': { killed: 2 } });
+  assert.match(accepted.result.kind === 'output' ? accepted.result.output : '', /Hermes accepted the interrupt request/);
+  assert.match(accepted.result.kind === 'output' ? accepted.result.output : '', /Stopped 2 background processes/);
+  let rejectedCleanup = 0;
+  await assert.rejects(route('/stop')!.run({ call: async method => {
+    if (method === 'session.interrupt') return { ok: false };
+    rejectedCleanup++; return { killed: 1 };
+  } }, owner, () => {}, () => {}));
+  assert.equal(rejectedCleanup, 0, 'ok:false must fail before global process cleanup');
   let calls = 0;
   await assert.rejects(route('/stop')!.run({ call: async () => { calls++; throw new Error('network'); } }, owner, () => {}, () => {}));
   assert.equal(calls, 1, 'no cleanup or executor fallback after uncertain interruption');
