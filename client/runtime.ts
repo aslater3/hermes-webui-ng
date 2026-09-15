@@ -1,3 +1,5 @@
+import { WorkspaceMutations } from './workspace/mutations.js';
+import { WorkspaceApi } from './workspace/api.js';
 import { PwaController } from './pwa.js';
 import { SessionAttention } from '../src/hermes/session-attention.js';
 import { profileIdentifier, type ModelChoice, type Effort } from '../src/hermes/model-catalog.js';
@@ -14,7 +16,7 @@ import type { SessionRef } from '../src/hermes/session-rest.js';
 /** One disposable client lifetime; React never builds RPC envelopes or owns durable sessions. */
 export class AppRuntime {
   readonly pwa = new PwaController(() => this.reloadBlocker());
-  reloadBlocker = () => this.gateway?.requests.getSnapshot().length ? 'Answer or decline the native request before updating.' : this.connection?.state.busy ? 'Wait for authentication to finish.' : this.chat?.reloadBlocker() ?? '';
+  reloadBlocker = () => this.gateway?.requests.getSnapshot().length ? 'Answer or decline the native request before updating.' : this.connection?.state.busy ? 'Wait for authentication to finish.' : this.workspaceMutations?.blocker() || this.chat?.reloadBlocker() || '';
   readonly diagnostics = new DiagnosticsRing();
   private readonly requests = new DocumentRequests(window);
   readonly dashboard: DashboardClient;
@@ -22,6 +24,7 @@ export class AppRuntime {
   readonly connection: ConnectionStore;
   readonly chat: ChatController;
   readonly attention: SessionAttention;
+  readonly workspaceMutations: WorkspaceMutations;
   accountGeneration = 0;
   error = '';
   private revision = 0;
@@ -36,6 +39,7 @@ export class AppRuntime {
     this.connection = new ConnectionStore(this.dashboard, this.gateway, this.diagnostics);
     this.chat = new ChatController(this.dashboard, this.gateway, error => this.gateway.suspend(error));
     this.attention = new SessionAttention(this.gateway);
+    this.workspaceMutations = new WorkspaceMutations(new WorkspaceApi(this.requests.fetch), this.requests.fetch, () => this.readable && !this.connection.state.busy && !this.pwa.state.updating, () => { void this.connection.refresh(); });
   }
   get readable() { return this.connection.hasAccess && !this.connection.state.offline; }
   get ready() { return this.readable && this.gateway.state.phase === 'ready'; }
@@ -64,6 +68,7 @@ export class AppRuntime {
   };
   private navigate = () => {
     if (!this.readable) return;
+    if (this.workspaceMutations.state.phase !== 'closed') { history.replaceState(null, '', this.chat.selected ? navigation(this.chat.selected) : location.pathname); return; }
     try {
       const ref = navigationRef(location.hash);
       if (ref && draftKey(ref) !== draftKey(this.chat.selected)) this.run(() => this.chat.open(ref));
@@ -73,6 +78,7 @@ export class AppRuntime {
   start() {
     if (this.started) return;
     this.started = true; this.gateway.requests.setVisible(document.visibilityState === 'visible');
+    this.cleanup.push(this.workspaceMutations.subscribe(this.notify));
     this.cleanup.push(this.pwa.subscribe(this.notify)); void this.pwa.start();
     this.cleanup.push(this.attention.subscribe(this.notify), this.chat.subscribe(() => {
       this.chat.native.commands.setVisible(document.visibilityState === 'visible');
@@ -81,12 +87,14 @@ export class AppRuntime {
       this.attention.select(state.runtimeId); this.notify();
     }), this.gateway.onState(() => { this.attention.setEnabled(this.ready); this.notify(); }));
     this.cleanup.push(this.connection.onIdentityBoundary(() => {
+      this.workspaceMutations.clear();
       ++this.accountGeneration; this.openedLocation = false; this.gateway.requests.clear();
       this.attention.clear(); this.chat.clear(); this.error = ''; history.replaceState(null, '', location.pathname);
       document.querySelectorAll<HTMLInputElement>('input[type="password"]').forEach(input => { input.value = ''; });
       this.notify();
     }));
     this.cleanup.push(this.connection.subscribe(() => {
+      if (!this.readable) this.workspaceMutations.pause();
       this.chat.setEnabled(this.readable); this.attention.setEnabled(this.ready);
       if (this.readable && !this.openedLocation) { this.openedLocation = true; this.navigate(); }
       this.notify();
@@ -113,23 +121,23 @@ export class AppRuntime {
     this.run(() => navigator.onLine ? this.connection.start() : this.connection.setOffline(true));
   }
   newChat = () => {
-    if (!this.ready || this.chat.busy) return;
+    if (!this.ready || this.chat.busy || this.workspaceMutations.state.phase !== 'closed') return;
     this.error = ''; history.pushState(null, '', location.pathname);
     this.run(() => this.chat.create(this.chat.selected?.profile));
   };
   open = (ref: SessionRef) => {
-    if (!this.readable || this.chat.busy) return;
+    if (!this.readable || this.chat.busy || this.workspaceMutations.state.phase !== 'closed') return;
     try { history.pushState(null, '', navigation(ref)); this.run(() => this.chat.open(ref)); }
     catch { this.error = 'This conversation link is invalid.'; this.notify(); }
   };
   openLive = (runtimeId: string) => {
-    if (!this.ready || this.chat.busy) return;
+    if (!this.ready || this.chat.busy || this.workspaceMutations.state.phase !== 'closed') return;
     history.pushState(null, '', location.pathname);
     this.run(() => this.chat.openLive(runtimeId));
   };
   setDraft = (value: string) => { this.chat.setDraft(value); this.notify(); };
   send = () => this.run(async () => {
-    if (!this.ready || this.chat.busy || !this.chat.draft.trim()) return;
+    if (!this.ready || this.chat.busy || this.workspaceMutations.state.phase !== 'closed' || !this.chat.draft.trim()) return;
     if (!this.chat.selected) {
       const text = this.chat.draft, account = this.accountGeneration;
       const creation = this.chat.create(), native = this.chat.native;
@@ -141,7 +149,7 @@ export class AppRuntime {
     await this.chat.send();
   });
   private async settingsSession() {
-    if (!this.ready || this.chat.busy || this.chat.historical)
+    if (!this.ready || this.chat.busy || this.chat.historical || this.workspaceMutations.state.phase !== 'closed')
       throw new ClientError('disconnected', 'Connect to an idle conversation to change settings');
     if (!this.chat.native.state.runtimeId) {
       if (this.chat.selected) throw new ClientError('disconnected', 'Wait for native reattachment');
@@ -205,7 +213,7 @@ export class AppRuntime {
   }
   async newProfile(profile: string): Promise<void> {
     profileIdentifier(profile);
-    if (!this.ready || this.chat.busy || this.chat.native.settings.state.busy || this.chat.native.commands.blocked ||
+    if (!this.ready || this.chat.busy || this.workspaceMutations.state.phase !== 'closed' || this.chat.native.settings.state.busy || this.chat.native.commands.blocked ||
       ['running', 'waiting'].includes(this.chat.native.state.phase))
       throw new ClientError('protocol', 'Wait for the current turn before changing profile');
     // A profile is a new conversation boundary. Keep the previous draft with its owner.
@@ -213,6 +221,7 @@ export class AppRuntime {
     await this.chat.create(profile);
   }
   dispose() {
+    this.workspaceMutations.clear();
     this.pwa.dispose();
     this.requests.dispose();
     this.cleanup.forEach(fn => fn()); this.cleanup = [];
