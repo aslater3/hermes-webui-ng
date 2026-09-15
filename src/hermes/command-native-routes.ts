@@ -71,9 +71,13 @@ export function nativeCommandRoute(command: CommandInvocation): NativeCommandRou
       return { profileSafe: false, run: async (rpc, owner, current, issued) => {
         current(); issued();
         const stopped = record(await rpc.call('session.interrupt', { session_id: owner.runtimeId })); current();
-        if (!['interrupted', 'not_interrupted'].includes(String(stopped.status))) invalid('Hermes did not confirm the interrupt request; background processes were not touched.');
+        // The certified baseline returns {interrupted:boolean}; newer Hermes returns a status enum.
+        // Accept either explicit shape, but never infer success from a missing/unknown acknowledgement.
+        const didInterrupt = stopped.status === 'interrupted' || stopped.interrupted === true;
+        const didNotInterrupt = stopped.status === 'not_interrupted' || stopped.interrupted === false;
+        if (!didInterrupt && !didNotInterrupt) invalid('Hermes did not confirm the interrupt request; background processes were not touched.');
         const processes = record(await rpc.call('process.stop', {})); current();
-        return output(`${stopped.status === 'interrupted' ? 'Interrupt requested for the selected conversation.' : 'No active turn was interrupted.'}\nStopped ${number(processes.killed)} background processes across the Hermes process registry.`);
+        return output(`${didInterrupt ? 'Interrupt requested for the selected conversation.' : 'No active turn was interrupted.'}\nStopped ${number(processes.killed)} background processes across the Hermes process registry.`);
       } };
     case '/bg': case '/btw':
       if (!arg) invalid(`Use ${name} <${name === '/bg' ? 'prompt' : 'question'}>. Nothing was started.`);

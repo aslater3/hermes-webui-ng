@@ -18,7 +18,7 @@ function QuestionCard({ request, requests, current, onError }: { request: PeerRe
   };
   const label = (choice: string) => ({ once: 'Approve once', session: 'Approve for session', always: 'Always approve', deny: 'Deny' })[choice] ?? choice;
   return <article className="native-question" aria-label={request.title}>
-    <h3>{request.title}</h3>
+    <h2>{request.title}</h2>
     {request.detail && <pre className="native-question-detail" role="region" tabIndex={0} aria-label="Native request details">{request.detail}</pre>}
     {error && <Notice error>{error}</Notice>}
     {request.kind === 'approval' ? <div className="native-question-actions">

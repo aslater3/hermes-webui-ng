@@ -39,6 +39,10 @@ test('stop interrupts the selected session before explicitly global process clea
   const h = await run('/stop', '', { 'session.interrupt': { status: 'interrupted' }, 'process.stop': { killed: 2 } });
   assert.deepEqual(h.calls.map(call => [call.method, call.params]), [['session.interrupt', { session_id: 'live-a' }], ['process.stop', {}]]);
   assert.match(h.result.kind === 'output' ? h.result.output : '', /across the Hermes process registry/);
+  const legacy = await run('/stop', '', { 'session.interrupt': { interrupted: true }, 'process.stop': { killed: 1 } });
+  assert.match(legacy.result.kind === 'output' ? legacy.result.output : '', /Interrupt requested/);
+  const legacyIdle = await run('/stop', '', { 'session.interrupt': { interrupted: false }, 'process.stop': { killed: 0 } });
+  assert.match(legacyIdle.result.kind === 'output' ? legacyIdle.result.output : '', /No active turn was interrupted/);
   let calls = 0;
   await assert.rejects(route('/stop')!.run({ call: async () => { calls++; throw new Error('network'); } }, owner, () => {}, () => {}));
   assert.equal(calls, 1, 'no cleanup or executor fallback after uncertain interruption');
