@@ -4,7 +4,7 @@ import { ChatController } from '../../src/hermes/chat-controller.js';
 import type { ConnectionState } from '../../src/hermes/gateway-client.js';
 import type { GatewayEvent } from '../../src/hermes/protocol.js';
 import { commandFixture } from '../fixtures/commands.js';
-function fixture() {
+function fixture(browserCommands = false) {
   let sequence = 0;
   const state: ConnectionState = { phase: 'ready', generation: 1, attempt: 0 };
   const events = new Set<(event: GatewayEvent) => void>(), states = new Set<(state: ConnectionState) => void>();
@@ -17,7 +17,11 @@ function fixture() {
       if (['session.create', 'session.resume'].includes(method)) return { session_id: `live-${++sequence}`, stored_session_id: params.session_id ?? `stored-${sequence}`, info: { profile_name: params.profile ?? 'default' } };
       if (method === 'session.history') return { messages: [] };
       if (method === 'session.activate') return { running: false };
-      if (method === 'commands.catalog') return commandFixture(String(params.profile));
+      if (method === 'commands.catalog') {
+        const fixture = commandFixture(String(params.profile));
+        if (browserCommands) fixture.pairs.push(['/prompt', 'Expanded browser editor']);
+        return fixture;
+      }
       if (method === 'slash.exec') return commandHook ? commandHook() : { output: `Native ${String(params.profile)}` };
       if (method === 'prompt.submit') return {};
       throw new Error(`Unexpected: ${method}`);
@@ -40,7 +44,7 @@ test('composer sends native reads separately, while literal slash text uses only
 
 test('unknown commands and arguments leave drafts intact and cannot invoke tools or settings', async t => {
   const h = fixture(); t.after(() => h.chat.dispose()); await h.chat.create();
-  for (const text of ['/unknown', '/usage reset', '/model other --global', '/undo', '/']) {
+  for (const text of ['/unknown', '/usage reset', '/']) {
     h.chat.setDraft(text); await h.chat.send(); assert.equal(h.chat.draft, text); assert.ok(h.chat.error);
   }
   assert.ok(h.calls.every(c => !['prompt.submit', 'slash.exec', 'command.dispatch', 'config.set'].includes(c.method)));
@@ -78,4 +82,30 @@ test('historical views and account clearing discard command output and discovery
   h.chat.setDraft('/usage'); const count = h.calls.length; await h.chat.send(); assert.equal(h.calls.length, count);
   await h.chat.latest(); await h.chat.native.commands.load(); h.chat.clear();
   assert.equal(h.chat.native.commands.state.catalogue, undefined); assert.equal(h.chat.native.commands.state.result, undefined);
+});
+
+
+test('preparing and cancelling an effectful composer command preserves the exact unsent draft', async t => {
+  const h = fixture(); t.after(() => h.chat.dispose()); await h.chat.create();
+  for (const text of ['/undo 2', '/model other --global']) {
+    h.chat.setDraft(text); await h.chat.send();
+    assert.equal(h.chat.draft, text); assert.equal(h.chat.native.commands.state.confirmation?.text, text);
+    assert.equal(h.chat.error, undefined); assert.ok(h.chat.reloadBlocker());
+    await assert.rejects(h.chat.native.submit('blocked by confirmation'));
+    h.chat.native.commands.cancelConfirmation(); assert.equal(h.chat.draft, text);
+  }
+  assert.ok(h.calls.every(c => !['prompt.submit', 'slash.exec', 'command.dispatch', 'config.set'].includes(c.method)));
+});
+
+
+test('browser editor intents retain source drafts, block update/reload and clear on owner changes', async t => {
+  const h = fixture(true); t.after(() => h.chat.dispose()); await h.chat.create();
+  h.chat.setDraft('/prompt A private draft'); await h.chat.send();
+  assert.equal(h.chat.draft, '/prompt A private draft'); assert.equal(h.chat.native.commands.state.action?.kind, 'browser');
+  assert.ok(h.chat.reloadBlocker()); await assert.rejects(h.chat.native.submit('not admitted'));
+  h.chat.native.commands.dismissAction(); assert.equal(h.chat.draft, '/prompt A private draft');
+  await h.chat.send(); const old = h.chat.native;
+  await h.chat.create('work'); assert.equal(old.commands.state.action, undefined);
+  assert.equal(h.chat.draft, ''); assert.equal(h.chat.native.commands.state.action, undefined);
+  assert.ok(h.calls.every(c => !['prompt.submit', 'slash.exec', 'command.dispatch', 'config.set'].includes(c.method)));
 });

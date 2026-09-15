@@ -45,7 +45,7 @@ export class ChatController {
     for (const view of [this.native, ...this.retained.values()]) {
       if (['running', 'waiting', 'attaching', 'unknown'].includes(view.state.phase) || view.state.deliveryUnknown)
         return 'Finish or reconcile active conversations before updating.';
-      if (view.commands.state.busy) return 'Wait for the native command to finish.';
+      if (view.commands.blocked) return 'Wait for the native command to finish.';
       if (view.settings.state.busy || view.settings.state.confirmation || view.settings.state.outcome === 'unknown')
         return 'Resolve the pending settings change before updating.';
       if (view.activity.state.inputs.some(input => ['pending', 'sending', 'unknown'].includes(input.status)))
@@ -176,9 +176,9 @@ export class ChatController {
     const scope = this.scope, text = this.draft, native = this.native;
     this.error = undefined;
     try {
-      if (slashInput(text)) await native.commands.execute(text);
+      if (slashInput(text)) await native.commands.execute(text, 'composer');
       else await native.submit(literalPrompt(text));
-      if (scope === this.scope && this.native === native && this.draft === text) {
+      if (scope === this.scope && this.native === native && this.draft === text && !native.commands.state.confirmation && native.commands.state.action?.kind !== 'browser') {
         this.draft = ''; this.drafts.delete(draftKey(this.selected));
       }
     } catch (error) { this.fail(error, scope); }

@@ -16,7 +16,7 @@ import type { SessionRef } from '../src/hermes/session-rest.js';
 /** One disposable client lifetime; React never builds RPC envelopes or owns durable sessions. */
 export class AppRuntime {
   readonly pwa = new PwaController(() => this.reloadBlocker());
-  reloadBlocker = () => this.connection?.state.busy ? 'Wait for authentication to finish.' : this.workspaceMutations?.blocker() || this.chat?.reloadBlocker() || '';
+  reloadBlocker = () => this.gateway?.requests.getSnapshot().length ? 'Answer or decline the native request before updating.' : this.connection?.state.busy ? 'Wait for authentication to finish.' : this.workspaceMutations?.blocker() || this.chat?.reloadBlocker() || '';
   readonly diagnostics = new DiagnosticsRing();
   private readonly requests = new DocumentRequests(window);
   readonly dashboard: DashboardClient;
@@ -77,7 +77,7 @@ export class AppRuntime {
   };
   start() {
     if (this.started) return;
-    this.started = true;
+    this.started = true; this.gateway.requests.setVisible(document.visibilityState === 'visible');
     this.cleanup.push(this.workspaceMutations.subscribe(this.notify));
     this.cleanup.push(this.pwa.subscribe(this.notify)); void this.pwa.start();
     this.cleanup.push(this.attention.subscribe(this.notify), this.chat.subscribe(() => {
@@ -88,7 +88,7 @@ export class AppRuntime {
     }), this.gateway.onState(() => { this.attention.setEnabled(this.ready); this.notify(); }));
     this.cleanup.push(this.connection.onIdentityBoundary(() => {
       this.workspaceMutations.clear();
-      ++this.accountGeneration; this.openedLocation = false;
+      ++this.accountGeneration; this.openedLocation = false; this.gateway.requests.clear();
       this.attention.clear(); this.chat.clear(); this.error = ''; history.replaceState(null, '', location.pathname);
       document.querySelectorAll<HTMLInputElement>('input[type="password"]').forEach(input => { input.value = ''; });
       this.notify();
@@ -102,8 +102,9 @@ export class AppRuntime {
     const resume = () => {
       const visible = document.visibilityState === 'visible';
       this.connection.poll(visible ? 30_000 : 0); this.attention.setVisible(visible);
+      this.gateway.requests.setVisible(visible);
       this.chat.native.commands.setVisible(visible); this.notify();
-      if (visible) this.run(() => this.connection.resume());
+      if (visible) this.run(async () => { await this.connection.resume(); if (this.ready && this.chat.native.state.runtimeId) await this.chat.native.refresh(); });
     };
     const listen = (target: EventTarget, event: string, callback: () => void) => {
       target.addEventListener(event, callback); this.cleanup.push(() => target.removeEventListener(event, callback));
@@ -162,12 +163,41 @@ export class AppRuntime {
     }
     return this.chat.native;
   }
-  /** A deliberate catalogue action, independent of the unsent composer draft. */
+  private async commandSession() {
+    if (!this.ready || this.chat.historical)
+      throw new ClientError('disconnected', 'Connect to a live conversation to use commands');
+    if (!this.chat.native.state.runtimeId) {
+      if (this.chat.selected) throw new ClientError('disconnected', 'Wait for native reattachment');
+      if (this.chat.busy) throw new ClientError('protocol', 'Wait for the selected conversation to attach');
+      const draft = this.chat.draft, account = this.accountGeneration;
+      const creation = this.chat.create(), native = this.chat.native;
+      await creation;
+      if (account !== this.accountGeneration || native !== this.chat.native || !this.ready)
+        throw new ClientError('disconnected', 'Conversation selection changed');
+      this.chat.setDraft(draft);
+      if (this.chat.error || !native.state.runtimeId) throw this.chat.error ?? new ClientError('protocol', 'Could not prepare a native conversation');
+    }
+    return this.chat.native;
+  }
+  /** A deliberate catalogue action, independent of the unsent composer draft. Busy-safe slash commands
+   * are admitted by NativeCommands according to the pinned Hermes registry; settings controls remain idle-only. */
   async command(text: string): Promise<void> {
     const account = this.accountGeneration;
     let native = this.chat.native;
-    try { native = await this.settingsSession(); await native.commands.execute(text); }
+    try { native = await this.commandSession(); await native.commands.execute(text); }
     catch (error) { if (native === this.chat.native && account === this.accountGeneration) throw error; }
+  }
+  /** Confirm one prepared command. Never discard a different catalogue-origin draft. */
+  async confirmCommand(): Promise<void> {
+    const native = this.chat.native, account = this.accountGeneration;
+    const pending = native.commands.state.confirmation, text = pending?.text;
+    const originalDraft = this.chat.draft;
+    try {
+      await native.commands.confirm();
+      if (native === this.chat.native && account === this.accountGeneration && pending?.source === 'composer' && text === originalDraft && this.chat.draft === originalDraft) {
+        this.chat.setDraft(''); this.notify();
+      }
+    } catch (error) { if (native === this.chat.native && account === this.accountGeneration) throw error; }
   }
   async changeModel(choice: ModelChoice): Promise<void> {
     const native = await this.settingsSession();
@@ -183,7 +213,7 @@ export class AppRuntime {
   }
   async newProfile(profile: string): Promise<void> {
     profileIdentifier(profile);
-    if (!this.ready || this.chat.busy || this.workspaceMutations.state.phase !== 'closed' || this.chat.native.settings.state.busy || this.chat.native.commands.state.busy ||
+    if (!this.ready || this.chat.busy || this.workspaceMutations.state.phase !== 'closed' || this.chat.native.settings.state.busy || this.chat.native.commands.blocked ||
       ['running', 'waiting'].includes(this.chat.native.state.phase))
       throw new ClientError('protocol', 'Wait for the current turn before changing profile');
     // A profile is a new conversation boundary. Keep the previous draft with its owner.

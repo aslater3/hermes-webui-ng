@@ -1,9 +1,11 @@
+import { NativeQuestions } from './NativeQuestions.js';
+import { CommandTaskResults } from './CommandTaskResults.js';
 import { useCommands } from './Commands.js';
 import './m3-activity.css';
 import { HermesMark } from './HermesMark.js';
 import { UsageButton } from './SessionUsage.js';
 import { AgentControls } from './AgentControls.js';
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { ArrowDown, ArrowUp, ArrowUpRight, Code2, Compass, ListChecks, LoaderCircle, Square, Wrench } from 'lucide-react';
 import type { AppRuntime } from './runtime.js';
 import type { NativeSession } from '../src/hermes/native-session.js';
@@ -34,9 +36,12 @@ export function Conversation({ runtime: rt, revision }: { runtime: AppRuntime; r
   const following = useRef(true), [unread, setUnread] = useState(false), [draft, setDraft] = useState(chat.draft);
   const scope = `${draftKey(chat.selected)}:${historical ? saved.page?.offset ?? 0 : 'live'}`;
   const busy = ['running', 'waiting'].includes(state.phase), loading = chat.busy || state.phase === 'attaching';
-  const writable = rt.ready && !chat.native.commands.state.busy && !chat.native.settings.state.busy && chat.native.settings.state.outcome !== 'unknown' && !chat.native.settings.state.confirmation && !loading && !historical && (!chat.selected || state.phase === 'idle');
+  const peerRows = useSyncExternalStore(rt.gateway.requests.subscribe, rt.gateway.requests.getSnapshot).filter(row => row.sessionId === state.runtimeId);
+  const writable = !peerRows.length && rt.ready && !chat.native.commands.blocked && !chat.native.settings.state.busy && chat.native.settings.state.outcome !== 'unknown' && !chat.native.settings.state.confirmation && !loading && !historical && (!chat.selected || state.phase === 'idle');
   const commands = useCommands(rt, draft, value => { setDraft(value); rt.setDraft(value); }, composer, writable);
-  const pending = chat.native.activity.state.inputs.filter(input => ['pending', 'sending'].includes(input.status)).length;
+  const selectedOwner = chat.native;
+  const peerCurrent = () => rt.ready && rt.chat.native === selectedOwner && document.visibilityState === 'visible';
+  const pending = peerRows.length + chat.native.activity.state.inputs.filter(input => ['pending', 'sending'].includes(input.status)).length;
   const error = chat.error?.message || state.error?.message || saved.error?.message;
   const empty = !messages.length && !streaming && !busy && !loading && !error;
   useEffect(() => { setDraft(chat.draft); }, [chat.draft, scope, rt.accountGeneration]);
@@ -70,6 +75,8 @@ export function Conversation({ runtime: rt, revision }: { runtime: AppRuntime; r
       {empty && <div className="welcome"><div className="welcome-mark"><HermesMark size={30}/></div><p className="eyebrow">A SPACE FOR YOUR NEXT IDEA</p><h1>What are we working on?</h1><p>Think it through. Build it out. Make it happen with Hermes.</p><div className="welcome-suggestions">{starters.map(({ icon: Icon, title, subtitle, draft }) => <button key={title} onClick={() => useStarter(draft)} disabled={!writable} title={`Use “${title}” as a draft`}><Icon size={19}/><span><strong>{title}</strong><small>{subtitle}</small></span><ArrowUpRight size={15}/></button>)}</div></div>}
       {loading && <div className="loading-conversation" role="status"><LoaderCircle size={19} className="spin"/>Opening your conversation…</div>}
       {messages.slice(0, activityAt).map((message, index) => <Message key={`${scope}:${index}`} {...message}/>)}
+      <CommandTaskResults commands={chat.native.commands}/>
+      <NativeQuestions rows={peerRows} requests={rt.gateway.requests} current={peerCurrent} onError={error => { rt.error = error; rt.notify(); }}/>
       <Activity owner={chat.native} enabled={rt.ready && !loading} historical={snapshot} revision={revision}/>
       {messages.slice(activityAt).map((message, index) => <Message key={`${scope}:${activityAt + index}`} {...message}/>)}
       {streaming && <div className="message message-assistant streaming"><div className="message-label"><span className="assistant-mark"><HermesMark size={15}/></span>Hermes <span className="working-label">Working</span></div><pre className="plain-message">{streaming}<span className="stream-cursor"/></pre></div>}
@@ -79,7 +86,7 @@ export function Conversation({ runtime: rt, revision }: { runtime: AppRuntime; r
     </div></div>
     <div className="composer-dock">
       {unread && <button className="jump-latest" onClick={jump}><ArrowDown size={15}/>Jump to latest</button>}
-      {pending > 0 && <button className="attention-strip" onClick={() => { following.current = false; content.current?.querySelector('.agent-requests')?.scrollIntoView({ block: 'center', behavior: 'instant' }); }}><span className="attention-dot"/>{pending} request{pending === 1 ? '' : 's'} need your input<ArrowUpRight size={15}/></button>}
+      {pending > 0 && <button className="attention-strip" onClick={() => { following.current = false; content.current?.querySelector('[data-native-requests], .agent-requests')?.scrollIntoView({ block: 'center', behavior: 'instant' }); }}><span className="attention-dot"/>{pending} request{pending === 1 ? '' : 's'} need your input<ArrowUpRight size={15}/></button>}
       <form className="composer" id="shell-composer" onSubmit={event => { event.preventDefault(); send(); }}>
         {commands.popup}
         <label className="sr-only" htmlFor="shell-prompt">Message Hermes</label>

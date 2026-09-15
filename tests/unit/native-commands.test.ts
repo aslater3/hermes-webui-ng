@@ -18,7 +18,7 @@ function harness() {
   return { target, commands, calls, setHook: (value: typeof hook) => { hook = value; } };
 }
 
-test('catalogue is explicitly profile/session scoped, cached in memory and refreshed deliberately', async () => {
+test('catalogue requests include selection hints, cache in memory and refresh deliberately (not proof of server scoping)', async () => {
   const h = harness(); await h.commands.load(); await h.commands.load();
   assert.deepEqual(h.calls, [{ method: 'commands.catalog', params: { session_id: 'live-default', profile: 'default' } }]);
   await h.commands.load(true); assert.equal(h.calls.length, 2);
@@ -39,8 +39,8 @@ test('picker/help/context commands return UI intents without invoking remote mut
   }
 });
 
-test('unsupported commands, arguments and unknown names never reach a dispatch or prompt method', async () => {
-  for (const text of ['/undo', '/unsafe', '/default-skill', '/model other --global', '/usage reset', '/unknown']) {
+test('unknown names and unsupported read arguments never reach a dispatch or prompt method', async () => {
+  for (const text of ['/usage reset', '/status reset', '/unknown']) {
     const h = harness(); await assert.rejects(h.commands.execute(text));
     assert.ok(h.calls.every(call => call.method === 'commands.catalog'));
     assert.equal(h.commands.state.busy, false); assert.equal(h.commands.state.result, undefined);
@@ -87,7 +87,7 @@ test('missing catalogue or native method is explicit and never a weaker transpor
 });
 
 test('malformed or directive-shaped native results are never interpreted, forwarded or retained', async () => {
-  for (const result of [{ type: 'send', message: 'PRIVATE' }, { output: 'PRIVATE', type: 'exec' }, { output: [], key: 'PRIVATE' }, { output: 'PRIVATE', target: '/shell' }]) {
+  for (const result of [{ type: 'send', message: 'PRIVATE' }, { output: 'PRIVATE', type: 'exec', message: 'ambiguous' }, { output: [], key: 'PRIVATE' }, { output: 'PRIVATE', target: '/shell' }]) {
     const h = harness(); h.setHook(async method => method === 'commands.catalog' ? commandFixture() : result);
     await assert.rejects(h.commands.execute('/usage')); assert.equal(h.commands.state.result, undefined);
     assert.ok(!JSON.stringify(h.commands.state).includes('PRIVATE')); assert.equal(h.calls.length, 2);
@@ -101,6 +101,17 @@ test('native output is bounded plain text; closing or hiding clears private read
   h.commands.setVisible(false); assert.equal(h.commands.state.catalogue, undefined);
   const count = h.calls.length; await h.commands.load(); await assert.rejects(h.commands.execute('/usage')); assert.equal(h.calls.length, count);
   h.commands.setVisible(true); h.setHook(undefined); await h.commands.load(); assert.ok(h.commands.state.catalogue);
+});
+
+
+test('pinned busy-safe reads execute while a turn is running, while reject-policy commands stay blocked', async () => {
+  const h = harness(); h.target.idle = false; Object.assign(h.target, { running: true });
+  await h.commands.execute('/status');
+  assert.equal(h.commands.state.result?.output, 'Native default counters');
+  assert.equal(h.calls.filter(call => call.method === 'slash.exec').length, 1);
+  h.commands.dismissResult();
+  await assert.rejects(h.commands.execute('/usage'), /not available while Hermes is working/);
+  assert.equal(h.calls.filter(call => call.method === 'slash.exec').length, 1);
 });
 
 test('offline, busy and sessionless views cannot execute native commands', async () => {

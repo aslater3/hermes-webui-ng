@@ -34,6 +34,7 @@ export interface GatewayEvent {
 }
 export type Frame =
   | { kind: 'event'; event: GatewayEvent }
+  | { kind: 'request'; id: string | number; method: string; params: unknown }
   | { kind: 'reply'; id: string | number; result?: unknown; error?: { code: number } };
 
 export function parseFrames(raw: unknown): Frame[] {
@@ -47,6 +48,11 @@ export function parseFrames(raw: unknown): Frame[] {
       .map((line): Frame => {
         const frame = record(JSON.parse(line));
         if (frame.jsonrpc !== '2.0') throw new Error();
+        if (frame.method !== undefined && frame.method !== 'event') {
+          if (typeof frame.method !== 'string' || !frame.method || frame.method.length > 128 ||
+              (typeof frame.id !== 'string' && typeof frame.id !== 'number') || 'result' in frame || 'error' in frame) throw new Error();
+          return { kind: 'request', id: frame.id, method: frame.method, params: frame.params };
+        }
         if (frame.method === 'event') {
           const event = record(frame.params);
           textField(event, 'type');

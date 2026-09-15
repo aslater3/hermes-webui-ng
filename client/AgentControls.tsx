@@ -36,7 +36,7 @@ export function AgentControls({ runtime: rt }: { runtime: AppRuntime }) {
   const selected = data.models?.choices.find(row => row.model === model && row.provider === provider);
   const effort = state.agent?.reasoningEffort ?? data.effort;
   const yolo = state.agent?.yolo === true;
-  const locked = !rt.ready || rt.chat.busy || rt.chat.historical || native.commands.state.busy || settings.busy || ['attaching', 'running', 'waiting', 'unknown', 'error'].includes(state.phase);
+  const locked = !rt.ready || rt.chat.busy || rt.chat.historical || native.commands.blocked || settings.busy || ['attaching', 'running', 'waiting', 'unknown', 'error'].includes(state.phase);
   const blocked = locked || settings.outcome === 'unknown';
   const open = (next: typeof panel) => { setQuery(''); setLimit(80); setPanel(next); };
   const close = () => { native.settings.cancelConfirmation(); setPanel(null); };

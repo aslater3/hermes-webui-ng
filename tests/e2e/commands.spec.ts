@@ -72,8 +72,8 @@ test('searchable catalogue and native readout preserve a first-message draft at 
   const rpc = await inspect(page); await login(page); await prompt(page).fill('An unsent draft that must survive');
   expect((await browse(page).boundingBox())!.height).toBeGreaterThanOrEqual(44);
   await browse(page).click();
-  await expect(catalogue(page).getByRole('button', { name: 'Use /undo', exact: true })).toBeDisabled();
-  await expect(catalogue(page).getByRole('button', { name: 'Use /default-skill', exact: true })).toBeDisabled();
+  await expect(catalogue(page).getByRole('button', { name: 'Use /undo', exact: true })).toBeEnabled();
+  await expect(catalogue(page).getByRole('button', { name: 'Use /default-skill', exact: true })).toBeEnabled();
   expect((await new AxeBuilder({ page }).include('.modal-commands').analyze()).violations).toEqual([]);
   await page.getByLabel('Search Hermes commands', { exact: true }).fill('token');
   await expect(catalogue(page).locator('.command-catalogue-row')).toHaveCount(1);
@@ -92,9 +92,9 @@ test('searchable catalogue and native readout preserve a first-message draft at 
 test('unknown and mutating slash forms fail closed while the explicit literal escape sends ordinary text', async ({ page }) => {
   const rpc = await inspect(page); await login(page); await send(page, 'Command rejection setup'); await idle(page);
   const prompts = rpc.count('prompt.submit');
-  for (const command of ['/unknown', '/undo', '/usage reset', '/model other --global', '/unsafe']) {
+  for (const command of ['/unknown', '/usage reset', '/status reset']) {
     await submitCommand(page, command);
-    await expect(page.locator('.conversation-content')).toContainText(/not available|takes no arguments/);
+    await expect(page.locator('.conversation-content')).toContainText(/not available|ignores arguments/);
     await expect(prompt(page)).toBeEnabled(); await expect(prompt(page)).toHaveValue(command);
     expect(rpc.count('prompt.submit')).toBe(prompts); expect(rpc.count('slash.exec')).toBe(0);
   }
@@ -130,7 +130,7 @@ test('profile shortcut replaces catalogue ownership and never carries command ou
   await page.getByRole('button', { name: 'New conversation with Work', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Profile: work', exact: true })).toBeVisible();
   await expect(prompt(page)).toHaveValue(''); await browse(page).click();
-  await expect(catalogue(page).getByRole('button', { name: 'Use /work-skill', exact: true })).toBeDisabled();
+  await expect(catalogue(page).getByRole('button', { name: 'Use /work-skill', exact: true })).toBeEnabled();
   await expect(catalogue(page).getByRole('button', { name: 'Use /default-skill', exact: true })).toHaveCount(0);
   await catalogue(page).getByRole('button', { name: 'Use /status', exact: true }).click();
   await expect(output(page, '/status')).toContainText('Native work /status');
@@ -138,7 +138,7 @@ test('profile shortcut replaces catalogue ownership and never carries command ou
   await page.reload(); await expect(output(page, '/status')).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Profile: work', exact: true })).toBeVisible();
   await page.goto(oldUrl); await expect(page.getByRole('button', { name: 'Profile: default', exact: true })).toBeVisible();
-  await browse(page).click(); await expect(catalogue(page).getByRole('button', { name: 'Use /default-skill', exact: true })).toBeDisabled();
+  await browse(page).click(); await expect(catalogue(page).getByRole('button', { name: 'Use /default-skill', exact: true })).toBeEnabled();
   expect(rpc.calls.filter(call => call.method === 'slash.exec').map(call => call.params.profile)).toEqual(['work']);
   expect(rpc.count('prompt.submit')).toBe(1);
 });
