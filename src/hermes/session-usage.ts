@@ -46,6 +46,30 @@ export function infoUsage(info: unknown): SessionUsage | undefined {
     ? sessionUsage((info as Record<string, unknown>).usage) : undefined;
 }
 
+const cumulativeFields = ['input', 'output', 'reasoning', 'total', 'calls', 'compressions'] as const;
+
+/**
+ * Hermes can briefly publish an idle cleanup snapshot whose counters are zero even after the
+ * completed-turn usage event carried the real totals. Within one runtime cumulative counters
+ * cannot legitimately move backwards. Context occupancy may shrink, but an exact zero is treated
+ * as the same cleanup regression unless Hermes also reports a new compression.
+ */
+export function reconcileUsage(previous?: SessionUsage, next?: SessionUsage): SessionUsage | undefined {
+  if (!previous || !next) return next;
+  const usage: SessionUsage = { ...next };
+  for (const field of cumulativeFields) {
+    const before = previous[field], after = next[field];
+    if (before !== undefined && after !== undefined && after < before) usage[field] = before;
+  }
+  const compressed = (next.compressions ?? previous.compressions ?? 0) > (previous.compressions ?? 0);
+  if (!compressed && (previous.contextUsed ?? 0) > 0 && next.contextUsed === 0) {
+    usage.contextUsed = previous.contextUsed;
+    if ((next.contextPercent ?? 0) === 0 && previous.contextPercent !== undefined)
+      usage.contextPercent = previous.contextPercent;
+  }
+  return usage;
+}
+
 export function contextPercent(usage?: SessionUsage): number | undefined {
   if (usage?.contextPercent !== undefined) return usage.contextPercent;
   if (usage?.contextUsed !== undefined && usage.contextMax !== undefined)
