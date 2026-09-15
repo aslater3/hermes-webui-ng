@@ -56,10 +56,12 @@ export class NativeSession {
       read: () => ({ runtimeId: this.state.runtimeId, profile: this.state.profile,
         ready: this.foreground && !this.disposed && gateway.state.phase === 'ready',
         idle: this.state.phase === 'idle' && !this.submission && !this.yoloFlight &&
+          !this.settings.state.busy && this.settings.state.outcome !== 'unknown' && !this.settings.state.confirmation,
+        running: ['running', 'waiting'].includes(this.state.phase) && !this.submission && !this.state.interrupting && !this.yoloFlight &&
           !this.settings.state.busy && this.settings.state.outcome !== 'unknown' && !this.settings.state.confirmation }),
       notify: () => this.publish({}),
       refresh: () => this.refresh(),
-      submitGenerated: message => this.submitText(message, true),
+      submitGenerated: message => this.submitGenerated(message),
     });
     this.unsubscribe = [
       gateway.onEvent((event) => this.event(event)),
@@ -257,6 +259,31 @@ export class NativeSession {
     }
   }
   async submit(text: string): Promise<void> { return this.submitText(text, false); }
+  /** Native command-generated prompts use Hermes' own busy-input policy. When a turn is already
+   * running, do not reset streaming/phase locally: prompt.submit decides queue/steer/interrupt and
+   * the authoritative snapshot reconciles the result. */
+  private async submitGenerated(text: string): Promise<void> {
+    if (this.state.phase === 'idle') return this.submitText(text, true);
+    if (!this.foreground || !['running', 'waiting'].includes(this.state.phase) || this.settings.state.busy ||
+        this.settings.state.outcome === 'unknown' || this.settings.state.confirmation || this.submission ||
+        this.state.interrupting || !this.state.runtimeId || !text.trim() || text.length > 1048576)
+      throw new ClientError('protocol', 'The native session cannot accept this generated command prompt right now');
+    const epoch = this.epoch, submission = { epoch }; this.submission = submission;
+    this.publish({ error: undefined, deliveryUnknown: false, submitting: true });
+    try {
+      await this.gateway.call('prompt.submit', { session_id: this.state.runtimeId, text });
+      this.valid(epoch);
+      if (this.submission === submission) this.submission = undefined;
+      this.publish({ submitting: false });
+      await this.refresh();
+    } catch (error) {
+      if (epoch === this.epoch) {
+        this.submission = undefined;
+        this.publish({ submitting: false, deliveryUnknown: !(error instanceof ClientError && error.kind === 'rpc') });
+      }
+      throw error;
+    }
+  }
   private async submitText(text: string, nativeCommand: boolean): Promise<void> {
     if (!this.foreground || this.state.phase !== 'idle' || (!nativeCommand && this.commands.blocked) || this.settings.state.busy || this.settings.state.outcome === 'unknown' || this.settings.state.confirmation || this.submission || !this.state.runtimeId || !text.trim() || text.length > (nativeCommand ? 1048576 : 32768))
       throw new ClientError('protocol', 'Wait for an idle native session before submitting');

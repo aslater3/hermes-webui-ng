@@ -14,7 +14,7 @@ function harness() {
     if (method === 'commands.catalog') return commandFixture();
     if (method === 'config.get') return { home: '/home-private' };
     if (method === 'profiles.list') return { profiles: [{ name: 'default', path: '/home-private' }] };
-    if (method === 'session.activate') return { running: false, info: { profile_name: target.profile } };
+    if (method === 'session.activate') return { running: (target as typeof target & { running?: boolean }).running === true, info: { profile_name: target.profile } };
     if (['slash.exec', 'command.dispatch'].includes(method)) return effect ? effect() : result;
     throw new Error('Unexpected method');
   } };
@@ -96,6 +96,25 @@ test('late generated prompts from an old selection are discarded, never submitte
   h.commands.reset(); h.target.runtimeId = 'other'; h.target.profile = 'work';
   finish({ type: 'send', message: 'PRIVATE old prompt' }); await old;
   assert.equal(h.prompts.length, 0); assert.ok(!JSON.stringify(h.commands.state).includes('PRIVATE'));
+});
+
+
+test('busy-safe native commands execute against the active session without waiting for idle', async () => {
+  const h = harness(); Object.assign(h.target, { idle: false, running: true });
+  h.setResult({ type: 'exec', output: 'queued while running' });
+  await h.commands.execute('/queue follow up after this turn');
+  assert.equal(h.commands.state.confirmation?.text, '/queue follow up after this turn');
+  await h.commands.confirm();
+  assert.deepEqual(h.effects(), [{ method: 'command.dispatch', params: { session_id: 'live-1', name: 'queue', arg: 'follow up after this turn' } }]);
+  assert.equal(h.commands.state.result?.output, 'queued while running');
+});
+
+test('skill-generated prompts can hand off to Hermes busy-input policy while a turn is running', async () => {
+  const h = harness(); Object.assign(h.target, { idle: false, running: true });
+  h.setResult({ type: 'skill', message: 'expanded busy skill prompt', display: '/default-skill task' });
+  await h.commands.execute('/default-skill task'); await h.commands.confirm();
+  assert.deepEqual(h.prompts, ['expanded busy skill prompt']);
+  assert.equal(h.effects()[0]?.method, 'command.dispatch');
 });
 
 test('backgrounding an issued command remembers uncertainty but discards its private pending result', async () => {

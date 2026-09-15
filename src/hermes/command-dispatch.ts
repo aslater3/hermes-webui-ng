@@ -6,6 +6,25 @@ export interface CommandOwner { runtimeId: string; profile: string }
 export interface CommandRpc { call(method: string, params?: Record<string, unknown>, timeoutMs?: number): Promise<unknown> }
 
 const liveDispatch = new Set(['/retry', '/queue', '/steer', '/plan', '/goal', '/loop', '/moa', '/undo', '/learn', '/init', '/compress']);
+
+export type CommandBusyPolicy = 'dispatch' | 'interrupt_then_dispatch' | 'reject';
+const busyDispatch = new Set([
+  '/start', '/pause', '/approve', '/deny', '/bg', '/btw', '/agents', '/queue', '/steer', '/goal',
+  '/heartbeat', '/loop', '/subgoal', '/status', '/egress', '/context', '/profile', '/verbose', '/footer',
+  '/yolo', '/busy', '/kanban', '/commands', '/help', '/palette', '/restart', '/login', '/update', '/version',
+]);
+const busyInterrupt = new Set(['/new', '/stop']);
+
+/** Pinned Hermes registry policy. Catalogue discovery does not carry this field, so keep this compatibility
+ * table limited to commands whose busy policy is explicit in the certified runtime. Dynamic skill/plugin/user
+ * commands are client-expanded while busy and their generated prompt is handed to prompt.submit, which owns
+ * the configured queue/steer/interrupt behavior. */
+export function commandBusyPolicy(name: string, category = ''): CommandBusyPolicy {
+  if (['Skills', 'Plugin commands', 'User commands'].includes(category)) return 'dispatch';
+  if (busyInterrupt.has(name)) return 'interrupt_then_dispatch';
+  if (busyDispatch.has(name)) return 'dispatch';
+  return 'reject';
+}
 const readCommands = new Set(['/usage', '/status', '/history']);
 export function readOnlyInvocation(command: CommandInvocation): boolean {
   return !command.argument && readCommands.has(command.name) &&
@@ -41,15 +60,16 @@ export async function verifyCommandProfile(rpc: CommandRpc, owner: CommandOwner,
 
 /** A newly created runtime may be idle while its lazy agent has no profile metadata yet.
  * Retry read-only snapshots only; an actual run, malformed identity or different owner fails closed. */
-export async function waitForCommandOwner(rpc: CommandRpc, owner: CommandOwner, current: () => void): Promise<void> {
+export async function waitForCommandOwner(rpc: CommandRpc, owner: CommandOwner, current: () => void, allowRunning = false): Promise<void> {
   const deadline = Date.now() + 10_000;
   for (let attempt = 0; attempt < 100 && Date.now() < deadline; attempt++) {
     current();
     const live = record(await rpc.call('session.activate', { session_id: owner.runtimeId, omit_messages: true }));
     current();
     const info = record(live.info);
-    if (live.running !== false || (info.profile_name !== undefined && info.profile_name !== owner.profile))
-      throw new ClientError('protocol', 'The native session changed or is busy. Nothing was executed.');
+    if ((live.running !== false && !(allowRunning && live.running === true)) ||
+        (info.profile_name !== undefined && info.profile_name !== owner.profile))
+      throw new ClientError('protocol', 'The native session changed or is not in a state that accepts this command. Nothing was executed.');
     if (info.lazy !== true && live.status !== 'starting') {
       if (info.profile_name !== owner.profile)
         throw new ClientError('protocol', 'Hermes did not confirm the native session profile. Nothing was executed.');
@@ -65,11 +85,12 @@ export async function waitForCommandOwner(rpc: CommandRpc, owner: CommandOwner, 
 export async function dispatchCommand(rpc: CommandRpc, command: CommandInvocation, owner: CommandOwner,
   current: () => void, issued: () => void): Promise<CommandResult> {
   const line = checked(command), readOnly = readOnlyInvocation(command);
+  const busyPolicy = commandBusyPolicy(command.name, command.category);
   current();
   if (!readOnly) {
     await verifyCommandProfile(rpc, owner, current);
     // Resolve an existing attached runtime before invoking handlers that have an unsafe missing-session fallback.
-    await waitForCommandOwner(rpc, owner, current);
+    await waitForCommandOwner(rpc, owner, current, busyPolicy !== 'reject');
   }
   const method = nativeCommandMethod(command);
   current(); issued();

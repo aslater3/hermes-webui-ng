@@ -154,11 +154,28 @@ export class AppRuntime {
     }
     return this.chat.native;
   }
-  /** A deliberate catalogue action, independent of the unsent composer draft. */
+  private async commandSession() {
+    if (!this.ready || this.chat.historical)
+      throw new ClientError('disconnected', 'Connect to a live conversation to use commands');
+    if (!this.chat.native.state.runtimeId) {
+      if (this.chat.selected) throw new ClientError('disconnected', 'Wait for native reattachment');
+      if (this.chat.busy) throw new ClientError('protocol', 'Wait for the selected conversation to attach');
+      const draft = this.chat.draft, account = this.accountGeneration;
+      const creation = this.chat.create(), native = this.chat.native;
+      await creation;
+      if (account !== this.accountGeneration || native !== this.chat.native || !this.ready)
+        throw new ClientError('disconnected', 'Conversation selection changed');
+      this.chat.setDraft(draft);
+      if (this.chat.error || !native.state.runtimeId) throw this.chat.error ?? new ClientError('protocol', 'Could not prepare a native conversation');
+    }
+    return this.chat.native;
+  }
+  /** A deliberate catalogue action, independent of the unsent composer draft. Busy-safe slash commands
+   * are admitted by NativeCommands according to the pinned Hermes registry; settings controls remain idle-only. */
   async command(text: string): Promise<void> {
     const account = this.accountGeneration;
     let native = this.chat.native;
-    try { native = await this.settingsSession(); await native.commands.execute(text); }
+    try { native = await this.commandSession(); await native.commands.execute(text); }
     catch (error) { if (native === this.chat.native && account === this.accountGeneration) throw error; }
   }
   /** Confirm one prepared command. Never discard a different catalogue-origin draft. */

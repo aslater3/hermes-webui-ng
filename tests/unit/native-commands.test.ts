@@ -103,6 +103,17 @@ test('native output is bounded plain text; closing or hiding clears private read
   h.commands.setVisible(true); h.setHook(undefined); await h.commands.load(); assert.ok(h.commands.state.catalogue);
 });
 
+
+test('pinned busy-safe reads execute while a turn is running, while reject-policy commands stay blocked', async () => {
+  const h = harness(); h.target.idle = false; Object.assign(h.target, { running: true });
+  await h.commands.execute('/status');
+  assert.equal(h.commands.state.result?.output, 'Native default counters');
+  assert.equal(h.calls.filter(call => call.method === 'slash.exec').length, 1);
+  h.commands.dismissResult();
+  await assert.rejects(h.commands.execute('/usage'), /not available while Hermes is working/);
+  assert.equal(h.calls.filter(call => call.method === 'slash.exec').length, 1);
+});
+
 test('offline, busy and sessionless views cannot execute native commands', async () => {
   for (const patch of [{ ready: false }, { idle: false }, { runtimeId: '' }]) {
     const h = harness(); Object.assign(h.target, patch); await assert.rejects(h.commands.execute('/usage')); assert.equal(h.calls.length, 0);

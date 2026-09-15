@@ -3,6 +3,7 @@ import { useEffect, useLayoutEffect, useId, useRef, useState, useSyncExternalSto
 import { createPortal } from 'react-dom';
 import { Search, RefreshCw, Terminal } from 'lucide-react';
 import { commandHint, commandAvailability, commandMatches, type CommandChoice } from '../src/hermes/command-catalog.js';
+import { commandBusyPolicy } from '../src/hermes/command-dispatch.js';
 import type { AppRuntime } from './runtime.js';
 import { Modal, Notice } from './primitives.js';
 import { UsageDetails } from './SessionUsage.js';
@@ -19,11 +20,21 @@ export function useCommands(rt: AppRuntime, draft: string, setDraft: (text: stri
   const [active, setActive] = useState(0), [dismissed, setDismissed] = useState<string>();
   const [visible, setVisible] = useState(() => document.visibilityState === 'visible');
   const trigger = useRef<HTMLButtonElement>(null), list = useRef<HTMLDivElement>(null), id = useId();
-  const eligible = rt.ready && visible && !rt.chat.historical && !rt.chat.busy;
+  const eligible = rt.ready && visible && !rt.chat.historical;
   const prefix = /^\s*\/[a-z0-9_.:-]*$/i.test(draft) ? draft.trim() : undefined;
   const suggesting = eligible && writable && prefix !== undefined && dismissed !== draft && !panel && !state.result && !state.confirmation && !state.recovered && !state.uncertain;
   const matches = commandMatches(state.catalogue, prefix ?? '');
   const enabled = (row: CommandChoice) => row.action !== 'unavailable' && !(row.action === 'native' && state.executionUnavailable);
+  const usable = (row: CommandChoice) => {
+    if (!enabled(row) || state.busy || state.confirmation || state.uncertain) return false;
+    if (!rt.chat.busy) return writable;
+    // Picker/settings actions are intentionally idle-only even when the similarly named CLI command has
+    // a busy handler. Context/catalogue are read-only browser surfaces; generic native busy policy comes
+    // from the certified Hermes registry compatibility table.
+    if (['models', 'profiles', 'reasoning', 'browser'].includes(row.action)) return false;
+    if (row.action === 'catalogue' || row.action === 'context') return true;
+    return commandBusyPolicy(row.name, row.category) !== 'reject';
+  };
   const selections = matches.filter(enabled), choice = selections[active % Math.max(1, selections.length)];
   const rows = commandMatches(state.catalogue, query);
   useEffect(() => {
@@ -79,12 +90,13 @@ export function useCommands(rt: AppRuntime, draft: string, setDraft: (text: stri
   };
   const action = (row: CommandChoice) => {
     // The catalogue uses a separate deliberate command operation so an existing draft is untouched.
-    if (!enabled(row) || !writable) return;
+    if (!usable(row)) return;
     if (row.action === 'confirm-native') { setArgumentCommand(row.name); setArgumentsText(''); return; }
     setPanel(null); rt.run(async () => { await rt.command(row.name); });
   };
   const prepare = () => {
-    if (!argumentCommand || !writable) return;
+    const row = state.catalogue?.choices.find(choice => choice.name === argumentCommand);
+    if (!argumentCommand || !row || !usable(row)) return;
     const text = argumentCommand + (argumentsText.trim() ? ` ${argumentsText.trim()}` : '');
     setPanel(null); setArgumentCommand(undefined); setArgumentsText('');
     rt.run(() => rt.command(text));
@@ -101,12 +113,12 @@ export function useCommands(rt: AppRuntime, draft: string, setDraft: (text: stri
     {state.loading && <p role="status">Reading commands…</p>}
     {state.error && <p role="status">{state.error}</p>}
     {!state.loading && !state.error && !matches.length && <p>No matching command. Use // to send literal slash text.</p>}
-    {state.catalogue && <p className="command-match-count" role="status">{matches.length} matching · {matches.filter(enabled).length} selectable</p>}
+    {state.catalogue && <p className="command-match-count" role="status">{matches.length} matching · {matches.filter(usable).length} selectable</p>}
     {!!matches.length && <div ref={list} id={id} role="listbox" tabIndex={0} aria-activedescendant={choice ? `${id}-${choice.name.slice(1)}` : undefined} onKeyDown={keyDown} aria-label="Slash command suggestions" className="command-suggestion-list">
       {matches.map(row => <button type="button" role="option" key={row.name} id={`${id}-${row.name.slice(1)}`} aria-selected={choice?.name === row.name}
-        aria-disabled={!enabled(row)} disabled={!enabled(row)} tabIndex={-1} className="command-suggestion" onMouseDown={event => event.preventDefault()} onClick={() => complete(row)}>
+        aria-disabled={!usable(row)} disabled={!usable(row)} tabIndex={-1} className="command-suggestion" onMouseDown={event => event.preventDefault()} onClick={() => complete(row)}>
         <strong>{row.name}</strong><span className="command-suggestion-copy"><span>{row.description || commandHint(row, state.executionUnavailable)}</span>
-          {!enabled(row) && <small>{commandAvailability(row, state.executionUnavailable)}</small>}
+          {!usable(row) && <small>{rt.chat.busy && enabled(row) ? 'Not available while Hermes is working' : commandAvailability(row, state.executionUnavailable)}</small>}
         </span>
       </button>)}
     </div>}
@@ -134,7 +146,7 @@ export function useCommands(rt: AppRuntime, draft: string, setDraft: (text: stri
       </> : argumentCommand ? <>
         <p>Enter the arguments accepted by Hermes. Nothing runs until you review and confirm the complete command.</p>
         <label className="command-search"><input data-initial-focus type="text" aria-label="Native command arguments" placeholder="Arguments (optional)" value={argumentsText} maxLength={32000} onChange={event => setArgumentsText(event.target.value)} onKeyDown={event => { if (event.key === 'Enter' && !event.nativeEvent.isComposing) { event.preventDefault(); prepare(); } }}/></label>
-        <button type="button" className="secondary" disabled={!writable} onClick={prepare}>Review command</button>
+        <button type="button" className="secondary" disabled={!argumentCommand || !usable(state.catalogue?.choices.find(choice => choice.name === argumentCommand) ?? { name: '', description: '', category: '', aliases: [], action: 'unavailable' })} onClick={prepare}>Review command</button>
       </> : state.result ? <>
         <p className="small muted">{state.result.native ? 'Native command result' : 'Read-only native result'} · {native.state.profile || 'default'} profile. Closing clears this readout; it is not added to the conversation.</p>
         <pre className="command-output" role="region" tabIndex={0} aria-label="Native command output">{state.result.output || 'Hermes returned no output.'}</pre>
@@ -146,11 +158,11 @@ export function useCommands(rt: AppRuntime, draft: string, setDraft: (text: stri
         {state.loading && <p role="status">Reading Hermes command catalogue…</p>}{state.error && <Notice error>{state.error}</Notice>}
         {state.catalogue?.partial && <Notice>Hermes returned a partial catalogue. Refresh to check for more commands.</Notice>}
         {!state.loading && !state.error && !rows.length && <p>No matching commands were returned by Hermes.</p>}
-        {state.catalogue && <p className="command-match-count" role="status">{rows.length} matching · {rows.filter(enabled).length} selectable</p>}
+        {state.catalogue && <p className="command-match-count" role="status">{rows.length} matching · {rows.filter(usable).length} selectable</p>}
         <div className="command-catalogue-list" role="region" aria-label="Matching Hermes commands" tabIndex={0} key={query}>{rows.map(row => <div className="command-catalogue-row" key={row.name}>
           <div><strong>{row.name}</strong><span className="small muted">{row.category}{row.aliases.length ? ` · ${row.aliases.join(', ')}` : ''}</span></div>
           <p>{row.description}</p><small>{commandHint(row, state.executionUnavailable)}</small>
-          <button type="button" className="secondary" disabled={!enabled(row) || !writable} aria-label={`Use ${row.name}`} onClick={() => action(row)}>{enabled(row) ? 'Use command' : commandAvailability(row, state.executionUnavailable)}</button>
+          <button type="button" className="secondary" disabled={!usable(row)} aria-label={`Use ${row.name}`} onClick={() => action(row)}>{usable(row) ? 'Use command' : rt.chat.busy && enabled(row) ? 'Unavailable while working' : commandAvailability(row, state.executionUnavailable)}</button>
         </div>)}</div>
         <p className="small muted">Using a command here preserves your unsent draft. Type // at the start of a message to send literal slash text. Native handlers remain authoritative. Terminal-only commands and unsupported native operations may need a different Hermes interface.</p>
       </>}

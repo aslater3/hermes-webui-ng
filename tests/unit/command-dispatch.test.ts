@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { dispatchCommand, nativeCommandMethod, readOnlyInvocation, verifyCommandProfile } from '../../src/hermes/command-dispatch.js';
+import { commandBusyPolicy, dispatchCommand, nativeCommandMethod, readOnlyInvocation, verifyCommandProfile } from '../../src/hermes/command-dispatch.js';
 import { ClientError } from '../../src/hermes/protocol.js';
 
 function harness(profile = 'default') {
@@ -38,6 +38,26 @@ test('mutating forms and overridden read names never inherit read-only admission
   assert.equal(readOnlyInvocation({ name: '/usage', argument: '', category: 'User commands' }), false);
   assert.equal(nativeCommandMethod({ name: '/plan', argument: '', category: 'Session' }), 'command.dispatch');
 });
+
+test('busy policy mirrors the certified Hermes registry and dynamic extensions stay dispatchable', () => {
+  assert.equal(commandBusyPolicy('/queue', 'Session'), 'dispatch');
+  assert.equal(commandBusyPolicy('/status', 'Session'), 'dispatch');
+  assert.equal(commandBusyPolicy('/new', 'Session'), 'interrupt_then_dispatch');
+  assert.equal(commandBusyPolicy('/model', 'Configuration'), 'reject');
+  assert.equal(commandBusyPolicy('/custom', 'Skills'), 'dispatch');
+});
+
+test('busy-safe dispatch accepts a running owner while reject-policy commands fail before effects', async () => {
+  const h = harness(), call = h.rpc.call;
+  h.rpc.call = async (method, params) => method === 'session.activate' ? { running: true, info: { profile_name: 'default' } } : call(method, params);
+  await dispatchCommand(h.rpc, { name: '/queue', argument: 'next task', category: 'Session' }, h.owner, h.current, h.issued);
+  assert.equal(h.count(), 1); assert.equal(h.calls.at(-1)?.method, 'command.dispatch');
+  const rejected = harness(), rejectedCall = rejected.rpc.call;
+  rejected.rpc.call = async (method, params) => method === 'session.activate' ? { running: true, info: { profile_name: 'default' } } : rejectedCall(method, params);
+  await assert.rejects(dispatchCommand(rejected.rpc, { name: '/plan', argument: 'task', category: 'Session' }, rejected.owner, rejected.current, rejected.issued));
+  assert.equal(rejected.count(), 0);
+});
+
 test('wrong-profile commands fail closed, before mutation, with no host path in the error', async () => {
   const h = harness('work');
   await assert.rejects(dispatchCommand(h.rpc, { name: '/local-task', argument: '', category: 'Skills' }, h.owner, h.current, h.issued),

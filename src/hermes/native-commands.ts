@@ -1,11 +1,11 @@
-import { dispatchCommand } from './command-dispatch.js';
+import { commandBusyPolicy, dispatchCommand } from './command-dispatch.js';
 import { readOnlyCommandResult } from './command-result.js';
 import { ClientError } from './protocol.js';
 import { commandCatalogue, commandChoice, slashInput, type CommandAction, type CommandCatalogue } from './command-catalog.js';
 
 interface Rpc { call(method: string, params?: Record<string, unknown>): Promise<unknown> }
 interface Target {
-  read(): { ready: boolean; idle: boolean; runtimeId?: string; profile?: string };
+  read(): { ready: boolean; idle: boolean; running?: boolean; runtimeId?: string; profile?: string };
   notify(): void;
   refresh?(): Promise<void>;
   submitGenerated?(message: string): Promise<void>;
@@ -94,15 +94,17 @@ export class NativeCommands {
   async execute(text: string, source: 'composer' | 'catalogue' = 'catalogue'): Promise<void> {
     const target = this.target.read(), epoch = this.epoch;
     const input = slashInput(text);
-    if (!input || !this.visible || !target.ready || !target.idle || !target.runtimeId || this.blocked)
-      throw new ClientError('protocol', 'Wait for an attached idle conversation before using a command.');
+    if (!input || !this.visible || !target.ready || (!target.idle && !target.running) || !target.runtimeId || this.blocked)
+      throw new ClientError('protocol', 'Wait for an attached conversation before using a command.');
     this.publish({ busy: true, result: undefined, recovered: undefined, action: undefined, error: undefined });
     try {
       // Revalidate discovery at the deliberate send; the displayed catalogue may be old.
       await this.load(true); this.current(epoch, target.runtimeId, target.profile);
-      if (!this.target.read().idle) throw new ClientError('protocol', 'The agent started working; no command was sent.');
       if (!this.state.catalogue) throw new ClientError('protocol', this.state.error ?? 'Command discovery is unavailable. Nothing was sent.');
       const choice = commandChoice(this.state.catalogue, input);
+      const currentTarget = this.target.read();
+      if (!currentTarget.idle && !(currentTarget.running && commandBusyPolicy(choice.name, choice.category) !== 'reject'))
+        throw new ClientError('protocol', 'This command is not available while Hermes is working. Nothing was executed.');
       if (choice.action === 'unavailable') throw new ClientError('protocol', 'Command unavailable.');
       if (choice.action === 'confirm-native') {
         const expires = Date.now() + 120_000;
@@ -135,7 +137,11 @@ export class NativeCommands {
       this.cancelConfirmation(); throw new ClientError('protocol', 'The command confirmation expired or is unavailable. Prepare it again.');
     }
     this.current(pending.epoch, pending.runtimeId, pending.profile);
-    if (!this.target.read().idle) throw new ClientError('protocol', 'Wait for an idle session before confirming.');
+    const pendingInput = slashInput(pending.text);
+    const preparedChoice = pendingInput && this.state.catalogue ? commandChoice(this.state.catalogue, pendingInput) : undefined;
+    const currentTarget = this.target.read();
+    if (!currentTarget.idle && !(currentTarget.running && preparedChoice && commandBusyPolicy(preparedChoice.name, preparedChoice.category) !== 'reject'))
+      throw new ClientError('protocol', 'This command cannot be confirmed while Hermes is working. Nothing was executed.');
     this.pending = undefined;
     this.publish({ confirmation: undefined, busy: true, error: undefined, recovered: undefined, result: undefined });
     let issued = false;
