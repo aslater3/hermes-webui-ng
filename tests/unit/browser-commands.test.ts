@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { browserCommand, copyAssistantResponse, COPY_TEXT_LIMIT, BROWSER_COMMAND_NAMES } from '../../src/hermes/browser-commands.js';
 import { commandCatalogue, commandChoice } from '../../src/hermes/command-catalog.js';
 import { NativeCommands } from '../../src/hermes/native-commands.js';
+import { branchCommandConversation } from '../../client/browser-command-actions.js';
 
 const pairs = [...BROWSER_COMMAND_NAMES].map(name => [name, `Browser ${name}`]);
 const catalogue = { pairs, canon: { '/compose': '/prompt', '/reset': '/new' } };
@@ -16,11 +17,15 @@ test('client-owned commands have explicit browser semantics and preserve aliases
   assert.deepEqual(browserCommand('/copy', '1'), { kind: 'copy', ordinal: 1 });
   assert.deepEqual(browserCommand('/copy', ''), { kind: 'copy' });
   assert.deepEqual(browserCommand('/redraw', ''), { kind: 'redraw' });
+  assert.deepEqual(browserCommand('/branch', 'Experiment'), { kind: 'branch', title: 'Experiment' });
+  assert.deepEqual(browserCommand('/yolo', ''), { kind: 'yolo' });
+  assert.deepEqual(browserCommand('/image', '/tmp/example.png'), { kind: 'image', hostPath: '/tmp/example.png' });
+  assert.deepEqual(browserCommand('/paste', ''), { kind: 'paste' });
   assert.equal(commandChoice(commandCatalogue(catalogue), { name: '/compose', argument: 'text' }).name, '/prompt');
 });
 
 test('browser command validation rejects unsupported arguments rather than delegating to a worker', () => {
-  for (const [name, arg] of [['/copy', '0'], ['/copy', '-1'], ['/copy', '1.2'], ['/copy', 'NaN'], ['/clear', 'all'], ['/redraw', 'now'], ['/new', 'x'.repeat(513)], ['/resume', 'x'.repeat(513)], ['/paste', ''], ['/prompt', '\0']])
+  for (const [name, arg] of [['/copy', '0'], ['/copy', '-1'], ['/copy', '1.2'], ['/copy', 'NaN'], ['/clear', 'all'], ['/redraw', 'now'], ['/new', 'x'.repeat(513)], ['/resume', 'x'.repeat(513)], ['/paste', 'extra'], ['/yolo', 'on'], ['/branch', 'x'.repeat(513)], ['/image', 'x'.repeat(4097)], ['/prompt', '\0']])
     assert.throws(() => browserCommand(name!, arg!));
 });
 
@@ -60,4 +65,25 @@ test('browser intents block conflicting actions, preserve composer input and nev
 test('an advertised custom command with a browser-command name retains native ownership', () => {
   const custom = commandCatalogue({ ...catalogue, categories: [{ name: 'User commands', pairs: [['/copy', 'Custom copy']] }] });
   assert.equal(commandChoice(custom, { name: '/copy', argument: 'custom args' }).action, 'confirm-native');
+});
+
+
+test('branch browser action uses the selected native session RPC and opens only the returned stored child', async () => {
+  const oldHistory = globalThis.history;
+  const pushed: string[] = [];
+  Object.defineProperty(globalThis, 'history', { configurable: true, value: { pushState: (_a: unknown, _b: string, url: string) => pushed.push(url) } });
+  try {
+    const calls: { method: string; params: Record<string, unknown> }[] = [], opened: unknown[] = [];
+    const native = { state: { phase: 'idle', runtimeId: 'live-parent', profile: 'work' }, commands: { blocked: false } } as any;
+    const rt = {
+      ready: true, accountGeneration: 4,
+      gateway: { state: { generation: 9 }, call: async (method: string, params: Record<string, unknown>) => {
+        calls.push({ method, params }); return { session_id: 'live-child', stored_session_id: 'stored-child', title: 'Experiment' };
+      } },
+      chat: { busy: false, native, error: undefined, open: async (ref: unknown) => { opened.push(ref); } }, notify: () => {},
+    } as any;
+    await branchCommandConversation(rt, native, 'Experiment');
+    assert.deepEqual(calls, [{ method: 'session.branch', params: { session_id: 'live-parent', profile: 'work', name: 'Experiment' } }]);
+    assert.deepEqual(opened, [{ id: 'stored-child', profile: 'work' }]); assert.equal(pushed.length, 1); assert.match(pushed[0]!, /stored-child/);
+  } finally { Object.defineProperty(globalThis, 'history', { configurable: true, value: oldHistory }); }
 });

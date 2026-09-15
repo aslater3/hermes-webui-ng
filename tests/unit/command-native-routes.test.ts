@@ -18,6 +18,15 @@ async function run(name: string, argument: string, results: Record<string, unkno
   return { result, calls, issued };
 }
 
+
+test('bare save uses the dedicated session export RPC while format arguments retain native parsing', async () => {
+  const h = await run('/save', '', { 'session.save': { file: '/tmp/hermes-saved.json' } });
+  assert.deepEqual(h.calls[0]?.params, { session_id: 'live-a', profile: 'work' });
+  assert.match(h.result.kind === 'output' ? h.result.output : '', /Saved transcript to \/tmp\/hermes-saved.json/);
+  assert.equal(route('/save', 'md export.md'), undefined);
+  await assert.rejects(run('/save', '', { 'session.save': {} }));
+});
+
 test('compression uses the live session RPC and long native timeout with exact arguments', async () => {
   const h = await run('/compress', 'here 3 --preview', { 'session.compress': { status: 'compressed', removed: 0, summary: { headline: 'Preview', token_line: '0 removed', note: null } } });
   assert.deepEqual(h.calls, [{ method: 'session.compress', params: { session_id: 'live-a', profile: 'work', focus_topic: 'here 3 --preview' }, timeout: COMPRESS_TIMEOUT_MS }]);

@@ -5,8 +5,12 @@ export type BrowserCommand =
   | { kind: 'sessions'; query: string }
   | { kind: 'compose'; text: string }
   | { kind: 'copy'; ordinal?: number }
-  | { kind: 'redraw' };
-export const BROWSER_COMMAND_NAMES = new Set(['/new', '/clear', '/resume', '/sessions', '/prompt', '/copy', '/redraw']);
+  | { kind: 'redraw' }
+  | { kind: 'branch'; title: string }
+  | { kind: 'yolo' }
+  | { kind: 'image'; hostPath: string }
+  | { kind: 'paste' };
+export const BROWSER_COMMAND_NAMES = new Set(['/new', '/clear', '/resume', '/sessions', '/prompt', '/copy', '/redraw', '/branch', '/yolo', '/image', '/paste']);
 export const COPY_TEXT_LIMIT = 262144;
 
 /** Browser equivalents of client-owned commands; never send them to a detached slash worker. */
@@ -31,6 +35,18 @@ export function browserCommand(name: string, argument: string): BrowserCommand {
     case '/redraw':
       if (argument) throw new ClientError('protocol', '/redraw takes no arguments.');
       return { kind: 'redraw' };
+    case '/branch':
+      if (argument.length > 512) throw new ClientError('protocol', 'A branch title is limited to 512 characters.');
+      return { kind: 'branch', title: argument };
+    case '/yolo':
+      if (argument) throw new ClientError('protocol', '/yolo takes no arguments in HermesUI NG. Use the session toggle to choose the state.');
+      return { kind: 'yolo' };
+    case '/image':
+      if (argument.length > 4096) throw new ClientError('protocol', 'An image path is limited to 4,096 characters.');
+      return { kind: 'image', hostPath: argument };
+    case '/paste':
+      if (argument) throw new ClientError('protocol', '/paste takes no arguments.');
+      return { kind: 'paste' };
     default: throw new ClientError('protocol', 'No browser handler exists for this command.');
   }
 }

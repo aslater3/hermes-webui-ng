@@ -49,6 +49,13 @@ export function nativeCommandRoute(command: CommandInvocation): NativeCommandRou
   if (dynamic.has(command.category)) return undefined;
   const { name, argument: arg } = command;
   switch (name) {
+    case '/save':
+      if (arg) return undefined; // format/filename/redaction arguments retain the native parser.
+      return rpcRoute('session.save', {}, raw => {
+        const file = bounded(record(raw).file, 4096);
+        if (!file) invalid('Hermes did not return the saved transcript path.');
+        return output(`Saved transcript to ${file}`);
+      });
     case '/title':
       if (arg.length > 512) invalid('A conversation title is limited to 512 characters.');
       return rpcRoute('session.title', arg ? { title: arg } : {}, raw => {

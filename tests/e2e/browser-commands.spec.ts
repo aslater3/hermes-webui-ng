@@ -5,7 +5,7 @@ import { login, send, idle } from './shell-fixture.js';
 test.use({ baseURL: 'http://127.0.0.1:8787' });
 const field = (page: Page) => page.locator('#shell-prompt');
 const modal = (page: Page) => page.getByRole('dialog', { name: 'Browser command', exact: true });
-const names = ['/new', '/clear', '/sessions', '/resume', '/copy', '/prompt', '/redraw'];
+const names = ['/new', '/clear', '/sessions', '/resume', '/copy', '/prompt', '/redraw', '/branch', '/yolo', '/image', '/paste'];
 async function fixture(page: Page) {
   const calls: { method: string; params: Record<string, unknown> }[] = [];
   let copyHistory: unknown;
@@ -17,6 +17,8 @@ async function fixture(page: Page) {
       const result = (value: unknown) => socket.send(JSON.stringify({ jsonrpc: '2.0', id: frame.id, result: value }));
       if (frame.method === 'session.title') { result({ title: frame.params.title, pending: false }); return; }
       if (frame.method === 'session.history' && copyHistory) { result(copyHistory); return; }
+      if (frame.method === 'image.attach') { result({ attached: true, count: 1, name: String(frame.params.path).split('/').pop() || 'host.png' }); return; }
+      if (frame.method === 'image.attach_bytes') { result({ attached: true, count: 1, name: frame.params.filename || 'upload.png', bytes: 4 }); return; }
       requests.set(frame.id, frame.method); server.send(raw);
     });
     server.onMessage(raw => {
@@ -125,4 +127,41 @@ test('revoked session-search admission closes private command views instead of r
   await modal(page).getByLabel('Search saved conversations', { exact: true }).fill('revoked-admission');
   await expect(modal(page)).toHaveCount(0);
   expect(rpc.count('command.dispatch')).toBe(0); expect(rpc.count('slash.exec')).toBe(0); expect(rpc.count('prompt.submit')).toBe(1);
+});
+
+
+test('image command attaches a Hermes-host path without invoking a detached slash worker', async ({ page }) => {
+  const rpc = await fixture(page); await login(page); await send(page, 'Image path setup'); await idle(page);
+  await openCommand(page, '/image /tmp/example.png');
+  await modal(page).getByRole('button', { name: 'Attach Hermes-host path', exact: true }).click();
+  await expect(modal(page).getByRole('status')).toContainText('Attached example.png for the next prompt.');
+  expect(rpc.calls.filter(call => call.method === 'image.attach').map(call => call.params)).toEqual([
+    { session_id: expect.any(String), profile: 'default', path: '/tmp/example.png' },
+  ]);
+  expect(rpc.count('slash.exec')).toBe(0); expect(rpc.count('command.dispatch')).toBe(0);
+  await modal(page).getByRole('button', { name: 'Done', exact: true }).click(); await expect(field(page)).toHaveValue('');
+});
+
+test('browser image upload sends bytes to the selected native session and does not persist them locally', async ({ page }) => {
+  const rpc = await fixture(page); await login(page); await send(page, 'Image upload setup'); await idle(page);
+  await openCommand(page, '/image');
+  const chooser = modal(page).locator('input[type="file"]');
+  await chooser.setInputFiles({ name: 'browser.png', mimeType: 'image/png', buffer: Buffer.from([0x89, 0x50, 0x4e, 0x47]) });
+  await expect(modal(page).getByRole('status')).toContainText('Attached browser.png for the next prompt.');
+  const attach = rpc.calls.find(call => call.method === 'image.attach_bytes');
+  expect(attach?.params).toMatchObject({ session_id: expect.any(String), profile: 'default', filename: 'browser.png' });
+  expect(typeof attach?.params.content_base64).toBe('string');
+  expect(await page.evaluate(() => JSON.stringify({ ...localStorage, ...sessionStorage }))).not.toContain('iVBORw');
+  expect(rpc.count('slash.exec')).toBe(0); expect(rpc.count('command.dispatch')).toBe(0);
+});
+
+test('paste reads this device clipboard image only after an explicit gesture and queues native bytes', async ({ page }) => {
+  await page.addInitScript(() => Object.defineProperty(navigator, 'clipboard', { configurable: true, value: {
+    read: async () => [{ types: ['image/png'], getType: async () => new Blob([new Uint8Array([1, 2, 3, 4])], { type: 'image/png' }) }],
+  } }));
+  const rpc = await fixture(page); await login(page); await send(page, 'Paste setup'); await idle(page);
+  await openCommand(page, '/paste'); expect(rpc.count('image.attach_bytes')).toBe(0);
+  await modal(page).getByRole('button', { name: 'Read image from this device clipboard', exact: true }).click();
+  await expect(modal(page).getByRole('status')).toContainText('Attached clipboard.png for the next prompt.');
+  expect(rpc.count('image.attach_bytes')).toBe(1); expect(rpc.count('clipboard.paste')).toBe(0);
 });
