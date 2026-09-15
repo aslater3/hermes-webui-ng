@@ -39,10 +39,11 @@ test('usage hydrates from native info, live ticker does not fetch history or alt
   await session.create(); assert.equal(usageOf(session)?.total, 28);
   const calls = rpc.calls.length;
   for (let i = 0; i < 25; i++) rpc.emit('session.usage', { total: i, context_used: i, context_max: 100 });
-  assert.equal(usageOf(session)?.total, 24); assert.equal(session.state.phase, 'idle');
+  assert.equal(usageOf(session)?.total, 28, 'cumulative totals do not move backwards within one runtime');
+  assert.equal(usageOf(session)?.contextUsed, 24); assert.equal(session.state.phase, 'idle');
   assert.equal(rpc.calls.length, calls, 'usage notifications never poll or refetch full transcripts');
   rpc.emit('session.usage', { total: 9000 }, 'another-session');
-  assert.equal(usageOf(session)?.total, 24);
+  assert.equal(usageOf(session)?.total, 28);
 });
 
 test('a live usage event wins over an older in-flight native snapshot without recovery starvation', async t => {
@@ -54,7 +55,20 @@ test('a live usage event wins over an older in-flight native snapshot without re
   finish({ running: false, info: { usage: { total: 28 } } }); await refresh;
   assert.equal(usageOf(session)?.total, 99); assert.equal(rpc.calls.length, calls);
   rpc.activateHook = undefined; rpc.info = { usage: { total: 100 } }; await session.refresh();
-  assert.equal(usageOf(session)?.total, 100, 'subsequent authoritative reads can replace the event');
+  assert.equal(usageOf(session)?.total, 100, 'subsequent authoritative reads can advance the event');
+});
+
+test('completed-turn counters survive the zeroed idle cleanup snapshot', async t => {
+  const rpc = new UsageRpc(), session = new NativeSession(rpc); t.after(() => session.dispose()); await session.create();
+  const completed = { input: 300, output: 50, reasoning: 10, total: 350, calls: 2,
+    context_used: 6400, context_max: 128000, context_percent: 5, compressions: 0 };
+  rpc.info = { usage: { input: 0, output: 0, reasoning: 0, total: 0, calls: 0,
+    context_used: 0, context_max: 128000, context_percent: 0, compressions: 0 } };
+  rpc.emit('message.complete', completed); await session.refresh();
+  assert.deepEqual(usageOf(session), {
+    input: 300, output: 50, reasoning: 10, total: 350, calls: 2,
+    contextUsed: 6400, contextMax: 128000, contextPercent: 5, compressions: 0,
+  });
 });
 
 test('switching profile rejects late snapshots and old-session usage events', async t => {

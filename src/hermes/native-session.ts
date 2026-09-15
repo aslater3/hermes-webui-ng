@@ -1,6 +1,6 @@
 import { NativeCommands } from './native-commands.js';
 import { displayMessage, type DisplayMessage } from './history-message.js';
-import { infoUsage, type SessionUsage } from './session-usage.js';
+import { infoUsage, reconcileUsage, type SessionUsage } from './session-usage.js';
 import { NativeSettings } from './native-settings.js';
 import { agentMetadata, yoloSetParams, type AgentMetadata } from './model-catalog.js';
 import { AgentActivity, inputRpc } from './agent-activity.js';
@@ -204,8 +204,9 @@ export class NativeSession {
       this.publish({
         messages: this.foreground ? messages : [],
         // A usage ticker must not invalidate/retry the entire transcript snapshot.
-        // Preserve a newer event while a slower history/activate pair is in flight.
-        usage: !this.foreground ? undefined : usageRevision === this.usageRevision ? infoUsage(live.info) : this.state.usage,
+        // Preserve a newer event while a slower history/activate pair is in flight, and reject
+        // Hermes' transient post-turn zero counters within the same attached runtime.
+        usage: !this.foreground ? undefined : usageRevision === this.usageRevision ? reconcileUsage(this.state.usage, infoUsage(live.info)) : this.state.usage,
         totalMessages: history.messages.length,
         agent: { ...this.state.agent, ...agentMetadata(live.info) },
         agentStarting: live.status === 'starting' || (live.info !== null && typeof live.info === 'object' && !Array.isArray(live.info) && record(live.info).lazy === true),
@@ -223,7 +224,7 @@ export class NativeSession {
       const payload = event.payload;
       if (payload && typeof payload === 'object' && !Array.isArray(payload) && 'usage' in payload) {
         ++this.usageRevision;
-        this.publish({ usage: infoUsage(payload) });
+        this.publish({ usage: reconcileUsage(this.state.usage, infoUsage(payload)) });
       }
     }
     if (this.activity.receive(event)) this.publish({});
