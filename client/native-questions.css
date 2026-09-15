@@ -1,0 +1,10 @@
+.native-questions { min-width: 0; margin-block: 16px; }
+.native-question { padding: 16px; margin-block: 12px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); overflow-wrap: anywhere; }
+.native-question h3 { margin: 0 0 12px; font-size: 16px; }
+.native-question-detail { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 13px; max-height: 180px; overflow-y: auto; }
+.native-question fieldset { min-width: 0; padding: 12px 0; margin: 0; border: none; }
+.native-question legend { font-size: 14px; }
+.native-question input:not([type=radio]):not([type=checkbox]), .native-question textarea { box-sizing: border-box; min-height: 44px; width: 100%; padding: 10px; color: var(--text); background: var(--bg); border: 1px solid var(--border); border-radius: 8px; font: inherit; font-size: 16px; }
+.native-choice { display: flex; gap: 8px; min-height: 44px; align-items: center; font-size: 14px; }
+.native-question-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.native-question-actions button { min-width: 44px; min-height: 44px; }

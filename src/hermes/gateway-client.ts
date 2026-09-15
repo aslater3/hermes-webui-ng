@@ -1,3 +1,4 @@
+import { PeerRequests } from './peer-requests.js';
 import { WS_PROTOCOL, type WsCredential } from './ws-auth.js';
 import type { DiagnosticsRing } from './diagnostics.js';
 import { ClientError, parseFrames, record, type GatewayEvent } from './protocol.js';
@@ -31,6 +32,14 @@ interface Pending {
 
 /** Transport only: no sessions, prompt queue, transcript persistence, or automatic RPC replay. */
 export class GatewayClient {
+  readonly requests = new PeerRequests(frame => {
+    if (this.state.phase !== 'ready' || this.socket?.readyState !== 1)
+      throw new ClientError('disconnected', 'The native response could not be sent. It was not replayed.');
+    const encoded = JSON.stringify(frame);
+    if (encoded.length > 1_048_576) throw new ClientError('protocol', 'Native response is too large.');
+    // Interactive values and IDs are deliberately excluded from diagnostics.
+    this.socket.send(encoded);
+  });
   private socket?: WebSocket;
   private resumeCheck?: Promise<void>;
   private metrics: { readyAt?: number; lastEventAt?: number; latencyMs?: number; closeCode?: number } = {};
@@ -157,7 +166,9 @@ export class GatewayClient {
         try {
           for (const frame of parseFrames(message.data)) {
             if (generation !== this.generation) return;
-            if (frame.kind === 'reply') {
+            if (frame.kind === 'request') {
+              if (this.state.phase === 'ready') this.requests.receive(frame);
+            } else if (frame.kind === 'reply') {
               const pending = this.pending.get(frame.id);
               if (!pending) continue;
               clearTimeout(pending.timer);
@@ -183,6 +194,7 @@ export class GatewayClient {
               this.startHeartbeat(generation);
             } else if (this.state.phase === 'ready') {
               this.options.diagnostics?.add({ event: 'gateway.event', generation });
+              this.requests.cancel(frame.event);
               for (const listener of this.events) this.notify(() => listener(frame.event));
             }
           }
@@ -228,6 +240,7 @@ export class GatewayClient {
     this.connecting = undefined;
     for (const pending of this.pending.values()) { clearTimeout(pending.timer); pending.reject(error); }
     this.pending.clear();
+    this.requests.clear();
   }
   private fail(generation: number, error: ClientError): void {
     if (generation !== this.generation) return;

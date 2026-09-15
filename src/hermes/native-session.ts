@@ -8,7 +8,7 @@ import { AgentActivity, inputRpc } from './agent-activity.js';
 import type { ConnectionState, GatewayClient } from './gateway-client.js';
 import { ClientError, record, textField, type GatewayEvent } from './protocol.js';
 
-type Transport = Pick<GatewayClient, 'call' | 'onEvent' | 'onState' | 'state'>;
+type Transport = Pick<GatewayClient, 'call' | 'onEvent' | 'onState' | 'state'> & Partial<Pick<GatewayClient, 'requests'>>;
 export type Message = DisplayMessage;
 export interface SessionState {
   phase: 'empty' | 'attaching' | 'idle' | 'running' | 'waiting' | 'unknown' | 'error';
@@ -49,13 +49,13 @@ export class NativeSession {
   constructor(private readonly gateway: Transport) {
     this.settings = new NativeSettings(gateway, {
       read: () => ({ runtimeId: this.state.runtimeId, profile: this.state.profile, starting: this.state.agentStarting,
-        idle: this.foreground && !this.disposed && gateway.state.phase === 'ready' && this.state.phase === 'idle' && !this.submission && !this.commands?.blocked, agent: this.state.agent }),
+        idle: this.foreground && !this.disposed && gateway.state.phase === 'ready' && !this.hasPeerRequest() && this.state.phase === 'idle' && !this.submission && !this.commands?.blocked, agent: this.state.agent }),
       refresh: () => this.refresh(), notify: () => this.publish({}),
     });
     this.commands = new NativeCommands(gateway, {
       read: () => ({ runtimeId: this.state.runtimeId, profile: this.state.profile,
         ready: this.foreground && !this.disposed && gateway.state.phase === 'ready',
-        idle: this.state.phase === 'idle' && !this.submission && !this.yoloFlight &&
+        idle: !this.hasPeerRequest() && this.state.phase === 'idle' && !this.submission && !this.yoloFlight &&
           !this.settings.state.busy && this.settings.state.outcome !== 'unknown' && !this.settings.state.confirmation,
         running: ['running', 'waiting'].includes(this.state.phase) && !this.submission && !this.state.interrupting && !this.yoloFlight &&
           !this.settings.state.busy && this.settings.state.outcome !== 'unknown' && !this.settings.state.confirmation }),
@@ -64,6 +64,7 @@ export class NativeSession {
       submitGenerated: message => this.submitGenerated(message),
     });
     this.unsubscribe = [
+      ...(gateway.requests ? [gateway.requests.subscribe(() => this.publish({}))] : []),
       gateway.onEvent((event) => this.event(event)),
       gateway.onState((connection) => this.connection(connection)),
     ];
@@ -86,6 +87,7 @@ export class NativeSession {
     this.state = { ...this.state, ...patch };
     for (const listener of this.listeners) listener(this.state);
   }
+  private hasPeerRequest(): boolean { return this.gateway.requests?.getSnapshot().some(row => row.sessionId === this.state.runtimeId) ?? false; }
   private valid(epoch: number): void {
     if (this.disposed || epoch !== this.epoch || this.gateway.state.phase !== 'ready')
       throw new ClientError('disconnected', 'Session selection or connection changed');
@@ -210,6 +212,7 @@ export class NativeSession {
       if (reportedKey !== undefined && typeof reportedKey !== 'string')
         throw new ClientError('protocol', 'Hermes returned an invalid durable session identifier');
       this.activity.snapshot(live);
+      if (this.foreground) this.gateway.requests?.hydrate(live.open_requests, runtimeId);
       this.publish({
         // Compression can rotate the durable key without replacing the live runtime.
         storedId: reportedKey ? sessionId(reportedKey) : this.state.storedId,
@@ -285,7 +288,7 @@ export class NativeSession {
     }
   }
   private async submitText(text: string, nativeCommand: boolean): Promise<void> {
-    if (!this.foreground || this.state.phase !== 'idle' || (!nativeCommand && this.commands.blocked) || this.settings.state.busy || this.settings.state.outcome === 'unknown' || this.settings.state.confirmation || this.submission || !this.state.runtimeId || !text.trim() || text.length > (nativeCommand ? 1048576 : 32768))
+    if (this.hasPeerRequest() || !this.foreground || this.state.phase !== 'idle' || (!nativeCommand && this.commands.blocked) || this.settings.state.busy || this.settings.state.outcome === 'unknown' || this.settings.state.confirmation || this.submission || !this.state.runtimeId || !text.trim() || text.length > (nativeCommand ? 1048576 : 32768))
       throw new ClientError('protocol', 'Wait for an idle native session before submitting');
     const epoch = this.epoch;
     this.settings.cancelConfirmation();

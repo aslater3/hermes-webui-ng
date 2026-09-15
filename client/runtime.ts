@@ -14,7 +14,7 @@ import type { SessionRef } from '../src/hermes/session-rest.js';
 /** One disposable client lifetime; React never builds RPC envelopes or owns durable sessions. */
 export class AppRuntime {
   readonly pwa = new PwaController(() => this.reloadBlocker());
-  reloadBlocker = () => this.connection?.state.busy ? 'Wait for authentication to finish.' : this.chat?.reloadBlocker() ?? '';
+  reloadBlocker = () => this.gateway?.requests.getSnapshot().length ? 'Answer or decline the native request before updating.' : this.connection?.state.busy ? 'Wait for authentication to finish.' : this.chat?.reloadBlocker() ?? '';
   readonly diagnostics = new DiagnosticsRing();
   private readonly requests = new DocumentRequests(window);
   readonly dashboard: DashboardClient;
@@ -72,7 +72,7 @@ export class AppRuntime {
   };
   start() {
     if (this.started) return;
-    this.started = true;
+    this.started = true; this.gateway.requests.setVisible(document.visibilityState === 'visible');
     this.cleanup.push(this.pwa.subscribe(this.notify)); void this.pwa.start();
     this.cleanup.push(this.attention.subscribe(this.notify), this.chat.subscribe(() => {
       this.chat.native.commands.setVisible(document.visibilityState === 'visible');
@@ -81,7 +81,7 @@ export class AppRuntime {
       this.attention.select(state.runtimeId); this.notify();
     }), this.gateway.onState(() => { this.attention.setEnabled(this.ready); this.notify(); }));
     this.cleanup.push(this.connection.onIdentityBoundary(() => {
-      ++this.accountGeneration; this.openedLocation = false;
+      ++this.accountGeneration; this.openedLocation = false; this.gateway.requests.clear();
       this.attention.clear(); this.chat.clear(); this.error = ''; history.replaceState(null, '', location.pathname);
       document.querySelectorAll<HTMLInputElement>('input[type="password"]').forEach(input => { input.value = ''; });
       this.notify();
@@ -94,8 +94,9 @@ export class AppRuntime {
     const resume = () => {
       const visible = document.visibilityState === 'visible';
       this.connection.poll(visible ? 30_000 : 0); this.attention.setVisible(visible);
+      this.gateway.requests.setVisible(visible);
       this.chat.native.commands.setVisible(visible); this.notify();
-      if (visible) this.run(() => this.connection.resume());
+      if (visible) this.run(async () => { await this.connection.resume(); if (this.ready && this.chat.native.state.runtimeId) await this.chat.native.refresh(); });
     };
     const listen = (target: EventTarget, event: string, callback: () => void) => {
       target.addEventListener(event, callback); this.cleanup.push(() => target.removeEventListener(event, callback));
