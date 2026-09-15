@@ -52,7 +52,7 @@ test('confirmation, cancellation and keyboard-height recovery preserve the compo
 
 test('catalogue native arguments are reviewed and inert output never replaces an unrelated draft', async ({ page }) => {
   const rpc = await nativeFixture(page); rpc.outcome({ type: 'plugin', output: '<script>PRIVATE_CODE()</script>\nNative output' });
-  await login(page); await send(pae, 'Native catalogue setup'); await idle(page); await field(page).fill('My unrelated unsent draft');
+  await login(page); await send(page, 'Native catalogue setup'); await idle(page); await field(page).fill('My unrelated unsent draft');
   await page.getByRole('button', { name: 'Browse Hermes commands', exact: true }).click();
   await page.getByRole('button', { name: 'Use /unsafe', exact: true }).click();
   await page.getByLabel('Native command arguments', { exact: true }).fill('list --all');
@@ -87,7 +87,7 @@ test('undo prefill is offered for editing and a leading slash remains literal wh
   expect(rpc.count('prompt.submit')).toBe(1);
   await recovered.getByRole('button', { name: 'Use recovered input as draft', exact: true }).click();
   await expect(field(page)).toHaveValue('//literal restored text');
-  await page.getByRole('button', { name: 'Send message', exact: true }).click(); await idle(pae);
+  await page.getByRole('button', { name: 'Send message', exact: true }).click(); await idle(page);
   expect(rpc.calls.filter(call => call.method === 'prompt.submit').at(-1)?.params.text).toBe('/literal restored text');
   expect(rpc.count('command.dispatch')).toBe(1);
 });
@@ -116,7 +116,7 @@ test('foreign-profile execution is rejected before dispatch instead of using the
 
 test('busy-safe commands remain available from the catalogue without interrupting the active turn', async ({ page }) => {
   const rpc = await nativeFixture(page); await login(page); await send(page, 'Busy command setup'); await idle(page);
-  await send(page, '[slow-test] keep this turn running');
+  await send(page, '[agent-test] approval holds the active turn for command checks');
   await expect(page.getByRole('button', { name: 'Stop response', exact: true })).toBeEnabled();
   const commands = page.getByRole('button', { name: 'Browse Hermes commands', exact: true });
   await expect(commands).toBeEnabled(); await commands.click();
@@ -124,7 +124,7 @@ test('busy-safe commands remain available from the catalogue without interruptin
   await expect(useQueue).toBeEnabled(); await useQueue.click();
   await page.getByLabel('Native command arguments', { exact: true }).fill('follow up after this turn');
   await page.getByRole('button', { name: 'Review command', exact: true }).click();
-  await expect(confirmation(page)).toContainText('/queu follow up after this turn');
+  await expect(confirmation(page)).toContainText('/queue follow up after this turn');
   await confirmation(page).getByRole('button', { name: 'Run native command', exact: true }).click();
   await expect(page.getByRole('dialog', { name: 'Command /queue', exact: true })).toContainText('SYNTHETIC native command result');
   expect(rpc.calls.filter(call => call.method === 'command.dispatch').at(-1)?.params).toEqual({

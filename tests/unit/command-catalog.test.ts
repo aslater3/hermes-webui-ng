@@ -66,7 +66,7 @@ test('matching exposes the whole bounded catalogue, not an eight or eighty entry
     ...commandFixture().pairs,
     ...Array.from({ length: 120 }, (_, i) => [`/extra-${String(i).padStart(3, '0')}`, `Fixture command ${i}`]),
   ] });
-  assert.equal(commandMatches(catalogue, '/').length, 132);
+  assert.equal(commandMatches(catalogue, '/').length, commandFixture().pairs.length + 120);
   assert.equal(commandMatches(catalogue, '/extra-119')[0]?.name, '/extra-119');
   assert.equal(commandMatches(catalogue, '/extra-11').length, 10);
   assert.equal(commandMatches(catalogue, '/', 8).length, 8, 'explicit caller bounds are still honoured');
