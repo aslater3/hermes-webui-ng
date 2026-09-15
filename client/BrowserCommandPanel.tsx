@@ -19,7 +19,7 @@ export function BrowserCommandPanel({ runtime: rt, intent, onClose, setDraft }: 
   const [query, setQuery] = useState(command.kind === 'sessions' ? command.query : '');
   const [copied, setCopied] = useState(false), [error, setError] = useState(''), [busy, setBusy] = useState(false);
   const [response, setResponse] = useState<{ text: string; ordinal: number }>();
-  const [browser] = useState(() => new SessionBrowser(rt.dashboard));
+  const [browser] = useState(() => new SessionBrowser(rt.dashboard, error => rt.gateway.suspend(error)));
   const [index, setIndex] = useState(browser.index);
   const owner = useRef({ native: rt.chat.native, account: rt.accountGeneration, generation: rt.gateway.state.generation });
   const mounted = useRef(true), inFlight = useRef(false);
@@ -78,7 +78,7 @@ export function BrowserCommandPanel({ runtime: rt, intent, onClose, setDraft }: 
       }}>Start new conversation</button>
     </>}
     {command.kind === 'sessions' && <>
-      <h3>Resume a conversation</h3><label className="field">Search saved conversations<input data-initial-focus type="search" aria-label="Search saved conversations" value={query} maxLength={512} onChange={event => setQuery(event.target.value)}/></label>
+      <h3>Resume a conversation</h3><label className="field">Search saved conversations<input data-initial-focus type="search" aria-label="Search saved conversations" value={query} maxLength={512} onChange={event => { browser.clear(); setQuery(event.target.value); }}/></label>
       <p className="small muted">Choose the actual saved conversation; a name is never guessed as a runtime identifier.</p>
       {index.phase === 'loading' && <p role="status">Reading saved conversations…</p>}
       {index.phase === 'error' && <Notice error>Could not read saved conversations. <button type="button" onClick={() => void browser.refresh()}>Retry</button></Notice>}

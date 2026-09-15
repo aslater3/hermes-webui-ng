@@ -115,3 +115,13 @@ test('redraw reads native state without sending another prompt or losing an unre
   await expect(modal(page)).toHaveCount(0); await expect(field(page)).toHaveValue('Unsent draft to keep');
   expect(rpc.count('session.history')).toBeGreaterThan(before); expect(rpc.count('prompt.submit')).toBe(1); expect(rpc.count('slash.exec')).toBe(0);
 });
+
+
+test('revoked session-search admission closes private command views instead of retaining stale search results', async ({ page }) => {
+  const rpc = await fixture(page); await login(page); await send(page, 'Private session search setup'); await idle(page);
+  await page.route('**/__hermes/api/sessions/search?**', route => route.fulfill({ status: 401, contentType: 'application/json', body: '{}' }));
+  await openCommand(page, '/sessions');
+  await modal(page).getByLabel('Search saved conversations', { exact: true }).fill('revoked-admission');
+  await expect(modal(page)).toHaveCount(0);
+  expect(rpc.count('command.dispatch')).toBe(0); expect(rpc.count('slash.exec')).toBe(0); expect(rpc.count('prompt.submit')).toBe(1);
+});
