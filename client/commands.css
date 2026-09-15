@@ -43,3 +43,7 @@
 .browser-command p { font-size: 13px; line-height: 1.6; }
 .browser-command textarea { box-sizing: border-box; width: 100%; min-height: 120px; max-height: calc(var(--app-height, 100dvh) * .45); resize: vertical; padding: 10px; color: var(--text); background: var(--surface); border: 1px solid var(--border); border-radius: 8px; font: inherit; font-size: 16px; }
 .browser-command-actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0; }
+.native-command-tasks { margin-block: 12px; min-width: 0; }
+.native-command-task { padding: 8px 12px; margin-block: 8px; border: 1px solid var(--border); border-radius: 12px; overflow-wrap: anywhere; }
+.native-command-task summary { min-height: 44px; align-content: center; cursor: pointer; }
+.native-command-task button { min-height: 44px; min-width: 44px; }

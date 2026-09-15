@@ -171,6 +171,16 @@ try {
   assert.equal(commandSession.state.messages.filter(message => message.role === 'user').length, 0, 'Undo did not auto-resubmit the recovered input');
   assert.equal(current.session.state.messages.filter(message => message.role === 'user' && message.text === prompt).length, 1, 'The other session remained untouched');
   pass('native-command-confirm-plan-send-undo-readback-and-session-isolation');
+  stage = 'native-command-dedicated-routes';
+  commandSession.commands.dismissResult();
+  await commandSession.commands.execute('/title Command route acceptance');
+  await commandSession.commands.confirm();
+  assert.equal(record(await current.gateway.call('session.title', { session_id: commandSession.state.runtimeId })).title, 'Command route acceptance');
+  await commandSession.commands.execute('/compress'); await commandSession.commands.confirm();
+  assert.equal(commandSession.commands.state.uncertain, false);
+  assert.equal(commandSession.state.messages.filter(message => message.role === 'user').length, 0);
+  assert.equal(current.session.state.messages.filter(message => message.role === 'user' && message.text === prompt).length, 1);
+  pass('native-command-title-and-empty-compression-use-selected-session');
   success = true;
 } catch (error) {
   console.error(error instanceof ClientError ? `${error.kind}: ${error.message}` : error instanceof Error ? error.message : 'Settings acceptance failed');

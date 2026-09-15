@@ -20,14 +20,15 @@ export function useCommands(rt: AppRuntime, draft: string, setDraft: (text: stri
   const [active, setActive] = useState(0), [dismissed, setDismissed] = useState<string>();
   const [visible, setVisible] = useState(() => document.visibilityState === 'visible');
   const trigger = useRef<HTMLButtonElement>(null), list = useRef<HTMLDivElement>(null), id = useId();
-  const eligible = rt.ready && visible && !rt.chat.historical;
+  const running = ['running', 'waiting'].includes(native.state.phase);
+  const eligible = rt.ready && visible && !rt.chat.historical && !rt.chat.busy;
   const prefix = /^\s*\/[a-z0-9_.:-]*$/i.test(draft) ? draft.trim() : undefined;
   const suggesting = eligible && writable && prefix !== undefined && dismissed !== draft && !panel && !state.result && !state.confirmation && !state.recovered && !state.uncertain;
   const matches = commandMatches(state.catalogue, prefix ?? '');
   const enabled = (row: CommandChoice) => row.action !== 'unavailable' && !(row.action === 'native' && state.executionUnavailable);
   const usable = (row: CommandChoice) => {
     if (!enabled(row) || state.busy || state.confirmation || state.uncertain) return false;
-    if (!rt.chat.busy) return writable;
+    if (!running) return writable;
     // Picker/settings actions are intentionally idle-only even when the similarly named CLI command has
     // a busy handler. Context/catalogue are read-only browser surfaces; generic native busy policy comes
     // from the certified Hermes registry compatibility table.
@@ -118,7 +119,7 @@ export function useCommands(rt: AppRuntime, draft: string, setDraft: (text: stri
       {matches.map(row => <button type="button" role="option" key={row.name} id={`${id}-${row.name.slice(1)}`} aria-selected={choice?.name === row.name}
         aria-disabled={!usable(row)} disabled={!usable(row)} tabIndex={-1} className="command-suggestion" onMouseDown={event => event.preventDefault()} onClick={() => complete(row)}>
         <strong>{row.name}</strong><span className="command-suggestion-copy"><span>{row.description || commandHint(row, state.executionUnavailable)}</span>
-          {!usable(row) && <small>{rt.chat.busy && enabled(row) ? 'Not available while Hermes is working' : commandAvailability(row, state.executionUnavailable)}</small>}
+          {!usable(row) && <small>{running && enabled(row) ? 'Not available while Hermes is working' : commandAvailability(row, state.executionUnavailable)}</small>}
         </span>
       </button>)}
     </div>}
@@ -127,7 +128,7 @@ export function useCommands(rt: AppRuntime, draft: string, setDraft: (text: stri
   const overlay = eligible && (panel || state.result || state.confirmation || state.recovered || state.uncertain || argumentCommand) ? createPortal(<Modal title={state.confirmation ? 'Confirm native command' : state.recovered ? 'Recovered command input' : state.uncertain ? 'Check native command outcome' : argumentCommand ? `Command ${argumentCommand}` : state.result ? `Command ${state.result.command}` : panel === 'context' ? 'Usage & context' : panel === 'browser' ? 'Browser command' : 'Hermes commands'} kind="commands" onClose={close}>
     <div className="commands-body">
       {state.confirmation ? <>
-        <p>This command runs in Hermes for the <strong>{native.state.profile || 'default'}</strong> profile. It may change conversation history, files, tools or persistent configuration. Custom commands may run server-side programs.</p>
+        <p>This command runs in Hermes for the <strong>{native.state.profile || 'default'}</strong> profile. It may change conversation history, files, tools or persistent configuration. Custom commands may run server-side programs or incur model charges. /stop also terminates background processes across the whole Hermes process registry; /tools enable or disable changes persistent profile configuration.</p>
         <pre className="command-output" role="region" tabIndex={0} aria-label="Command to confirm">{state.confirmation.text}</pre>
         <p className="small muted">The confirmation expires after two minutes. Cancelling preserves your draft. Hermes still applies its own permissions and approval rules.</p>
         <button type="button" className="secondary" onClick={() => { setPanel(null); rt.run(() => rt.confirmCommand()); }}>Run native command</button>
@@ -162,7 +163,7 @@ export function useCommands(rt: AppRuntime, draft: string, setDraft: (text: stri
         <div className="command-catalogue-list" role="region" aria-label="Matching Hermes commands" tabIndex={0} key={query}>{rows.map(row => <div className="command-catalogue-row" key={row.name}>
           <div><strong>{row.name}</strong><span className="small muted">{row.category}{row.aliases.length ? ` · ${row.aliases.join(', ')}` : ''}</span></div>
           <p>{row.description}</p><small>{commandHint(row, state.executionUnavailable)}</small>
-          <button type="button" className="secondary" disabled={!usable(row)} aria-label={`Use ${row.name}`} onClick={() => action(row)}>{usable(row) ? 'Use command' : rt.chat.busy && enabled(row) ? 'Unavailable while working' : commandAvailability(row, state.executionUnavailable)}</button>
+          <button type="button" className="secondary" disabled={!usable(row)} aria-label={`Use ${row.name}`} onClick={() => action(row)}>{usable(row) ? 'Use command' : running && enabled(row) ? 'Unavailable while working' : commandAvailability(row, state.executionUnavailable)}</button>
         </div>)}</div>
         <p className="small muted">Using a command here preserves your unsent draft. Type // at the start of a message to send literal slash text. Native handlers remain authoritative. Terminal-only commands and unsupported native operations may need a different Hermes interface.</p>
       </>}

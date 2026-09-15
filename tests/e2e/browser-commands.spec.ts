@@ -59,18 +59,19 @@ test('new uses the selected profile and applies an optional title only to the ne
   expect(rpc.count('command.dispatch')).toBe(0); expect(rpc.count('slash.exec')).toBe(0);
 });
 
-test('resume searches native saved conversations and waits for an explicit selected result', async ({ page }) => {
-  const rpc = await fixture(page); await login(page); await send(page, 'Find this exact conversation'); await idle(page);
+test('resume searches native saved conversations and waits for an explicit selected result', async ({ page }, info) => {
+  const uniqueText = `Find this exact conversation ${info.project.name}`;
+  const rpc = await fixture(page); await login(page); await send(page, uniqueText); await idle(page);
   const old = page.url();
   await openCommand(page, '/new'); await modal(page).getByRole('button', { name: 'Start new conversation', exact: true }).click(); await idle(page);
   await send(page, 'Second conversation'); await idle(page);
-  const count = rpc.count('session.resume'); await openCommand(page, '/resume Find this exact');
-  await expect(modal(page).getByLabel('Search saved conversations', { exact: true })).toHaveValue('Find this exact');
+  const count = rpc.count('session.resume'); await openCommand(page, `/resume ${uniqueText}`);
+  await expect(modal(page).getByLabel('Search saved conversations', { exact: true })).toHaveValue(uniqueText);
   const matches = modal(page).getByRole('region', { name: 'Matching saved conversations', exact: true });
-  const row = matches.getByRole('button').filter({ hasText: 'Find this exact conversation' });
+  const row = matches.getByRole('button').filter({ hasText: uniqueText });
   await expect(row).toBeVisible(); expect(rpc.count('session.resume')).toBe(count);
   await row.click(); await idle(page); await expect(page).toHaveURL(old);
-  await expect(page.locator('[data-role="user"]').last()).toContainText('Find this exact conversation');
+  await expect(page.locator('[data-role="user"]').last()).toContainText(uniqueText);
   expect(rpc.count('slash.exec')).toBe(0); expect(rpc.count('command.dispatch')).toBe(0);
 });
 

@@ -1,9 +1,13 @@
+import { CommandTasks } from './command-tasks.js';
 import { commandBusyPolicy, dispatchCommand } from './command-dispatch.js';
 import { readOnlyCommandResult } from './command-result.js';
-import { ClientError } from './protocol.js';
+import { ClientError, type GatewayEvent } from './protocol.js';
 import { commandCatalogue, commandChoice, slashInput, type CommandAction, type CommandCatalogue } from './command-catalog.js';
 
-interface Rpc { call(method: string, params?: Record<string, unknown>): Promise<unknown> }
+interface Rpc {
+  call(method: string, params?: Record<string, unknown>): Promise<unknown>;
+  onEvent?(listener: (event: GatewayEvent) => void): () => void;
+}
 interface Target {
   read(): { ready: boolean; idle: boolean; running?: boolean; runtimeId?: string; profile?: string };
   notify(): void;
@@ -32,8 +36,13 @@ function problem(error: unknown): string {
 
 /** Selected-session native command transactions. Hermes owns effects; the browser never executes shell code. */
 export class NativeCommands {
+  readonly tasks = new CommandTasks(() => this.publish({}));
+  receive(event: GatewayEvent): void {
+    if (this.visible && this.target.read().ready && event.session_id === this.target.read().runtimeId) this.tasks.receive(event);
+  }
   state = initial();
   private epoch = 0;
+  private taskSubscription?: () => void;
   private issued = false;
   private pending?: { text: string; epoch: number; runtimeId: string; profile?: string; expires: number };
   get blocked(): boolean { return this.state.busy || !!this.state.confirmation || !!this.state.uncertain || this.state.action?.kind === 'browser'; }
@@ -53,6 +62,7 @@ export class NativeCommands {
   }
   reset(preserveUncertainty = false): void {
     const uncertain = preserveUncertainty && (this.state.uncertain || (this.state.busy && this.issued));
+    this.taskSubscription?.(); this.taskSubscription = undefined; this.tasks.clear();
     ++this.epoch; this.pending = undefined; this.issued = false; ++this.loadId; this.flight = undefined;
     this.state = { ...initial(), ...(uncertain ? { uncertain: true } : {}) }; this.changed();
   }
@@ -151,10 +161,15 @@ export class NativeCommands {
       const input = slashInput(pending.text);
       if (!input || !this.state.catalogue) throw new ClientError('protocol', 'Command discovery failed. Nothing was executed.');
       const choice = commandChoice(this.state.catalogue, input);
+      this.tasks.prepare(choice.name, choice.category);
+      if (['/bg', '/btw'].includes(choice.name) && !this.taskSubscription)
+        this.taskSubscription = this.rpc.onEvent?.(event => this.receive(event));
       const result = await dispatchCommand(this.rpc, { ...input, name: choice.name, category: choice.category },
         { runtimeId: pending.runtimeId, profile: pending.profile || 'default' }, current, () => { issued = true; this.issued = true; });
       current();
-      if (result.kind === 'send') {
+      if (result.kind === 'task') {
+        this.tasks.finish(result);
+      } else if (result.kind === 'send') {
         if (!this.target.submitGenerated) throw new ClientError('protocol', 'The native prompt hand-off is unavailable. Check native state before retrying.');
         await this.target.refresh?.(); current();
         await this.target.submitGenerated(result.message); current();
@@ -163,14 +178,21 @@ export class NativeCommands {
         if (result.kind === 'output') this.publish({ result: { command: choice.name, output: result.output +
           (result.warning ? `\n\n${result.warning}` : ''), truncated: result.truncated, native: true, pending: result.pending },
           uncertain: result.pending });
-        else this.publish({ recovered: result.kind === 'alias' ? { text: result.target, kind: 'alias' } :
+        else this.publish({ recovered: result.kind === 'alias' ? { text: recoveredAlias(result.target, input.argument), kind: 'alias' } :
           { text: result.message, kind: 'prefill', notice: result.notice } });
       }
     } catch (error) {
       if (pending.epoch === this.epoch) this.publish({ uncertain: issued, error: error instanceof ClientError && error.kind !== 'rpc'
         ? error.message : 'The native command did not complete successfully. Check its effects before retrying; nothing was replayed.' });
       throw error;
-    } finally { if (pending.epoch === this.epoch) { this.issued = false; this.publish({ busy: false }); } }
+    } finally { if (pending.epoch === this.epoch) { this.tasks.finish(); this.issued = false; this.publish({ busy: false }); } }
   }
 
+}
+
+/** Native alias targets omit the slash and original tail on some releases. Preserve both without recursion. */
+export function recoveredAlias(target: string, argument: string): string {
+  const line = `${target.startsWith('/') ? '' : '/'}${target}${argument ? ` ${argument}` : ''}`;
+  if (line.length > 32768 || !slashInput(line)) throw new ClientError('protocol', 'Hermes returned an invalid alias target. Nothing was sent.');
+  return line;
 }

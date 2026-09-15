@@ -15,14 +15,14 @@ function harness() {
     if (method === 'config.get') return { home: '/home-private' };
     if (method === 'profiles.list') return { profiles: [{ name: 'default', path: '/home-private' }] };
     if (method === 'session.activate') return { running: (target as typeof target & { running?: boolean }).running === true, info: { profile_name: target.profile } };
-    if (['slash.exec', 'command.dispatch'].includes(method)) return effect ? effect() : result;
+    if (['slash.exec', 'command.dispatch', 'session.compress'].includes(method)) return effect ? effect() : result;
     throw new Error('Unexpected method');
   } };
   const commands = new NativeCommands(rpc, { read: () => target, notify() {},
     refresh: async () => { refreshes++; }, submitGenerated: async message => { prompts.push(message); } });
   return { commands, calls, prompts, target, rpc, setResult: (value: unknown) => { result = value; },
     setEffect: (value: typeof effect) => { effect = value; }, refreshes: () => refreshes,
-    effects: () => calls.filter(call => ['slash.exec', 'command.dispatch', 'prompt.submit'].includes(call.method)) };
+    effects: () => calls.filter(call => ['slash.exec', 'command.dispatch', 'session.compress', 'prompt.submit'].includes(call.method)) };
 }
 
 test('preparing, cancelling or expiring an advanced command never executes it', async () => {
@@ -36,8 +36,8 @@ test('preparing, cancelling or expiring an advanced command never executes it', 
 });
 
 test('confirmed native commands retain exact arguments, use the right method, and refresh authoritative state', async () => {
-  const h = harness(); await h.commands.execute('/compress here 3'); await h.commands.confirm();
-  assert.deepEqual(h.effects(), [{ method: 'command.dispatch', params: { session_id: 'live-1', name: 'compress', arg: 'here 3' } }]);
+  const h = harness(); h.setResult({ status: 'compressed', removed: 3, summary: { headline: 'Done by Hermes' } }); await h.commands.execute('/compress here 3'); await h.commands.confirm();
+  assert.deepEqual(h.effects(), [{ method: 'session.compress', params: { session_id: 'live-1', profile: 'default', focus_topic: 'here 3' } }]);
   assert.equal(h.commands.state.result?.output, 'Done by Hermes'); assert.equal(h.commands.state.result?.native, true);
   assert.equal(h.refreshes(), 1); await assert.rejects(h.commands.confirm()); assert.equal(h.effects().length, 1);
 });
@@ -78,7 +78,7 @@ test('native failures become an uncertain outcome and never trigger fallback, re
 });
 
 test('pending native operations remain unsettled instead of falsely reporting completion', async () => {
-  const h = harness(); h.setResult({ type: 'exec', status: 'pending', output: 'Still compressing' });
+  const h = harness(); h.setResult({ status: 'pending', message: 'Still compressing' });
   await h.commands.execute('/compress'); await h.commands.confirm();
   assert.equal(h.commands.state.result?.pending, true); assert.equal(h.commands.state.uncertain, true); assert.equal(h.commands.blocked, true);
 });

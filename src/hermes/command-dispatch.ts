@@ -1,3 +1,4 @@
+import { nativeCommandRoute } from './command-native-routes.js';
 import { ClientError, record } from './protocol.js';
 import { commandResult, readOnlyCommandResult, type CommandResult } from './command-result.js';
 
@@ -5,7 +6,7 @@ export interface CommandInvocation { name: string; argument: string; category: s
 export interface CommandOwner { runtimeId: string; profile: string }
 export interface CommandRpc { call(method: string, params?: Record<string, unknown>, timeoutMs?: number): Promise<unknown> }
 
-const liveDispatch = new Set(['/retry', '/queue', '/steer', '/plan', '/goal', '/loop', '/moa', '/undo', '/learn', '/init', '/compress']);
+const liveDispatch = new Set(['/retry', '/queue', '/steer', '/plan', '/goal', '/loop', '/moa', '/undo', '/learn', '/init', '/compress', '/snapshot']);
 
 export type CommandBusyPolicy = 'dispatch' | 'interrupt_then_dispatch' | 'reject';
 const busyDispatch = new Set([
@@ -84,14 +85,15 @@ export async function waitForCommandOwner(rpc: CommandRpc, owner: CommandOwner, 
 /** One deliberate operation. Never try another executor after a failure: it may already have had effects. */
 export async function dispatchCommand(rpc: CommandRpc, command: CommandInvocation, owner: CommandOwner,
   current: () => void, issued: () => void): Promise<CommandResult> {
-  const line = checked(command), readOnly = readOnlyInvocation(command);
+  const line = checked(command), readOnly = readOnlyInvocation(command), route = nativeCommandRoute(command);
   const busyPolicy = commandBusyPolicy(command.name, command.category);
   current();
   if (!readOnly) {
-    await verifyCommandProfile(rpc, owner, current);
+    if (!route?.profileSafe) await verifyCommandProfile(rpc, owner, current);
     // Resolve an existing attached runtime before invoking handlers that have an unsafe missing-session fallback.
     await waitForCommandOwner(rpc, owner, current, busyPolicy !== 'reject');
   }
+  if (route) return route.run(rpc, owner, current, issued);
   const method = nativeCommandMethod(command);
   current(); issued();
   const raw = await rpc.call(method, { session_id: owner.runtimeId,

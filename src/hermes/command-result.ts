@@ -5,7 +5,8 @@ export type CommandResult =
   | { kind: 'output'; output: string; warning?: string; truncated: boolean; pending: boolean }
   | { kind: 'send'; message: string; display?: string; notice?: string }
   | { kind: 'prefill'; message: string; notice?: string }
-  | { kind: 'alias'; target: string };
+  | { kind: 'alias'; target: string }
+  | { kind: 'task'; id: string; event: 'background.complete' | 'btw.complete' };
 export const COMMAND_RESULT_LIMITS = { output: 32768, generatedPrompt: 1048576, draft: 32768, alias: 32768, notice: 2048 } as const;
 
 function text(raw: unknown, max: number): string {
@@ -57,6 +58,6 @@ export function commandResult(raw: unknown): CommandResult {
 export function readOnlyCommandResult(raw: unknown): Extract<CommandResult, { kind: 'output' }> {
   const result = commandResult(raw);
   if (result.kind !== 'output' || result.pending)
-    throw new ClientError('protocol', 'Hermes returned an unexpected result for a read-only command. Nothing was forwarded.');
+    throw new ClientError('protocol', 'Hermes returned effects for a read-only command. Nothing was forwarded.');
   return result;
 }
