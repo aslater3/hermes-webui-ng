@@ -52,12 +52,12 @@ test('first-message catalogue settles even while shell animation-frame notificat
   try {
     await page.evaluate(() => Reflect.get(window, '__commandTestFrames').pause());
     release!();
-    await expect(catalogue(page).getByRole('button', { name: 'Use /undo', exact: true })).toBeDisabled();
+    await expect(catalogue(page).getByRole('button', { name: 'Use /undo', exact: true })).toBeEnabled();
     await expect(catalogue(page).getByRole('button', { name: 'Use /usage', exact: true })).toBeEnabled();
     await expect(catalogue(page)).not.toContainText('Reading Hermes command catalogue…');
     await expect.poll(() => page.evaluate(() => Reflect.get(window, '__commandTestFrames').held())).toBeGreaterThan(0);
     await expect(prompt(page)).toHaveValue('Preserve this first-message draft');
-    expect(calls.filter(method => ['session.create', 'prompt.submit', 'slash.exec'].includes(method))).toEqual([]);
+    expect(calls.filter(method => ['session.create', 'prompt.submit', 'slash.exec', 'command.dispatch'].includes(method))).toEqual([]);
   } finally {
     await page.evaluate(() => Reflect.get(window, '__commandTestFrames').resume());
   }

@@ -38,6 +38,12 @@ test('confirmation, cancellation and keyboard-height recovery preserve the compo
   expect((await new AxeBuilder({ page }).include('.modal-commands').analyze()).violations).toEqual([]);
   await page.screenshot({ path: info.outputPath('native-command-confirmation.png') });
   await page.setViewportSize({ width: page.viewportSize()!.width, height: 360 });
+  for (const name of ['Run native command', 'Cancel command', 'Done']) {
+    const button = confirmation(page).getByRole('button', { name, exact: true });
+    await button.scrollIntoViewIfNeeded();
+    const box = await button.boundingBox();
+    expect(box!.height).toBeGreaterThanOrEqual(44); expect(box!.width).toBeGreaterThanOrEqual(44);
+  }
   const cancel = confirmation(page).getByRole('button', { name: 'Cancel command', exact: true });
   await cancel.scrollIntoViewIfNeeded(); expect((await cancel.boundingBox())!.height).toBeGreaterThanOrEqual(44); await cancel.click();
   await expect(field(page)).toBeEnabled(); await expect(field(page)).toHaveValue('/undo 1');
