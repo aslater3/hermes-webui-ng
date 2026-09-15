@@ -33,7 +33,7 @@ jobs:
       - run: npx playwright test -c playwright.https.config.ts
         env:
           NODE_EXTRA_CA_CERTS: .local/tls/ca/ca.crt
-      - name: Repeat both iPhone WebKit HTTPS scenarios without retries
+      - name: Repeat iPhone WebKit HTTPS and workspace write scenarios without retries
         # Isolate output: Playwright cleans its output directory at the start of a run.
         run: npx playwright test -c playwright.https.config.ts --project=https-iphone-webkit --repeat-each=5 --output=test-results/webkit-reliability
         env:

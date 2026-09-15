@@ -60,3 +60,8 @@
 @media (max-width: 430px) { .workspace-heading, .workspace-controls { padding-inline: 10px; }.workspace-tabs { padding-inline: 8px; }.workspace-list button { padding-inline: 6px; }.workspace-preview-tools { padding-inline: 6px; } }
 
 .workspace.rail-collapsed.with-files:has(.workspace-size-wide) { grid-template-columns: 76px minmax(300px, 1fr) minmax(450px, 48%); }
+
+.workspace-write-tools { display: flex; flex-wrap: wrap; gap: 6px; padding: 6px 12px; }
+.workspace-write-tools button { border: 1px solid var(--border); font-size: 12px; padding-inline: 10px; min-height: 44px; }
+.workspace-item-actions { display: flex; gap: 6px; padding: 0 10px 5px; }
+.workspace-item-actions button { width: auto; font-size: 11px; color: var(--muted); min-height: 44px; }

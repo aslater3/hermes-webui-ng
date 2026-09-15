@@ -37,3 +37,14 @@ test('cached-page restoration opens a fresh scope while caller cancellation stil
   await assert.rejects(scope.fetch('http://example.test/api'));
   assert.equal(signals.length, 2);
 });
+
+test('cancelled dirty navigation permits fresh reads only after a new interaction, not after pagehide', async () => {
+  const target = new EventTarget(); let calls = 0;
+  const scope = new DocumentRequests(target, async () => { calls++; return Response.json({ ok: true }); });
+  target.dispatchEvent(new Event('beforeunload')); await assert.rejects(scope.fetch('http://example.test/api'));
+  target.dispatchEvent(new Event('pointerdown')); await scope.fetch('http://example.test/api');
+  assert.equal(calls, 1);
+  target.dispatchEvent(new Event('beforeunload')); target.dispatchEvent(new Event('pagehide'));
+  target.dispatchEvent(new Event('pointerdown')); await assert.rejects(scope.fetch('http://example.test/api'));
+  scope.dispose(); target.dispatchEvent(new Event('pageshow')); await assert.rejects(scope.fetch('http://example.test/api'));
+});

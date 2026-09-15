@@ -1,9 +1,9 @@
 /** The browser uses the native cookie-scoped LOCAL alias, never a host filesystem path. */
 const PREFIX = '/__hermes/webui-local/';
-export interface Root { id: string; label: string; writable: false }
+export interface Root { id: string; label: string; writable: boolean }
 export interface Entry { name: string; type: 'file' | 'directory' | 'blocked' }
 export interface Tree { path: string; entries: Entry[]; offset: number; nextOffset: number | null; truncated: boolean }
-export interface Preview { path: string; kind: 'text' | 'binary' | 'too-large'; size: number; text: string | null }
+export interface Preview { path: string; kind: 'text' | 'binary' | 'too-large'; size: number; text: string | null; version?: string }
 export interface Repo { path: string; supported: boolean }
 export interface Change { path: string; head: number; work: number; stage: number; staged: boolean; unstaged: boolean }
 export interface GitStatus { repo: string; branch: string | null; head: string | null; files: Change[]; total: number; truncated: boolean }
@@ -50,7 +50,7 @@ export class WorkspaceApi {
   }
   async roots(signal: AbortSignal): Promise<{ roots: Root[]; git: boolean }> {
     const data = await this.get('workspaces', {}, signal);
-    const roots = list(data.roots, 8).map(value => { const row = obj(value); if (row.writable !== false) bad(); return { id: id(row.id), label: str(row.label, 80), writable: false as const }; });
+    const roots = list(data.roots, 8).map(value => { const row = obj(value); return { id: id(row.id), label: str(row.label, 80), writable: bool(row.writable) }; });
     if (new Set(roots.map(row => row.id)).size !== roots.length) bad();
     return { roots, git: bool(data.git) };
   }
@@ -63,7 +63,12 @@ export class WorkspaceApi {
   async preview(root: string, path: string, signal: AbortSignal): Promise<Preview> {
     const data = await this.get('files/read', { root: id(root), path: validPath(path) }, signal);
     if (data.path !== path || !['text', 'binary', 'too-large'].includes(String(data.kind))) bad();
-    return { path, kind: data.kind as Preview['kind'], size: num(data.size), text: data.kind === 'text' ? str(data.text, 262144) : data.text === null ? null : bad() };
+    return { path, kind: data.kind as Preview['kind'], size: num(data.size), ...(data.version === undefined ? {} : { version: /^[a-f0-9]{64}$/.test(str(data.version, 64)) ? data.version as string : bad() }), text: data.kind === 'text' ? str(data.text, 262144) : data.text === null ? null : bad() };
+  }
+  async info(root: string, path: string, signal: AbortSignal) {
+    const data = await this.get('files/info', { root: id(root), path: validPath(path) }, signal);
+    if (data.path !== path || !['file', 'directory'].includes(String(data.kind)) || !/^[a-f0-9]{64}$/.test(str(data.version, 64))) bad();
+    return { path, kind: data.kind as 'file' | 'directory', version: data.version as string, size: num(data.size) };
   }
   async repos(root: string, path: string, signal: AbortSignal) {
     const data = await this.get('git/repos', { root: id(root), path: validPath(path) }, signal);

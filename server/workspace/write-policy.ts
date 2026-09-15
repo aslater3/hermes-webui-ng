@@ -18,7 +18,7 @@ export function writePolicy(env: NodeJS.ProcessEnv, roots: readonly WorkspaceRoo
   return { enabled, roots: names };
 }
 /** Defence in depth in addition to live Hermes admission. No new password/token store. */
-export function assertWriteRequest(headers: IncomingHttpHeaders, publicOrigin: URL): void {
+export function assertWriteRequest(headers: IncomingHttpHeaders, publicOrigin: URL, upload = false): void {
   if (publicOrigin.protocol !== 'https:' || headers.host !== publicOrigin.host || headers.origin !== publicOrigin.origin)
     throw new WorkspaceError('WORKSPACE_WRITE_ORIGIN_REJECTED', 403);
   if (headers['sec-fetch-site'] !== undefined && headers['sec-fetch-site'] !== 'same-origin')
@@ -28,7 +28,8 @@ export function assertWriteRequest(headers: IncomingHttpHeaders, publicOrigin: U
     catch { throw new WorkspaceError('WORKSPACE_WRITE_ORIGIN_REJECTED', 403); }
   }
   if (headers['x-webui-request'] !== 'workspace-write') throw new WorkspaceError('WORKSPACE_WRITE_GUARD_REQUIRED', 403);
-  if (!/^application\/json(?:\s*;\s*charset=utf-8)?$/i.test(headers['content-type'] ?? '') ||
+  const contentType = upload ? /^application\/octet-stream$/i : /^application\/json(?:\s*;\s*charset=utf-8)?$/i;
+  if (!contentType.test(headers['content-type'] ?? '') ||
       headers['content-encoding'] !== undefined && headers['content-encoding'] !== 'identity')
     throw new WorkspaceError('WORKSPACE_WRITE_CONTENT_TYPE', 415);
 }

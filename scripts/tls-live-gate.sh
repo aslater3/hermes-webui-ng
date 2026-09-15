@@ -82,6 +82,28 @@ for mode in dashboard trusted-local; do
   docker stop --time 10 webui-https >/dev/null
   test "$(docker inspect -f '{{.State.ExitCode}}' webui-https)" = 0
   docker rm webui-https >/dev/null
+  # Separate writable deployment, after the original read-only gate has passed.
+  printf 'Original writable fixture.\r\n' > "$project/editable.txt"
+  docker run -d --init --name webui-https --network host --read-only --user "$(id -u):$(id -g)" \
+    --tmpfs /tmp:rw,noexec,nosuid,size=16m --cap-drop ALL --security-opt no-new-privileges:true \
+    -v "$PWD/.local/tls/server:/run/webui-tls:ro" -v "$project:/workspace:rw" \
+    -e WORKSPACE_ROOTS=/workspace -e GIT_ENABLED=true -e WORKSPACE_WRITE_ENABLED=true -e WORKSPACE_WRITABLE_ROOTS=workspace -e GIT_WRITE_ENABLED=false \
+    -e WEBUI_TLS_CERT=/run/webui-tls/server.crt -e WEBUI_TLS_KEY=/run/webui-tls/server.key -e WEBUI_TLS_CA=/run/webui-tls/ca.crt \
+    -e "HERMES_AUTH_MODE=$mode" -e "HERMES_DASHBOARD_SESSION_TOKEN=${HERMES_DASHBOARD_SESSION_TOKEN:-}" \
+    -e HERMES_DASHBOARD_URL=http://127.0.0.1:9117 -e PUBLIC_ORIGIN=https://127.0.0.1:8790 \
+    -e HOST=127.0.0.1 -e PORT=8790 hermes-webui-ng:phase0
+  for attempt in $(seq 1 30); do
+    if curl --cacert "$NODE_EXTRA_CA_CERTS" -fsS https://127.0.0.1:8790/healthz >/dev/null 2>&1; then break; fi
+    sleep 1
+  done
+  curl --cacert "$NODE_EXTRA_CA_CERTS" -fsS https://127.0.0.1:8790/readyz
+  test "$(docker exec webui-https id -u)" != 0
+  PHASE4_TLS_MODE="$mode" node build/tests/integration/workspace-write-live.js
+  test "$(sha256sum "$project/.git/index" "$project/example.ts")" = "$expected"
+  test -z "$(find "$project" -name '.webui-tmp-*' -print -quit)"
+  docker stop --time 10 webui-https >/dev/null
+  test "$(docker inspect -f '{{.State.ExitCode}}' webui-https)" = 0
+  docker rm webui-https >/dev/null
   kill "$backend"; wait "$backend" 2>/dev/null || true; backend=''
 done
 test -z "$(git -C upstream diff --name-only HEAD)"

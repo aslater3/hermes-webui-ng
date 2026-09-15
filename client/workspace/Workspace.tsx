@@ -20,7 +20,9 @@ function Content({ runtime: rt }: { runtime: AppRuntime }) {
   const state = useSyncExternalStore(store.subscribe, store.snapshot);
   const [query, setQuery] = useState(''), [wrap, setWrap] = useState(true), [copyNote, setCopyNote] = useState('');
   const previousFileButton = useRef<HTMLElement | null>(null), backButton = useRef<HTMLButtonElement>(null), restoreFocus = useRef(false);
-  const tabList = useRef<HTMLDivElement>(null);
+  const tabList = useRef<HTMLDivElement>(null), uploadInput = useRef<HTMLInputElement>(null);
+  const writable = state.roots.find(root => root.id === state.root)?.writable === true;
+  useEffect(() => { const refresh = () => { void store.directory(store.state.tree?.path ?? ''); }; window.addEventListener('webui-workspace-changed', refresh); return () => window.removeEventListener('webui-workspace-changed', refresh); }, [store]);
   useEffect(() => { void store.load(); return () => { store.dispose(); requests.dispose(); }; }, [store, requests]);
   useEffect(() => { setQuery(''); setCopyNote(''); }, [state.root, state.tree?.path, state.preview?.path, state.diff?.path]);
   const path = state.tree?.path ?? '', preview = state.preview, diff = state.diff, viewing = !!preview || !!diff;
@@ -46,6 +48,7 @@ function Content({ runtime: rt }: { runtime: AppRuntime }) {
       const next = event.key === 'Home' ? 0 : event.key === 'End' ? tabs.length - 1 : (current + (event.key === 'ArrowRight' ? 1 : -1) + tabs.length) % tabs.length;
       tabs[next]!.focus(); tabs[next]!.click();
     }}>{(['files', 'git', 'changes'] as const).map(tab => <button type="button" key={tab} role="tab" id={`workspace-tab-${tab}`} aria-controls="workspace-view" aria-selected={state.tab === tab} tabIndex={state.tab === tab ? 0 : -1} title={tab === 'changes' && !state.status ? 'Select a repository from Git first' : undefined} disabled={!state.root || tab !== 'files' && !state.git || tab === 'changes' && !state.status && state.tab !== 'changes'} onClick={() => { if (tab === 'files') void store.directory(path); else if (tab === 'git') void store.discover(); else void store.changes(); }}>{tab === 'files' ? <Folder size={16}/> : <GitBranch size={16}/>}<span>{tab[0]!.toUpperCase() + tab.slice(1)}</span></button>)}</div>
+    {writable && <div className="workspace-write-tools"><button type="button" disabled={state.busy} onClick={() => { void rt.workspaceMutations.open('mkdir', state.root, path); }}>New folder</button><button type="button" disabled={state.busy} onClick={() => uploadInput.current?.click()}>Upload file</button><input ref={uploadInput} className="sr-only" type="file" aria-label="Choose upload file" onChange={event => { const file = event.target.files?.[0]; event.target.value = ''; if (file) void rt.workspaceMutations.open('upload', state.root, path, file); }}/></div>}
     {state.busy && <p className="workspace-progress" role="status">Reading project…</p>}
     {state.error && <Notice error>{state.error}<button type="button" onClick={refresh}>Refresh</button></Notice>}
     {!state.busy && !state.error && !state.roots.length && <div className="workspace-empty"><Folder size={32}/><h3>No workspace mounted</h3><p>Add a dedicated project folder with the read-only workspace Compose override. Chat works without it.</p><code>compose.workspace.yaml</code></div>}
@@ -55,7 +58,7 @@ function Content({ runtime: rt }: { runtime: AppRuntime }) {
           <nav aria-label="File breadcrumb" className="workspace-breadcrumb"><button type="button" onClick={() => { void store.directory(''); }}>Root</button>{path.split('/').filter(Boolean).map((part, i, parts) => <button type="button" key={i} onClick={() => { void store.directory(parts.slice(0, i + 1).join('/')); }}>/{part}</button>)}</nav>
           <label className="workspace-filter"><Search size={16}/><input type="search" aria-label="Filter current directory" placeholder="Find in this directory…" value={query} onChange={event => setQuery(event.target.value)}/></label>
           <ul className="workspace-list" aria-label="Files">{options.map(entry => <li key={entry.name}><button type="button" disabled={entry.type === 'blocked'} onClick={() => { remember(); const target = [path, entry.name].filter(Boolean).join('/'); if (entry.type === 'directory') void store.directory(target); else void store.file(target); }}>
-            {entry.type === 'directory' ? <Folder size={18}/> : entry.type === 'blocked' ? <LockKeyhole size={18}/> : <FileText size={18}/>}<span>{entry.name}</span><small>{entry.type === 'blocked' ? 'Unavailable' : entry.type === 'directory' ? 'Folder' : 'File'}</small></button></li>)}</ul>
+            {entry.type === 'directory' ? <Folder size={18}/> : entry.type === 'blocked' ? <LockKeyhole size={18}/> : <FileText size={18}/>}<span>{entry.name}</span><small>{entry.type === 'blocked' ? 'Unavailable' : entry.type === 'directory' ? 'Folder' : 'File'}</small></button>{writable && entry.type !== 'blocked' && <div className="workspace-item-actions"><button type="button" aria-label={`Rename ${entry.name}`} onClick={() => { void rt.workspaceMutations.open('rename', state.root, [path, entry.name].filter(Boolean).join('/')); }}>Rename</button><button type="button" aria-label={`Delete ${entry.name}`} onClick={() => { void rt.workspaceMutations.open('delete', state.root, [path, entry.name].filter(Boolean).join('/')); }}>Delete</button></div>}</li>)}</ul>
           {!state.busy && state.tree && !options.length && <p className="workspace-message">{query ? 'No matching files on this page.' : 'This directory has no visible files.'}</p>}
           {state.tree?.truncated && <Notice>Directory scan limited to 1,000 entries. Browse a smaller project folder.</Notice>}
           {state.tree && <div className="workspace-pagination"><button type="button" disabled={state.busy || !state.tree.offset} onClick={() => { void store.directory(path, Math.max(0, (state.tree?.offset ?? 0) - 200)); }}>Previous files</button><button type="button" disabled={state.busy || state.tree.nextOffset === null} onClick={() => { void store.directory(path, state.tree?.nextOffset ?? 0); }}>Next files</button></div>}
@@ -76,7 +79,7 @@ function Content({ runtime: rt }: { runtime: AppRuntime }) {
       </div>
       {viewing && <section className="workspace-preview" aria-label={diff ? 'Git diff preview' : 'File preview'}>
         <header><button type="button" className="workspace-back" ref={backButton} onClick={back}><ArrowLeft size={16}/>Back</button><strong title={preview?.path ?? diff?.path}>{preview?.path ?? diff?.path}</strong></header>
-        <div className="workspace-preview-tools"><span>{preview ? bytes(preview.size) : diff?.staged ? 'HEAD → Index' : 'Index → Working tree'}</span>
+        <div className="workspace-preview-tools">{writable && preview?.kind === 'text' && preview.version && <button type="button" onClick={() => rt.workspaceMutations.edit(state.root, preview)}>Edit file</button>}<span>{preview ? bytes(preview.size) : diff?.staged ? 'HEAD → Index' : 'Index → Working tree'}</span>
           <IconButton label="Toggle line wrapping" aria-pressed={wrap} onClick={() => setWrap(!wrap)}><WrapText size={17}/></IconButton>
           <IconButton label="Copy file text" disabled={!contents} onClick={() => {
             if (!navigator.clipboard) { setCopyNote('Select the text to copy.'); return; }
@@ -90,7 +93,7 @@ function Content({ runtime: rt }: { runtime: AppRuntime }) {
         {diff?.truncated && <Notice>Diff truncated at the display limit.</Notice>}
       </section>}
     </div>}
-    {!!state.root && <footer className="workspace-footer"><LockKeyhole size={13}/>Read-only project mount{!state.git && <span> · Git disabled by operator</span>}</footer>}
+    {!!state.root && <footer className="workspace-footer"><LockKeyhole size={13}/>{writable ? 'Writes enabled by operator' : 'Read-only project mount'}{!state.git && <span> · Git disabled by operator</span>}</footer>}
   </>;
 }
 export default function Workspace({ runtime: rt, onClose, pane = false }: { runtime: AppRuntime; onClose: () => void; pane?: boolean }) {
