@@ -78,13 +78,18 @@ export function nativeCommandRoute(command: CommandInvocation): NativeCommandRou
       return { profileSafe: false, run: async (rpc, owner, current, issued) => {
         current(); issued();
         const stopped = record(await rpc.call('session.interrupt', { session_id: owner.runtimeId })); current();
-        // The certified baseline returns {interrupted:boolean}; newer Hermes returns a status enum.
-        // Accept either explicit shape, but never infer success from a missing/unknown acknowledgement.
+        // Hermes has shipped three explicit interrupt acknowledgement shapes across supported clients:
+        // status enum, interrupted boolean, and the older {ok:true} acknowledgement. Accept only those
+        // positive/known forms; never infer success from a missing field or ok:false.
         const didInterrupt = stopped.status === 'interrupted' || stopped.interrupted === true;
         const didNotInterrupt = stopped.status === 'not_interrupted' || stopped.interrupted === false;
-        if (!didInterrupt && !didNotInterrupt) invalid('Hermes did not confirm the interrupt request; background processes were not touched.');
+        const accepted = stopped.ok === true;
+        if (!didInterrupt && !didNotInterrupt && !accepted)
+          invalid('Hermes did not confirm the interrupt request; background processes were not touched.');
         const processes = record(await rpc.call('process.stop', {})); current();
-        return output(`${didInterrupt ? 'Interrupt requested for the selected conversation.' : 'No active turn was interrupted.'}\nStopped ${number(processes.killed)} background processes across the Hermes process registry.`);
+        const interruptLine = didInterrupt ? 'Interrupt requested for the selected conversation.' : didNotInterrupt ?
+          'No active turn was interrupted.' : 'Hermes accepted the interrupt request for the selected conversation.';
+        return output(`${interruptLine}\nStopped ${number(processes.killed)} background processes across the Hermes process registry.`);
       } };
     case '/bg': case '/btw':
       if (!arg) invalid(`Use ${name} <${name === '/bg' ? 'prompt' : 'question'}>. Nothing was started.`);
