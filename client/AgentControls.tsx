@@ -46,11 +46,9 @@ export function AgentControls({ runtime: rt }: { runtime: AppRuntime }) {
     <button type="button" className="agent-chip" aria-label={`Profile: ${profile || 'default'}`} title="Start a conversation with another profile" disabled={locked} onClick={() => open('profiles')}><Layers3 size={14}/><span>{profile || 'default'}</span><ChevronDown size={12}/></button>
     <button type="button" className="agent-chip model-chip" aria-label={`Model: ${model || 'not reported'}`} title={model ? `${model}${provider ? ` · ${provider}` : ''}` : 'Choose a configured Hermes model'} disabled={locked} onClick={() => open('models')}><Cpu size={14}/><span>{model || (data.loading ? 'Loading model…' : 'Choose model')}</span><ChevronDown size={12}/></button>
     <button type="button" className="agent-chip" aria-label={`Reasoning: ${effortLabel(effort)}`} title="Reasoning effort for this conversation" disabled={locked} onClick={() => open('reasoning')}><Brain size={14}/><span>{effortLabel(effort)}</span><ChevronDown size={12}/></button>
-    <label className={`yolo-toggle${yolo ? ' yolo-active' : ''}`} title="YOLO mode bypasses routine approval prompts for this conversation. Explicit deny rules and Hermes hardline blocks still apply.">
-      <Zap size={14}/><span>YOLO</span>
-      <input type="checkbox" role="switch" aria-label="YOLO mode for this conversation" checked={yolo} disabled={blocked} onChange={event => rt.run(() => rt.changeYolo(event.target.checked))}/>
-      <span className="yolo-slider" aria-hidden="true"/>
-    </label>
+    <button type="button" role="switch" aria-checked={yolo} aria-label="YOLO mode for this conversation" className={`yolo-toggle${yolo ? ' yolo-active' : ''}`} title="YOLO mode bypasses routine approval prompts for this conversation. Explicit deny rules and Hermes hardline blocks still apply." disabled={blocked} onClick={() => rt.run(() => rt.changeYolo(!yolo))}>
+      <Zap size={14}/><span>YOLO</span><span className="yolo-slider" aria-hidden="true"/>
+    </button>
     {settings.busy && <span className="settings-working" role="status"><LoaderCircle size={14} className="spin"/>Applying…</span>}
     {settings.note && <span className={`settings-note${settings.outcome === 'unknown' || settings.outcome === 'rejected' ? ' settings-warning' : ''}`} role="status">{settings.note}{settings.outcome === 'unknown' && <button type="button" onClick={() => rt.run(() => native.settings.recover())} disabled={locked}>Read current settings</button>}</span>}
     {panel && createPortal(<Modal title={panel === 'models' ? 'Choose model' : panel === 'profiles' ? 'Choose profile' : 'Reasoning effort'} kind="agent" onClose={close}>
