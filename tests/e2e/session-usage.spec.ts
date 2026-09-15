@@ -54,7 +54,7 @@ test('usage/context inspector is accessible on desktop and mobile, preserves dra
   await expect(inspector(page)).toBeFocused();
 });
 
-test('live usage updates do not refetch transcripts or change the saved draft; missing values are explicit', async ({ page }) => {
+test('live usage updates preserve cumulative counters through zero regressions without refetching transcripts', async ({ page }) => {
   const fixture = await usageFixture(page); await login(page); await send(page, 'Live usage example'); await idle(page);
   await inspector(page).click();
   const histories = fixture.calls.filter(method => method === 'session.history').length;
@@ -64,7 +64,7 @@ test('live usage updates do not refetch transcripts or change the saved draft; m
   await expect(dialog(page).getByRole('progressbar')).toHaveAttribute('value', '100');
   expect(fixture.calls.filter(method => method === 'session.history').length).toBe(histories);
   fixture.update({ total: 0, calls: 0, context_max: 0 });
-  await expect(counter(page, 'Total tokens').locator('dd')).toHaveText('0');
+  await expect(counter(page, 'Total tokens').locator('dd')).toHaveText('400');
   await expect(counter(page, 'Input tokens')).toContainText('Not reported');
   await expect(dialog(page).getByRole('progressbar')).toHaveCount(0);
   fixture.update({ total: 'private-invalid-metadata', credits_lines: ['DO_NOT_RENDER'] });
