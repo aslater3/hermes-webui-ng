@@ -8,6 +8,8 @@ test('composer YOLO switch is session scoped and survives authoritative reload',
   const yolo = page.getByRole('switch', { name: 'YOLO mode for this conversation', exact: true });
   await expect(yolo).toBeEnabled();
   await expect(yolo).not.toBeChecked();
+  await expect(yolo).toHaveJSProperty('tagName', 'BUTTON');
+  await expect(page.locator('.yolo-toggle input[type="checkbox"]')).toHaveCount(0);
 
   await yolo.click();
   await expect(yolo).toBeChecked();
