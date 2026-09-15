@@ -176,7 +176,7 @@ export class NativeSession {
     return promise;
   }
   private async reconcile(epoch: number): Promise<void> {
-    for (let attempt = 0; attempt < 8; attemp++) {
+    for (let attempt = 0; attempt < 8; attempt++) {
       this.valid(epoch);
       const runtimeId = this.state.runtimeId;
       if (!runtimeId) throw new ClientError('disconnected', 'No attached native session');
@@ -221,7 +221,7 @@ export class NativeSession {
         // Preserve a newer event while a slower history/activate pair is in flight, and reject
         // Hermes' transient post-turn zero counters within the same attached runtime.
         usage: !this.foreground ? undefined : usageRevision === this.usageRevision ? reconcileUsage(this.state.usage, infoUsage(live.info)) : this.state.usage,
-      totalMessages: history.messages.length,
+        totalMessages: history.messages.length,
         agent: { ...this.state.agent, ...agentMetadata(live.info) },
         agentStarting: live.status === 'starting' || (live.info !== null && typeof live.info === 'object' && !Array.isArray(live.info) && record(live.info).lazy === true),
         streaming: this.foreground ? streaming : '',
