@@ -1,6 +1,7 @@
+import { BROWSER_COMMAND_NAMES, browserCommand } from './browser-commands.js';
 import { ClientError, record } from './protocol.js';
 
-export type CommandAction = 'catalogue' | 'models' | 'profiles' | 'reasoning' | 'context' | 'native' | 'confirm-native' | 'unavailable';
+export type CommandAction = 'catalogue' | 'models' | 'profiles' | 'reasoning' | 'context' | 'native' | 'confirm-native' | 'browser' | 'unavailable';
 export interface CommandChoice {
   name: string;
   description: string;
@@ -16,8 +17,9 @@ const label = (raw: unknown, limit: number): string => typeof raw === 'string' ?
 
 /** A catalogue is discovery, not permission to invoke every registered command. */
 export function commandAction(command: string): CommandAction {
+  if (BROWSER_COMMAND_NAMES.has(command)) return 'browser';
   switch (command) {
-    case '/help': return 'catalogue';
+    case '/help': case '/commands': case '/palette': return 'catalogue';
     case '/model': return 'models';
     case '/profile': return 'profiles';
     case '/reasoning': return 'reasoning';
@@ -97,6 +99,7 @@ export function commandChoice(catalogue: CommandCatalogue, input: { name: string
   const choice = catalogue.choices.find(row => row.name === input.name || row.aliases.includes(input.name));
   if (!choice || choice.action === 'unavailable')
     throw new ClientError('protocol', 'This command is not available in HermesUI NG. Check the command catalogue; nothing was sent to the model.');
+  if (choice.action === 'browser') { browserCommand(choice.name, input.argument); return choice; }
   if (input.argument && ['/usage', '/status', '/history'].includes(choice.name) && choice.action === 'native')
     throw new ClientError('protocol', 'This Hermes native read ignores arguments. No reset or other argument operation was executed.');
   if (input.argument && choice.action !== 'catalogue') return { ...choice, action: 'confirm-native' };
@@ -114,6 +117,7 @@ export function commandHint(choice: CommandChoice, executionUnavailable = false)
   if (choice.action === 'native' && executionUnavailable)
     return 'This Hermes version does not provide the native command method used by this WebUI.';
   switch (choice.action) {
+    case 'browser': return 'Open browser controls for this command; no detached terminal execution.';
     case 'catalogue': return 'Browse the Hermes command catalogue';
     case 'models': return 'Open the session model picker';
     case 'profiles': return 'Choose a profile for a new conversation';

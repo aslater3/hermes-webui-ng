@@ -178,7 +178,7 @@ export class ChatController {
     try {
       if (slashInput(text)) await native.commands.execute(text, 'composer');
       else await native.submit(literalPrompt(text));
-      if (scope === this.scope && this.native === native && this.draft === text && !native.commands.state.confirmation) {
+      if (scope === this.scope && this.native === native && this.draft === text && !native.commands.state.confirmation && native.commands.state.action?.kind !== 'browser') {
         this.draft = ''; this.drafts.delete(draftKey(this.selected));
       }
     } catch (error) { this.fail(error, scope); }

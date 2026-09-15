@@ -36,3 +36,8 @@ PR #18's previous browser failure was independently inspected: 419/420 passed, w
 ## Native startup correction
 
 The first transaction checkpoint (`0d7e962`) passed the existing native settings/read-only assertions, but the new real `/plan` scenario failed before dispatch in run `34903316219`. Its fresh native runtime was still lazily starting: `session.activate` returned `info.lazy=true` without `profile_name`. The new preflight waits for bounded read-only snapshots until the actual idle profile is reported. It still rejects running sessions, changed ownership and missing identity on a settled snapshot; it never retries a command. Three additional unit regressions cover lazy readiness, malformed/foreign identity and a selection change during the wait. The failed run remains failed evidence; the corrected checkpoint needs native and browser CI.
+
+
+## Browser-owned command recovery
+
+The interrupted checkpoint was recovered and its browser failures corrected at `a7f56ee`; all five recovery workflows passed. ADR-CP-002 (`browser-command-parity.md`) adds genuine browser equivalents for new/clear, resume/sessions, prompt, copy, redraw and catalogue shortcuts, rather than running those against a detached worker. Its local 290-unit/34-wire/build/lint verification is separate from pending browser CI. Full parity remains open under the documented command-family and upstream boundaries.

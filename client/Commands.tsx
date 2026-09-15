@@ -1,3 +1,4 @@
+import { BrowserCommandPanel } from './BrowserCommandPanel.js';
 import { useEffect, useLayoutEffect, useId, useRef, useState, useSyncExternalStore, type KeyboardEvent, type RefObject } from 'react';
 import { createPortal } from 'react-dom';
 import { Search, RefreshCw, Terminal } from 'lucide-react';
@@ -12,7 +13,7 @@ export function useCommands(rt: AppRuntime, draft: string, setDraft: (text: stri
   composer: RefObject<HTMLTextAreaElement | null>, writable: boolean) {
   const native = rt.chat.native, commands = native.commands;
   const state = useSyncExternalStore(commands.subscribe, commands.getSnapshot);
-  const [panel, setPanel] = useState<'catalogue' | 'context' | null>(null);
+  const [panel, setPanel] = useState<'catalogue' | 'context' | 'browser' | null>(null);
   const [query, setQuery] = useState('');
   const [argumentCommand, setArgumentCommand] = useState<string>(), [argumentsText, setArgumentsText] = useState('');
   const [active, setActive] = useState(0), [dismissed, setDismissed] = useState<string>();
@@ -39,9 +40,10 @@ export function useCommands(rt: AppRuntime, draft: string, setDraft: (text: stri
     [commands, eligible, suggesting, panel, prefix]);
   const intent = state.action;
   useEffect(() => {
-    if (!intent || !eligible || !['catalogue', 'context'].includes(intent.kind)) return;
+    if (!intent || !eligible || !['catalogue', 'context', 'browser'].includes(intent.kind)) return;
     trigger.current?.focus({ preventScroll: true });
-    setPanel(intent.kind as 'catalogue' | 'context'); setQuery(intent.query); commands.dismissAction();
+    setPanel(intent.kind as 'catalogue' | 'context' | 'browser'); setQuery(intent.query);
+    if (intent.kind !== 'browser') commands.dismissAction();
   }, [commands, intent, eligible]);
   useLayoutEffect(() => {
     const root = list.current, option = root?.querySelector<HTMLElement>('[aria-selected="true"]');
@@ -69,7 +71,7 @@ export function useCommands(rt: AppRuntime, draft: string, setDraft: (text: stri
   };
   const open = () => { trigger.current?.focus({ preventScroll: true }); setQuery(''); setArgumentCommand(undefined); setPanel('catalogue'); };
   const close = () => {
-    setPanel(null); setArgumentCommand(undefined); setArgumentsText(''); commands.cancelConfirmation(); commands.dismissResult();
+    setPanel(null); setArgumentCommand(undefined); setArgumentsText(''); commands.cancelConfirmation(); commands.dismissResult(); commands.dismissAction();
     requestAnimationFrame(() => {
       if (rt.chat.native === native && rt.ready && document.visibilityState === 'visible')
         trigger.current?.focus({ preventScroll: true });
@@ -110,7 +112,7 @@ export function useCommands(rt: AppRuntime, draft: string, setDraft: (text: stri
     </div>}
     <span className="command-completion-hint">Scroll for more · Type to filter · Tab completes · Escape closes</span>
   </div> : null;
-  const overlay = eligible && (panel || state.result || state.confirmation || state.recovered || state.uncertain || argumentCommand) ? createPortal(<Modal title={state.confirmation ? 'Confirm native command' : state.recovered ? 'Recovered command input' : state.uncertain ? 'Check native command outcome' : argumentCommand ? `Command ${argumentCommand}` : state.result ? `Command ${state.result.command}` : panel === 'context' ? 'Usage & context' : 'Hermes commands'} kind="commands" onClose={close}>
+  const overlay = eligible && (panel || state.result || state.confirmation || state.recovered || state.uncertain || argumentCommand) ? createPortal(<Modal title={state.confirmation ? 'Confirm native command' : state.recovered ? 'Recovered command input' : state.uncertain ? 'Check native command outcome' : argumentCommand ? `Command ${argumentCommand}` : state.result ? `Command ${state.result.command}` : panel === 'context' ? 'Usage & context' : panel === 'browser' ? 'Browser command' : 'Hermes commands'} kind="commands" onClose={close}>
     <div className="commands-body">
       {state.confirmation ? <>
         <p>This command runs in Hermes for the <strong>{native.state.profile || 'default'}</strong> profile. It may change conversation history, files, tools or persistent configuration. Custom commands may run server-side programs.</p>
@@ -137,7 +139,7 @@ export function useCommands(rt: AppRuntime, draft: string, setDraft: (text: stri
         <p className="small muted">{state.result.native ? 'Native command result' : 'Read-only native result'} · {native.state.profile || 'default'} profile. Closing clears this readout; it is not added to the conversation.</p>
         <pre className="command-output" role="region" tabIndex={0} aria-label="Native command output">{state.result.output || 'Hermes returned no output.'}</pre>
         {state.result.truncated && <Notice>Output limited to 32,768 characters.</Notice>}
-      </> : panel === 'context' ? <UsageDetails usage={native.state.usage}/> : <>
+      </> : panel === 'browser' && state.action?.kind === 'browser' ? <BrowserCommandPanel key={`${native.state.runtimeId}:${state.action.query}`} runtime={rt} intent={state.action} onClose={close} setDraft={setDraft}/> : panel === 'context' ? <UsageDetails usage={native.state.usage}/> : <>
         <p>Commands advertised by Hermes. Native commands require review; the gateway must be launched for the selected profile before generic execution is permitted.</p>
         <label className="command-search"><Search size={17}/><input data-initial-focus type="search" aria-label="Search Hermes commands" placeholder="Search commands, aliases or descriptions…" value={query} onChange={event => { setQuery(event.target.value); }}/></label>
         <div className="command-catalogue-summary"><span>{native.state.profile || rt.chat.selected?.profile || 'default'} profile</span><button type="button" className="text-button" disabled={state.loading || state.busy} onClick={() => void commands.load(true)}><RefreshCw size={15}/>Refresh commands</button></div>

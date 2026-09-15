@@ -17,7 +17,7 @@ export interface CommandsState {
   error?: string;
   unavailable: boolean;
   executionUnavailable: boolean;
-  action?: { kind: Exclude<CommandAction, 'native' | 'confirm-native' | 'unavailable'>; query: string };
+  action?: { kind: Exclude<CommandAction, 'native' | 'confirm-native' | 'unavailable'>; query: string; text?: string; source?: 'composer' | 'catalogue' };
   result?: { command: string; output: string; truncated: boolean; native?: boolean; pending?: boolean };
   confirmation?: { text: string; expires: number; source: 'composer' | 'catalogue' };
   recovered?: { text: string; kind: 'prefill' | 'alias'; notice?: string };
@@ -36,7 +36,7 @@ export class NativeCommands {
   private epoch = 0;
   private issued = false;
   private pending?: { text: string; epoch: number; runtimeId: string; profile?: string; expires: number };
-  get blocked(): boolean { return this.state.busy || !!this.state.confirmation || !!this.state.uncertain; }
+  get blocked(): boolean { return this.state.busy || !!this.state.confirmation || !!this.state.uncertain || this.state.action?.kind === 'browser'; }
   private visible = true;
   private loadId = 0;
   private listeners = new Set<() => void>();
@@ -109,7 +109,10 @@ export class NativeCommands {
         this.pending = { text, epoch, runtimeId: target.runtimeId, profile: target.profile, expires };
         this.publish({ confirmation: { text, expires, source } }); return;
       }
-      if (choice.action !== 'native') { this.publish({ action: { kind: choice.action, query: input.argument } }); return; }
+      if (choice.action !== 'native') {
+        this.publish({ action: { kind: choice.action, query: choice.action === 'browser' ? `${choice.name}${input.argument ? ` ${input.argument}` : ''}` : input.argument,
+          ...(choice.action === 'browser' ? { text, source } : {}) } }); return;
+      }
       if (this.state.executionUnavailable) throw new ClientError('protocol', 'Native commands are not supported by this Hermes version.');
       const raw = await this.rpc.call('slash.exec', { session_id: target.runtimeId,
         ...(target.profile ? { profile: target.profile } : {}), command: choice.name });

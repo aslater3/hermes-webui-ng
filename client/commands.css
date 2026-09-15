@@ -37,3 +37,9 @@
   .command-completion-hint { display: none; }
   .command-suggestions-heading { min-height: 44px; }
 }
+
+.browser-command { min-width: 0; overflow-wrap: anywhere; }
+.browser-command h3 { margin: 0 0 12px; font-size: 16px; }
+.browser-command p { font-size: 13px; line-height: 1.6; }
+.browser-command textarea { box-sizing: border-box; width: 100%; min-height: 120px; max-height: calc(var(--app-height, 100dvh) * .45); resize: vertical; padding: 10px; color: var(--text); background: var(--surface); border: 1px solid var(--border); border-radius: 8px; font: inherit; font-size: 16px; }
+.browser-command-actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0; }
