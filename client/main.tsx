@@ -6,6 +6,7 @@ import { applyTheme, readTheme } from './preferences.js';
 import { onDocumentExit } from './document-lifecycle.js';
 import './styles.css';
 import './accessibility.css';
+import './thinking-indicator.css';
 applyTheme(readTheme());
 const runtime = new AppRuntime(location.origin);
 const removeExit = onDocumentExit(window, () => runtime.dispose());
