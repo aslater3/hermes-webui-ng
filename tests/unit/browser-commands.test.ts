@@ -74,14 +74,14 @@ test('branch browser action uses the selected native session RPC and opens only 
   Object.defineProperty(globalThis, 'history', { configurable: true, value: { pushState: (_a: unknown, _b: string, url: string) => pushed.push(url) } });
   try {
     const calls: { method: string; params: Record<string, unknown> }[] = [], opened: unknown[] = [];
-    const native = { state: { phase: 'idle', runtimeId: 'live-parent', profile: 'work' }, commands: { blocked: false } } as any;
+    const native = { state: { phase: 'idle', runtimeId: 'live-parent', profile: 'work' }, commands: { blocked: false } } as unknown as Parameters<typeof branchCommandConversation>[1];
     const rt = {
       ready: true, accountGeneration: 4,
       gateway: { state: { generation: 9 }, call: async (method: string, params: Record<string, unknown>) => {
         calls.push({ method, params }); return { session_id: 'live-child', stored_session_id: 'stored-child', title: 'Experiment' };
       } },
       chat: { busy: false, native, error: undefined, open: async (ref: unknown) => { opened.push(ref); } }, notify: () => {},
-    } as any;
+    } as unknown as Parameters<typeof branchCommandConversation>[0];
     await branchCommandConversation(rt, native, 'Experiment');
     assert.deepEqual(calls, [{ method: 'session.branch', params: { session_id: 'live-parent', profile: 'work', name: 'Experiment' } }]);
     assert.deepEqual(opened, [{ id: 'stored-child', profile: 'work' }]); assert.equal(pushed.length, 1); assert.match(pushed[0]!, /stored-child/);
