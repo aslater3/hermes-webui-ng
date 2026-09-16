@@ -80,6 +80,8 @@
   font-weight: 650;
   box-shadow: 0 5px 22px color-mix(in srgb, var(--warning) 12%, transparent);
 }
+/* Mid-turn steering is an active composer action, so keep the desktop hit target at the same 44px minimum used on touch layouts. */
+.composer-dock .steer-button { width: 44px; height: 44px; }
 @media (max-width: 430px) {
   .agent-card.agent-approval[data-status="pending"] { padding: 16px; }
   .agent-card.agent-approval[data-status="pending"] .agent-input-controls button { flex: 1 1 120px; }

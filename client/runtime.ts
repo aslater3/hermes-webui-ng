@@ -10,6 +10,8 @@ import { WsAuthClient } from '../src/hermes/ws-auth.js';
 import { ConnectionStore } from '../src/hermes/connection-store.js';
 import { DiagnosticsRing } from '../src/hermes/diagnostics.js';
 import { ChatController, draftKey, navigation, navigationRef } from '../src/hermes/chat-controller.js';
+import { slashInput } from '../src/hermes/command-catalog.js';
+import { steerSession } from '../src/hermes/session-steer.js';
 import { ClientError } from '../src/hermes/protocol.js';
 import type { SessionRef } from '../src/hermes/session-rest.js';
 
@@ -27,6 +29,9 @@ export class AppRuntime {
   readonly workspaceMutations: WorkspaceMutations;
   accountGeneration = 0;
   error = '';
+  steering = false;
+  steerStatus = '';
+  steerRuntimeId?: string;
   private revision = 0;
   private frame = 0;
   private started = false;
@@ -83,13 +88,16 @@ export class AppRuntime {
     this.cleanup.push(this.attention.subscribe(this.notify), this.chat.subscribe(() => {
       this.chat.native.commands.setVisible(document.visibilityState === 'visible');
       const state = this.chat.native.state;
+      if (this.steerRuntimeId && (state.runtimeId !== this.steerRuntimeId || state.phase !== 'running')) {
+        this.steering = false; this.steerStatus = ''; this.steerRuntimeId = undefined;
+      }
       if (state.runtimeId && state.storedId) this.attention.bind(state.runtimeId, { id: state.storedId, profile: state.profile });
       this.attention.select(state.runtimeId); this.notify();
     }), this.gateway.onState(() => { this.attention.setEnabled(this.ready); this.notify(); }));
     this.cleanup.push(this.connection.onIdentityBoundary(() => {
       this.workspaceMutations.clear();
       ++this.accountGeneration; this.openedLocation = false; this.gateway.requests.clear();
-      this.attention.clear(); this.chat.clear(); this.error = ''; history.replaceState(null, '', location.pathname);
+      this.attention.clear(); this.chat.clear(); this.error = ''; this.steering = false; this.steerStatus = ''; this.steerRuntimeId = undefined; history.replaceState(null, '', location.pathname);
       document.querySelectorAll<HTMLInputElement>('input[type="password"]').forEach(input => { input.value = ''; });
       this.notify();
     }));
@@ -152,6 +160,29 @@ export class AppRuntime {
       if (account !== this.accountGeneration || native !== this.chat.native) return;
       this.chat.setDraft(text);
       if (this.chat.error) return;
+    }
+    const native = this.chat.native, text = this.chat.draft, runtimeId = native.state.runtimeId, account = this.accountGeneration;
+    if (native.state.phase === 'running') {
+      if (!runtimeId || this.steering) return;
+      if (slashInput(text)) {
+        await native.commands.execute(text, 'composer');
+        if (account === this.accountGeneration && native === this.chat.native && this.chat.draft === text &&
+            !native.commands.state.confirmation && native.commands.state.action?.kind !== 'browser') {
+          this.chat.setDraft('');
+        }
+        return;
+      }
+      this.steering = true; this.steerStatus = ''; this.steerRuntimeId = runtimeId; this.notify();
+      try {
+        await steerSession(this.gateway, runtimeId, text);
+        if (account === this.accountGeneration && native === this.chat.native && native.state.runtimeId === runtimeId && this.chat.draft === text) {
+          this.chat.setDraft(''); this.steerStatus = 'Steered into current turn';
+        }
+      } finally {
+        if (this.steerRuntimeId === runtimeId) this.steering = false;
+        this.notify();
+      }
+      return;
     }
     await this.chat.send();
   });
