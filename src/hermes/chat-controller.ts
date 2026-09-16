@@ -4,7 +4,7 @@ import type { GatewayClient } from './gateway-client.js';
 import { NativeSession } from './native-session.js';
 import { SessionBrowser } from './session-browser.js';
 import { ClientError } from './protocol.js';
-import { profileName, sessionId, type SessionRef } from './session-rest.js';
+import { profileName, sessionId, type SessionRef, type SessionRow } from './session-rest.js';
 
 type Gateway = Pick<GatewayClient, 'call' | 'onEvent' | 'onState' | 'state'>;
 type Reader = Pick<DashboardClient, 'sessions' | 'searchSessions' | 'sessionMessages'>;
@@ -29,6 +29,8 @@ export class ChatController {
   draft = '';
   busy = false;
   historical = false;
+  /** Saved REST history is available, but this selection has no safe native write attachment. */
+  readOnly = false;
   error?: ClientError;
   private scope = 0;
   private enabled = false;
@@ -93,6 +95,39 @@ export class ChatController {
   private missingRestHistory(): boolean {
     return this.browser.history.error instanceof HttpError && this.browser.history.error.status === 404;
   }
+  private listedRow(ref: SessionRef): SessionRow | undefined {
+    const rows = this.browser.index.rows.filter(row => row.id === ref.id && (!ref.profile || row.profile === ref.profile));
+    return rows.length === 1 ? rows[0] : undefined;
+  }
+  private static restOnly(row?: SessionRow): boolean {
+    // API-server rows are readable through Dashboard REST, but an ended row with no session_key
+    // has no durable TUI-Gateway resume identity. Other sources keep the established resume path.
+    return !!row && row.source.toLowerCase() === 'api_server' && row.endedAt !== undefined && !row.sessionKey;
+  }
+  private static missingNative(error: unknown): error is ClientError {
+    return error instanceof ClientError && error.rpcCode === 4007;
+  }
+  private replaceNativeWithEmpty(): void {
+    this.native.dispose();
+    this.native = this.newNative();
+    this.native.setForeground(true);
+  }
+  private enterReadOnlyHistory(): void {
+    // NativeSession records the failed RPC on its own state. Replace that failed projection so the
+    // raw 4007 cannot leak through Conversation after we deliberately fall back to REST history.
+    this.replaceNativeWithEmpty();
+    this.historical = true; this.readOnly = true; this.error = undefined; this.publish();
+  }
+  private settleMissingActive(): void {
+    if (this.error?.rpcCode !== 4007) return;
+    if (this.browser.history.phase === 'ready' && this.browser.history.page) {
+      this.enterReadOnlyHistory();
+      return;
+    }
+    this.replaceNativeWithEmpty();
+    this.error = new ClientError('protocol', 'This run has finished. The active-session list was refreshed.');
+    this.publish();
+  }
   setEnabled(enabled: boolean): void {
     const was = this.enabled; this.enabled = enabled;
     if (enabled && !was && this.browser.index.phase === 'empty') void this.browser.list();
@@ -121,7 +156,7 @@ export class ChatController {
     this.native = reuse ?? this.newNative(); this.native.setForeground(true);
     this.browser.clearHistory(); this.selected = ref;
     this.draft = this.drafts.get(draftKey(ref)) ?? '';
-    this.historical = false; this.busy = false; this.error = undefined;
+    this.historical = false; this.readOnly = false; this.busy = false; this.error = undefined;
     this.publish(); return this.scope;
   }
   async create(profile?: string): Promise<void> {
@@ -133,16 +168,28 @@ export class ChatController {
   }
   async open(ref: SessionRef): Promise<void> {
     if (!this.enabled) return;
+    const listed = this.listedRow(ref);
     const scope = this.reset(ref); this.busy = true; this.publish();
     try {
       const page = await this.browser.open(ref);
       if (scope !== this.scope) return;
       if (page) this.selected = { id:page.id, profile:page.profile };
       else if (!this.missingRestHistory()) return;
+      if (page && listed?.id === page.id && ChatController.restOnly(listed)) {
+        this.enterReadOnlyHistory();
+        return;
+      }
       if (this.ready()) {
         const target = page ? { id: page.id, profile: page.profile } : ref;
-        if (this.native.state.runtimeId && this.native.state.storedId === target.id) await this.native.refresh();
-        else await this.native.resume(target.id, target.profile);
+        try {
+          if (this.native.state.runtimeId && this.native.state.storedId === target.id) await this.native.refresh();
+          else await this.native.resume(target.id, target.profile);
+        } catch (error) {
+          // A single saved conversation disappearing from the live Gateway is not a transport outage.
+          // If REST has the transcript, retain it as read-only and suppress the raw RPC code.
+          if (page && ChatController.missingNative(error)) { this.enterReadOnlyHistory(); return; }
+          throw error;
+        }
         // Hermes may expose a newly-created native session before Dashboard REST has
         // materialised its first transcript. A successful native resume is authoritative.
         if (!page) this.browser.clearHistory();
@@ -150,18 +197,35 @@ export class ChatController {
     } catch (error) { this.fail(error, scope); }
     finally { if (scope === this.scope) { this.busy = false; this.publish(); } }
   }
-  /** Active-list rows have no profile. Resolve the runtime through Hermes instead of guessing one. */
-  async openLive(runtimeId: string): Promise<void> {
+  /**
+   * Active rows carry a process-local runtime id plus Hermes' durable session_key. Prefer the
+   * durable key because the runtime can be reaped between active_list rendering and a click.
+   */
+  async openLive(runtimeId: string, storedId?: string, ownerProfile?: string): Promise<void> {
     if (!this.ready() || this.busy) return;
-    sessionId(runtimeId);
+    runtimeId = sessionId(runtimeId); storedId = storedId ? sessionId(storedId) : undefined;
+    ownerProfile = profileName(ownerProfile);
     const known = [this.native, ...this.retained.values()].find(view => view.state.runtimeId === runtimeId);
     if (known?.state.storedId) return this.open({ id: known.state.storedId, profile: known.state.profile });
+    if (storedId) {
+      await this.open({ id: storedId, profile: ownerProfile });
+      this.settleMissingActive();
+      return;
+    }
+    // Compatibility path for an older/partial active_list payload with no durable key.
     const scope = this.reset(); this.busy = true; this.publish();
-    try { await this.native.resume(runtimeId); } catch (error) { this.fail(error, scope); }
+    try { await this.native.resume(runtimeId); }
+    catch (error) {
+      if (ChatController.missingNative(error) && scope === this.scope) {
+        this.replaceNativeWithEmpty();
+        this.error = new ClientError('protocol', 'This run has finished. The active-session list was refreshed.');
+        this.publish();
+      } else this.fail(error, scope);
+    }
     finally { if (scope === this.scope) { this.busy = false; this.publish(); } }
   }
   async attachIfReady(): Promise<void> {
-    if (!this.ready() || this.busy || !this.selected || this.native.state.storedId ||
+    if (!this.ready() || this.busy || this.readOnly || !this.selected || this.native.state.storedId ||
       (this.browser.history.phase !== 'ready' && !this.missingRestHistory())) return;
     const scope = this.scope; this.busy = true; this.publish();
     try {
@@ -199,7 +263,15 @@ export class ChatController {
   }
   async latest(): Promise<void> {
     if (this.busy) return;
-    const scope = this.scope; this.error = undefined; this.historical = false;
+    const scope = this.scope; this.error = undefined;
+    if (this.readOnly) {
+      if (!this.selected || !this.enabled) return;
+      this.busy = true; this.historical = true; this.publish();
+      try { await this.browser.open(this.selected, 0); }
+      finally { if (scope === this.scope) { this.busy = false; this.publish(); } }
+      return;
+    }
+    this.historical = false;
     if (this.native.state.runtimeId && this.ready()) {
       this.browser.clearHistory();
       try { await this.native.refresh(); } catch (error) { this.fail(error, scope); }
@@ -215,7 +287,7 @@ export class ChatController {
   clear(): void {
     ++this.scope; clearTimeout(this.refreshTimer); this.enabled = false;
     this.native.dispose(); this.retained.forEach(view => view.dispose()); this.retained.clear(); this.native = this.newNative();
-    this.selected = undefined; this.draft = ''; this.drafts.clear(); this.busy = false; this.historical = false; this.error = undefined;
+    this.selected = undefined; this.draft = ''; this.drafts.clear(); this.busy = false; this.historical = false; this.readOnly = false; this.error = undefined;
     this.browser.clear(); this.publish();
   }
   dispose(): void { this.clear(); this.disposed = true; this.native.dispose(); this.browser.dispose(); this.unlisten(); this.listeners.clear(); }

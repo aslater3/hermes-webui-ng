@@ -21,6 +21,22 @@ test('session list uses official recent pagination and encoded profile with no d
   const log = JSON.stringify(diagnostics.snapshot());
   for (const value of ['private title', 'private profile', 'stored']) assert.ok(!log.includes(value));
 });
+test('session rows retain optional lifecycle and durable resume metadata without requiring it', () => {
+  const page = sessionPage({ sessions: [
+    { id: 'api-ended', profile: 'owner', source: 'api_server', ended_at: 1712345678.25,
+      end_reason: 'ws_orphan_reap', session_key: null, message_count: 415 },
+    { id: 'stored', profile: 'owner', source: 'tui', ended_at: null, session_key: 'durable:key', message_count: 2 },
+    { id: 'legacy', profile: 'owner', source: 'tui', message_count: 1 },
+  ], total: 3, offset: 0, limit: 20 });
+  assert.equal(page.rows[0]?.endedAt, 1712345678.25);
+  assert.equal(page.rows[0]?.endReason, 'ws_orphan_reap');
+  assert.equal(page.rows[0]?.sessionKey, undefined);
+  assert.equal(page.rows[1]?.endedAt, undefined);
+  assert.equal(page.rows[1]?.sessionKey, 'durable:key');
+  assert.equal(page.rows[2]?.endedAt, undefined);
+  assert.equal(page.rows[2]?.endReason, undefined);
+  assert.equal(page.rows[2]?.sessionKey, undefined);
+});
 test('search and history use supported routes and canonical upstream session/profile', async () => {
   const client = new DashboardClient('http://localhost:8787', async (input) => {
     const url = new URL(String(input));

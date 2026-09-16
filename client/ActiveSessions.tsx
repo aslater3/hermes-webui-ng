@@ -15,7 +15,7 @@ export function ActiveSessions({ runtime: rt, onChoose }: { runtime: AppRuntime;
       const needsInput = item.status === 'waiting';
       const working = ['working', 'starting'].includes(item.status);
       const newActivity = !!item.review && !needsInput && !working && item.status !== 'unknown';
-      return <li key={item.runtimeId}><button type="button" className="active-session-row" data-attention={needsInput ? 'required' : newActivity ? 'new' : undefined} aria-label={`Open active session: ${item.title || 'Native conversation'}`} disabled={!rt.ready || rt.chat.busy} onClick={() => { rt.openLive(item.runtimeId); onChoose(); }}>
+      return <li key={item.runtimeId}><button type="button" className="active-session-row" data-attention={needsInput ? 'required' : newActivity ? 'new' : undefined} aria-label={`Open active session: ${item.title || 'Native conversation'}`} disabled={!rt.ready || rt.chat.busy} onClick={() => { rt.openLive(item.runtimeId, item.storedId, item.owner?.profile); onChoose(); }}>
         {needsInput ? <CircleAlert size={16} aria-hidden="true"/> : working ? <LoaderCircle size={16} aria-hidden="true"/> : <Check size={16} aria-hidden="true"/>}
         <span><strong>{item.title || 'Native conversation'}</strong><small>{needsInput ? 'Needs your input' : item.status === 'working' ? 'Working…' : item.status === 'starting' ? 'Starting…' : item.status === 'unknown' ? 'Reconnect to check status' : 'New activity'}</small></span>
       </button></li>;

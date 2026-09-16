@@ -130,10 +130,17 @@ export class AppRuntime {
     try { history.pushState(null, '', navigation(ref)); this.run(() => this.chat.open(ref)); }
     catch { this.error = 'This conversation link is invalid.'; this.notify(); }
   };
-  openLive = (runtimeId: string) => {
+  openLive = (runtimeId: string, storedId?: string, profile?: string) => {
     if (!this.ready || this.chat.busy || this.workspaceMutations.state.phase !== 'closed') return;
     history.pushState(null, '', location.pathname);
-    this.run(() => this.chat.openLive(runtimeId));
+    this.run(async () => {
+      // Reconcile immediately before using an active-row handle. If the runtime vanished after render,
+      // the clicked row's durable key remains the fallback; never depend on the stale process-local id.
+      await this.attention.refresh();
+      const fresh = this.attention.items.find(item => item.runtimeId === runtimeId);
+      try { await this.chat.openLive(runtimeId, fresh?.storedId ?? storedId, fresh?.owner?.profile ?? profile); }
+      finally { await this.attention.refresh(); }
+    });
   };
   setDraft = (value: string) => { this.chat.setDraft(value); this.notify(); };
   send = () => this.run(async () => {

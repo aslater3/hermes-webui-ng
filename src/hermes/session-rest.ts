@@ -4,6 +4,8 @@ import { ClientError, record, textField } from './protocol.js';
 export interface SessionRef { id: string; profile?: string }
 export interface SessionRow extends SessionRef {
   title: string; preview: string; source: string; lastActive: number; messageCount: number;
+  /** Optional Hermes state metadata used only to decide whether native resume is appropriate. */
+  sessionKey?: string; endedAt?: number; endReason?: string;
 }
 export interface SessionPage { rows: SessionRow[]; total: number; offset: number; limit: number }
 export type HistoryMessage = DisplayMessage;
@@ -39,15 +41,25 @@ export function sessionQuery(options: SessionQuery = {}): URLSearchParams {
   return query;
 }
 function optionalText(value: unknown, max = 256): string { return typeof value === 'string' ? value.slice(0, max) : ''; }
+function optionalTime(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : undefined;
+}
+function optionalSessionId(value: unknown): string | undefined {
+  if (value === undefined || value === null || value === '') return undefined;
+  if (typeof value !== 'string') throw new ClientError('protocol', 'Invalid Hermes session key');
+  return sessionId(value);
+}
 function row(input: unknown, profile?: string, search = false): SessionRow {
   const data = record(input);
   const id = sessionId(textField(data, search && typeof data.session_id === 'string' ? 'session_id' : 'id'));
+  const endReason = optionalText(data.end_reason, 80) || undefined;
   return { id, profile: profileName(typeof data.profile === 'string' ? data.profile : profile),
     title: optionalText(data.title), preview: optionalText(search ? data.snippet : data.preview, 512),
     source: optionalText(data.source, 80),
     lastActive: typeof data.last_active === 'number' && Number.isFinite(data.last_active) ? data.last_active :
       typeof data.started_at === 'number' && Number.isFinite(data.started_at) ? data.started_at : 0,
-    messageCount: typeof data.message_count === 'number' && Number.isSafeInteger(data.message_count) && data.message_count >= 0 ? data.message_count : 0 };
+    messageCount: typeof data.message_count === 'number' && Number.isSafeInteger(data.message_count) && data.message_count >= 0 ? data.message_count : 0,
+    sessionKey: optionalSessionId(data.session_key), endedAt: optionalTime(data.ended_at), endReason };
 }
 export function sessionPage(input: unknown, profile?: string): SessionPage {
   const data = record(input);
