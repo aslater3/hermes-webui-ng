@@ -42,6 +42,17 @@ test('session browsing resolves canonical owning profile and never creates on re
   const h=fixture(); await h.chat.open({id:'existing'});
   assert.equal(h.resumed(),'existing'); assert.equal(h.chat.selected?.profile,'owner'); assert.equal(h.creates(),0); h.chat.dispose();
 });
+test('ended API-server history without a durable session key stays read-only and never resumes',async()=>{
+  const h=fixture(); await h.chat.browser.list();
+  const row = { id:'api-ended', profile:'owner', title:'Ended API conversation', preview:'saved reply', source:'api_server',
+    lastActive:1712345678, messageCount:415, endedAt:1712345680.5, endReason:'ws_orphan_reap' };
+  h.chat.browser.index = { phase:'ready', rows:[row], query:'', offset:0, total:1, hasNext:false };
+  await h.chat.open(row);
+  assert.equal(h.resumed(),''); assert.equal(h.chat.browser.history.phase,'ready');
+  assert.equal(h.chat.historical,true); assert.equal(h.chat.readOnly,true);
+  await h.chat.latest(); assert.equal(h.resumed(),''); assert.equal(h.chat.historical,true); assert.equal(h.chat.readOnly,true);
+  h.chat.dispose();
+});
 test('an empty native session can resume before Dashboard REST materialises its first transcript',async()=>{
   const h=fixture({missingHistory:true}); await h.chat.open({id:'empty-session',profile:'owner'});
   assert.equal(h.resumed(),'empty-session'); assert.equal(h.chat.selected?.id,'empty-session');
