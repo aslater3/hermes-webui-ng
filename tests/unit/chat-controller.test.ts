@@ -3,30 +3,35 @@ import assert from 'node:assert/strict';
 import { ChatController, navigation, navigationRef } from '../../src/hermes/chat-controller.js';
 import { HttpError } from '../../src/hermes/dashboard-client.js';
 import type { ConnectionState } from '../../src/hermes/gateway-client.js';
-import type { GatewayEvent } from '../../src/hermes/protocol.js';
-import type { HistoryPage } from '../../src/hermes/session-rest.js';
-function fixture(options: { missingHistory?: boolean } = {}) {
+import { ClientError, type GatewayEvent } from '../../src/hermes/protocol.js';
+import type { HistoryPage, SessionRow } from '../../src/hermes/session-rest.js';
+function fixture(options: { missingHistory?: boolean; resumeError?: ClientError } = {}) {
   const state: ConnectionState = {phase:'ready', generation:1, attempt:0};
   const events = new Set<(event:GatewayEvent) => void>();
-  let prompts=0, creates=0, resumed='';
+  let prompts=0, creates=0;
+  const resumes:string[]=[];
   let resolvePrompt: ((value:unknown) => void) | undefined;
   const gateway = { state, onState: (cb:(state:ConnectionState)=>void) => { cb(state); return () => {}; },
     onEvent: (cb:(event:GatewayEvent)=>void) => { events.add(cb); return () => {events.delete(cb);}; },
     call: async (method:string, params:Record<string,unknown>={}) => {
       if(method==='session.create') { creates++; return {session_id:'live',stored_session_id:'draft',info:{profile_name:'owner'}}; }
-      if(method==='session.resume') { resumed=String(params.session_id); return {session_id:'live',session_key:params.session_id,info:{profile_name:'owner'}}; }
+      if(method==='session.resume') {
+        const id=String(params.session_id); resumes.push(id);
+        if(options.resumeError) throw options.resumeError;
+        return {session_id:'live',session_key:id,info:{profile_name:'owner'}};
+      }
       if(method==='session.history') return {messages:[]};
       if(method==='session.activate') return {running:false};
       if(method==='prompt.submit') { prompts++; return new Promise((r) => {resolvePrompt=r;}); }
       return {};
     } };
   const reader = {sessions:async()=>({rows:[],total:0,limit:20,offset:0}),searchSessions:async()=>[],
-    sessionMessages:async (ref:{id:string}):Promise<HistoryPage>=>{
+    sessionMessages:async (ref:{id:string;profile?:string}):Promise<HistoryPage>=>{
       if (options.missingHistory) throw new HttpError(404);
-      return {id:ref.id,profile:'owner',messages:[],returned:0,offset:0,limit:100};
+      return {id:ref.id,profile:ref.profile ?? 'owner',messages:[],returned:0,offset:0,limit:100};
     }};
   const chat = new ChatController(reader,gateway); chat.setEnabled(true);
-  return {chat, gateway, prompts:()=>prompts, creates:()=>creates, resumed:()=>resumed, finish:()=>resolvePrompt?.({})};
+  return {chat, gateway, prompts:()=>prompts, creates:()=>creates, resumed:()=>resumes.at(-1) ?? '', resumes:()=>[...resumes], finish:()=>resolvePrompt?.({})};
 }
 test('navigation encodes the owning profile and rejects path-shaped identifiers',()=>{
   const ref={id:'stored-id',profile:'owner & one'};
@@ -41,6 +46,33 @@ test('double send remains one RPC; late acknowledgement cannot clear another con
 test('session browsing resolves canonical owning profile and never creates on resume',async()=>{
   const h=fixture(); await h.chat.open({id:'existing'});
   assert.equal(h.resumed(),'existing'); assert.equal(h.chat.selected?.profile,'owner'); assert.equal(h.creates(),0); h.chat.dispose();
+});
+test('ended API-server history without a durable session key stays read-only and never resumes',async()=>{
+  const h=fixture(); await h.chat.browser.list();
+  const row:SessionRow={id:'api-ended',profile:'owner',title:'Ended API conversation',preview:'saved reply',source:'api_server',
+    lastActive:1712345678,messageCount:415,endedAt:1712345680.5,endReason:'ws_orphan_reap'};
+  h.chat.browser.index={phase:'ready',rows:[row],query:'',offset:0,total:1,hasNext:false};
+  await h.chat.open(row);
+  assert.deepEqual(h.resumes(),[]); assert.equal(h.chat.browser.history.phase,'ready');
+  assert.equal(h.chat.historical,true); assert.equal(h.chat.readOnly,true); assert.equal(h.chat.error,undefined);
+  assert.equal(h.chat.native.state.phase,'empty'); assert.equal(h.chat.native.state.error,undefined);
+  h.chat.setDraft('must not send'); await h.chat.send(); assert.equal(h.prompts(),0);
+  await h.chat.latest(); assert.deepEqual(h.resumes(),[]); assert.equal(h.chat.readOnly,true); assert.equal(h.chat.historical,true);
+  h.chat.dispose();
+});
+test('active-session opening prefers the durable key over a stale process runtime id',async()=>{
+  const h=fixture(); await h.chat.openLive('stale-runtime','durable-saved','owner');
+  assert.deepEqual(h.resumes(),['durable-saved']); assert.ok(!h.resumes().includes('stale-runtime'));
+  assert.deepEqual(h.chat.selected,{id:'durable-saved',profile:'owner'}); assert.equal(h.chat.readOnly,false);
+  assert.equal(h.chat.error,undefined); h.chat.dispose();
+});
+test('RPC 4007 while opening an active row falls back to saved REST history without exposing the raw code',async()=>{
+  const h=fixture({resumeError:new ClientError('rpc','Hermes RPC rejected (4007)',4007)});
+  await h.chat.openLive('stale-runtime','durable-saved','owner');
+  assert.deepEqual(h.resumes(),['durable-saved']); assert.equal(h.chat.browser.history.phase,'ready');
+  assert.equal(h.chat.historical,true); assert.equal(h.chat.readOnly,true); assert.equal(h.chat.error,undefined);
+  assert.equal(h.chat.native.state.phase,'empty'); assert.equal(h.chat.native.state.error,undefined);
+  assert.ok(!JSON.stringify(h.chat.native.state).includes('4007')); h.chat.dispose();
 });
 test('an empty native session can resume before Dashboard REST materialises its first transcript',async()=>{
   const h=fixture({missingHistory:true}); await h.chat.open({id:'empty-session',profile:'owner'});
