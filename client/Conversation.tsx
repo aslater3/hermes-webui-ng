@@ -42,7 +42,7 @@ export function Conversation({ runtime: rt, revision }: { runtime: AppRuntime; r
   const selectedOwner = chat.native;
   const peerCurrent = () => rt.ready && rt.chat.native === selectedOwner && document.visibilityState === 'visible';
   const pending = peerRows.length + chat.native.activity.state.inputs.filter(input => ['pending', 'sending'].includes(input.status)).length;
-  const error = chat.error?.message || state.error?.message || saved.error?.message;
+  const error = chat.error?.message || (!chat.readOnly ? state.error?.message : '') || saved.error?.message;
   const empty = !messages.length && !streaming && !busy && !loading && !error;
   useEffect(() => { setDraft(chat.draft); }, [chat.draft, scope, rt.accountGeneration]);
   useLayoutEffect(() => { following.current = true; setUnread(false); }, [scope]);
