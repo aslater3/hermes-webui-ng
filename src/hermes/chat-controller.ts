@@ -4,7 +4,7 @@ import type { GatewayClient } from './gateway-client.js';
 import { NativeSession } from './native-session.js';
 import { SessionBrowser } from './session-browser.js';
 import { ClientError } from './protocol.js';
-import { profileName, sessionId, type SessionRef } from './session-rest.js';
+import { profileName, sessionId, type SessionRef, type SessionRow } from './session-rest.js';
 
 type Gateway = Pick<GatewayClient, 'call' | 'onEvent' | 'onState' | 'state'>;
 type Reader = Pick<DashboardClient, 'sessions' | 'searchSessions' | 'sessionMessages'>;
@@ -29,6 +29,8 @@ export class ChatController {
   draft = '';
   busy = false;
   historical = false;
+  /** True only when Hermes' REST row proves there is saved history but no durable native resume identity. */
+  readOnly = false;
   error?: ClientError;
   private scope = 0;
   private enabled = false;
@@ -93,6 +95,16 @@ export class ChatController {
   private missingRestHistory(): boolean {
     return this.browser.history.error instanceof HttpError && this.browser.history.error.status === 404;
   }
+  /** Metadata is advisory only when it unambiguously belongs to the selected REST row. */
+  private listedRow(ref: SessionRef): SessionRow | undefined {
+    const rows = this.browser.index.rows.filter(row => row.id === ref.id && (!ref.profile || row.profile === ref.profile));
+    return rows.length === 1 ? rows[0] : undefined;
+  }
+  private static restOnly(row?: SessionRow): boolean {
+    // An ended row with no session_key has no durable TUI-Gateway resume identity. Do not turn a
+    // perfectly readable REST transcript into a Gateway error by guessing that row.id is resumable.
+    return !!row && row.endedAt !== undefined && !row.sessionKey;
+  }
   setEnabled(enabled: boolean): void {
     const was = this.enabled; this.enabled = enabled;
     if (enabled && !was && this.browser.index.phase === 'empty') void this.browser.list();
@@ -113,7 +125,7 @@ export class ChatController {
       eviction[1].dispose(); this.retained.delete(eviction[0]);
     }
     this.saveDraft(); ++this.scope;
-    if (this.native.state.storedId && this.native !== reuse) {
+    if (this.native.state.storedId && !reuse && this.native !== reuse) {
       this.native.setForeground(false);
       this.retained.set(this.viewKey({ id: this.native.state.storedId, profile: this.native.state.profile }), this.native);
     } else if (this.native !== reuse) this.native.dispose();
@@ -121,7 +133,7 @@ export class ChatController {
     this.native = reuse ?? this.newNative(); this.native.setForeground(true);
     this.browser.clearHistory(); this.selected = ref;
     this.draft = this.drafts.get(draftKey(ref)) ?? '';
-    this.historical = false; this.busy = false; this.error = undefined;
+    this.historical = false; this.readOnly = false; this.busy = false; this.error = undefined;
     this.publish(); return this.scope;
   }
   async create(profile?: string): Promise<void> {
@@ -133,12 +145,17 @@ export class ChatController {
   }
   async open(ref: SessionRef): Promise<void> {
     if (!this.enabled) return;
+    const listed = this.listedRow(ref);
     const scope = this.reset(ref); this.busy = true; this.publish();
     try {
       const page = await this.browser.open(ref);
       if (scope !== this.scope) return;
       if (page) this.selected = { id:page.id, profile:page.profile };
       else if (!this.missingRestHistory()) return;
+      if (page && listed?.id === page.id && ChatController.restOnly(listed)) {
+        this.readOnly = true; this.historical = true;
+        return;
+      }
       if (this.ready()) {
         const target = page ? { id: page.id, profile: page.profile } : ref;
         if (this.native.state.runtimeId && this.native.state.storedId === target.id) await this.native.refresh();
@@ -161,7 +178,7 @@ export class ChatController {
     finally { if (scope === this.scope) { this.busy = false; this.publish(); } }
   }
   async attachIfReady(): Promise<void> {
-    if (!this.ready() || this.busy || !this.selected || this.native.state.storedId ||
+    if (!this.ready() || this.busy || this.readOnly || !this.selected || this.native.state.storedId ||
       (this.browser.history.phase !== 'ready' && !this.missingRestHistory())) return;
     const scope = this.scope; this.busy = true; this.publish();
     try {
@@ -199,7 +216,15 @@ export class ChatController {
   }
   async latest(): Promise<void> {
     if (this.busy) return;
-    const scope = this.scope; this.error = undefined; this.historical = false;
+    const scope = this.scope; this.error = undefined;
+    if (this.readOnly) {
+      if (!this.selected || !this.enabled) return;
+      this.busy = true; this.historical = true; this.publish();
+      try { await this.browser.open(this.selected, 0); }
+      finally { if (scope === this.scope) { this.busy = false; this.publish(); } }
+      return;
+    }
+    this.historical = false;
     if (this.native.state.runtimeId && this.ready()) {
       this.browser.clearHistory();
       try { await this.native.refresh(); } catch (error) { this.fail(error, scope); }
@@ -215,7 +240,7 @@ export class ChatController {
   clear(): void {
     ++this.scope; clearTimeout(this.refreshTimer); this.enabled = false;
     this.native.dispose(); this.retained.forEach(view => view.dispose()); this.retained.clear(); this.native = this.newNative();
-    this.selected = undefined; this.draft = ''; this.drafts.clear(); this.busy = false; this.historical = false; this.error = undefined;
+    this.selected = undefined; this.draft = ''; this.drafts.clear(); this.busy = false; this.historical = false; this.readOnly = false; this.error = undefined;
     this.browser.clear(); this.publish();
   }
   dispose(): void { this.clear(); this.disposed = true; this.native.dispose(); this.browser.dispose(); this.unlisten(); this.listeners.clear(); }
