@@ -29,7 +29,7 @@ export class ChatController {
   draft = '';
   busy = false;
   historical = false;
-  /** True only when Hermes' REST row proves there is saved history but no durable native resume identity. */
+  /** True when saved REST history is available but this selection must not attempt native writes. */
   readOnly = false;
   error?: ClientError;
   private scope = 0;
@@ -105,6 +105,17 @@ export class ChatController {
     // perfectly readable REST transcript into a Gateway error by guessing that row.id is resumable.
     return !!row && row.endedAt !== undefined && !row.sessionKey;
   }
+  private settleMissingActive(): void {
+    if (this.error?.rpcCode !== 4007) return;
+    if (this.browser.history.phase === 'ready' && this.browser.history.page) {
+      // The active runtime disappeared, but Hermes still has an authoritative saved transcript.
+      // Keep that useful state visible instead of surfacing the process-local race as a fatal error.
+      this.error = undefined; this.historical = true; this.readOnly = true; this.publish();
+      return;
+    }
+    this.error = new ClientError('rpc', 'This active conversation ended before it could be opened. The active-session list has been refreshed.', 4007);
+    this.publish();
+  }
   setEnabled(enabled: boolean): void {
     const was = this.enabled; this.enabled = enabled;
     if (enabled && !was && this.browser.index.phase === 'empty') void this.browser.list();
@@ -167,14 +178,32 @@ export class ChatController {
     } catch (error) { this.fail(error, scope); }
     finally { if (scope === this.scope) { this.busy = false; this.publish(); } }
   }
-  /** Active-list rows have no profile. Resolve the runtime through Hermes instead of guessing one. */
-  async openLive(runtimeId: string): Promise<void> {
+  /**
+   * Active rows carry both a process-local runtime id and Hermes' durable session_key. Prefer the
+   * durable key: the runtime can be reaped between active_list rendering and a click. A 4007 on
+   * durable resume is retried once (upstream explicitly says "retry resume"), then falls back to
+   * authoritative REST history when one exists.
+   */
+  async openLive(runtimeId: string, storedId?: string, ownerProfile?: string): Promise<void> {
     if (!this.ready() || this.busy) return;
-    sessionId(runtimeId);
+    runtimeId = sessionId(runtimeId); storedId = storedId ? sessionId(storedId) : undefined;
+    ownerProfile = profileName(ownerProfile);
     const known = [this.native, ...this.retained.values()].find(view => view.state.runtimeId === runtimeId);
     if (known?.state.storedId) return this.open({ id: known.state.storedId, profile: known.state.profile });
+    if (storedId) {
+      const target = { id: storedId, profile: ownerProfile };
+      await this.open(target);
+      if (this.error?.rpcCode === 4007) await this.open(target);
+      this.settleMissingActive();
+      return;
+    }
     const scope = this.reset(); this.busy = true; this.publish();
-    try { await this.native.resume(runtimeId); } catch (error) { this.fail(error, scope); }
+    try { await this.native.resume(runtimeId); }
+    catch (error) {
+      this.fail(error, scope);
+      if (this.error?.rpcCode === 4007)
+        this.error = new ClientError('rpc', 'This active conversation ended before it could be opened. The active-session list has been refreshed.', 4007);
+    }
     finally { if (scope === this.scope) { this.busy = false; this.publish(); } }
   }
   async attachIfReady(): Promise<void> {
