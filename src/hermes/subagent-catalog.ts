@@ -35,6 +35,8 @@ export interface SubagentPatch {
   lastTool?: string;
   acceptingSteer?: boolean;
 }
+/** Process-wide `delegation.status` row with an explicit durable parent session identity. */
+export interface OwnedSubagentPatch extends SubagentPatch { ownerSessionId: string }
 
 /** Bounded fan-out: Hermes caps its own roster, and a hostile peer must not make us render thousands of rows. */
 export const SUBAGENT_LIMIT = 24;
@@ -137,6 +139,26 @@ export function subagentRosterPatches(input: unknown): SubagentPatch[] {
 
 export function subagentRoster(input: unknown): SubagentSnapshot[] {
   return ordered(subagentRosterPatches(input).map(item => mergeSubagent(undefined, item)));
+}
+
+/**
+ * Validate the process-wide `delegation.status` snapshot. A child without the explicit durable parent id is
+ * unusable for nesting and is dropped; titles and ordering are never used to guess ownership.
+ */
+export function delegationRosterPatches(input: unknown): OwnedSubagentPatch[] {
+  const data = record(input);
+  if (!Array.isArray(data.active) || data.active.length > ROSTER_LIMIT)
+    throw new ClientError('protocol', 'Invalid Hermes delegation roster');
+  const seen = new Set<string>(); const out: OwnedSubagentPatch[] = [];
+  for (const raw of data.active) {
+    const source = safeRecord(raw), patch = subagentPatch(source);
+    const ownerSessionId = identifier(source.owner_agent_session_id);
+    if (!patch || !ownerSessionId) continue;
+    const key = `${ownerSessionId}\u0000${patch.subagentId}`;
+    if (seen.has(key)) continue;
+    seen.add(key); out.push({ ...patch, ownerSessionId });
+  }
+  return out;
 }
 
 /**

@@ -1,8 +1,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  SUBAGENT_LIMIT, mergeRoster, mergeSubagent, reconcileHydration, subagentElapsedSeconds, subagentPatch,
-  subagentRoster, subagentRosterPatches, subagentStatusLabel, subagentSummary, upsertSubagent,
+  SUBAGENT_LIMIT, delegationRosterPatches, mergeRoster, mergeSubagent, reconcileHydration,
+  subagentElapsedSeconds, subagentPatch, subagentRoster, subagentRosterPatches,
+  subagentStatusLabel, subagentSummary, upsertSubagent,
 } from '../../src/hermes/subagent-catalog.js';
 
 /** Test-only: a fixture that silently lost its identity would make every later assertion meaningless. */
@@ -45,6 +46,25 @@ test('roster reads are bounded, deduplicated and reject a malformed envelope', (
 test('the roster is bounded even when Hermes sends more children than we render', () => {
   const roster = subagentRoster({ subagents: Array.from({ length: SUBAGENT_LIMIT + 40 }, (_, i) => ({ subagent_id: `sa-${i}` })) });
   assert.equal(roster.length, SUBAGENT_LIMIT);
+});
+
+test('global delegation rows require an exact durable parent identity and stay bounded', () => {
+  const rows = delegationRosterPatches({ active: [
+    { subagent_id:'sa-a', owner_agent_session_id:'parent-a', goal:'A', status:'running', model:'deepseek', last_tool:'terminal' },
+    { subagent_id:'sa-b', goal:'No parent', status:'running' },
+    { subagent_id:'sa-c', owner_agent_session_id:'../bad', status:'running' },
+    { subagent_id:'sa-a', owner_agent_session_id:'parent-a', goal:'Duplicate' },
+    { subagent_id:'sa-a', owner_agent_session_id:'parent-b', goal:'Same child id, different owner', status:'waiting' },
+  ] });
+  assert.deepEqual(rows.map(item => [item.ownerSessionId, item.subagentId]), [
+    ['parent-a','sa-a'], ['parent-b','sa-a'],
+  ]);
+  assert.equal(rows[0]?.goal, 'A');
+  assert.equal(rows[0]?.lastTool, 'terminal');
+  assert.throws(() => delegationRosterPatches({ active: 'nope' }));
+  assert.throws(() => delegationRosterPatches({ active: Array.from({length: 5000}, (_,i) => ({
+    subagent_id:`sa-${i}`, owner_agent_session_id:'parent',
+  })) }));
 });
 
 test('an event patch merges without erasing values the event omitted', () => {

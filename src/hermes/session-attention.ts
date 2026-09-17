@@ -2,8 +2,8 @@ import type { GatewayClient } from './gateway-client.js';
 import { ClientError, record, type GatewayEvent } from './protocol.js';
 import { sessionId, profileName, type SessionRef } from './session-rest.js';
 import {
-  reconcileHydration, subagentPatch, subagentRosterPatches, subagentTerminal, upsertSubagent,
-  type SubagentSnapshot,
+  delegationRosterPatches, reconcileHydration, subagentPatch, subagentRosterPatches, subagentTerminal,
+  upsertSubagent, type SubagentSnapshot,
 } from './subagent-catalog.js';
 
 type Gateway = Pick<GatewayClient, 'call' | 'onEvent' | 'onState' | 'state'>;
@@ -18,8 +18,9 @@ export class SessionAttention {
   private owners = new Map<string, SessionRef>();
   private children = new Map<string, SubagentSnapshot[]>();
   private childPrunes = new Map<string, ReturnType<typeof setTimeout>>();
-  /** Consecutive roster omissions per child, so a transiently scoped roster cannot retire live work. */
+  /** Consecutive omissions from transport-owned and process-wide rosters are independent evidence. */
   private childMisses = new Map<string, Map<string, number>>();
+  private globalMisses = new Map<string, Map<string, number>>();
   /** Parents that produced a child event before their session row was known; one discovery refresh each. */
   private discovering = new Set<string>();
   private current?: string;
@@ -122,7 +123,49 @@ export class SessionAttention {
     const live = new Set(this.items.map(item => item.runtimeId));
     for (const parent of [...this.children.keys()]) if (!live.has(parent)) this.children.delete(parent);
     for (const parent of [...this.childMisses.keys()]) if (!live.has(parent)) this.childMisses.delete(parent);
+    for (const parent of [...this.globalMisses.keys()]) if (!live.has(parent)) this.globalMisses.delete(parent);
     for (const parent of [...this.discovering]) if (live.has(parent)) this.discovering.delete(parent);
+  }
+  /**
+   * Process-wide delegation fallback. Hermes' transport-owned roster can be empty even while the global registry
+   * contains live children. `owner_agent_session_id` is the durable parent key reported by Hermes; associate it
+   * only when exactly one active row has that key. Duplicate cross-profile ids fail closed instead of guessing.
+   */
+  private async hydrateDelegations(valid: () => boolean): Promise<void> {
+    try {
+      const roster = delegationRosterPatches(await this.gateway.call('delegation.status', {}));
+      if (!valid()) return;
+      const parents = new Map<string, AttentionItem[]>();
+      for (const item of this.items) parents.set(item.storedId, [...(parents.get(item.storedId) ?? []), item]);
+      const grouped = new Map<string, typeof roster>();
+      for (const child of roster) {
+        const matches = parents.get(child.ownerSessionId);
+        if (matches?.length !== 1) continue;
+        const runtimeId = matches[0]!.runtimeId;
+        grouped.set(runtimeId, [...(grouped.get(runtimeId) ?? []), child]);
+      }
+      for (const matches of parents.values()) {
+        if (matches.length !== 1) {
+          // A durable id can exist in several profiles; never leave a previously-associated child on an
+          // ambiguous row after the collision appears.
+          for (const item of matches) {
+            this.children.delete(item.runtimeId); this.childMisses.delete(item.runtimeId);
+            this.globalMisses.delete(item.runtimeId);
+          }
+          continue;
+        }
+        const parent = matches[0]!, patches = grouped.get(parent.runtimeId) ?? [];
+        // Empty global snapshots are only evidence for a parent that was previously present globally; otherwise
+        // they must not age children learned from the transport-owned roster or event stream.
+        if (!patches.length && !this.globalMisses.has(parent.runtimeId)) continue;
+        const misses = this.globalMisses.get(parent.runtimeId) ?? new Map<string, number>();
+        this.globalMisses.set(parent.runtimeId, misses);
+        const children = reconcileHydration(this.children.get(parent.runtimeId) ?? [], patches, misses);
+        if (children.length) this.children.set(parent.runtimeId, children); else this.children.delete(parent.runtimeId);
+        if (parent.status === 'idle' && patches.some(child => !child.status || !subagentTerminal(child.status)))
+          this.items = this.items.map(item => item.runtimeId === parent.runtimeId ? { ...item, status: 'working' } : item);
+      }
+    } catch { /* older/unsupported Gateway or transient read: retain stream/owned-roster state */ }
   }
   /**
    * Read one parent roster. `session.active_list` is process-wide, while `subagent.list` requires this exact
@@ -196,6 +239,8 @@ export class SessionAttention {
         if (!valid()) return;
         if (revision !== this.revision) { raced = true; return; }
         this.items = this.items.map(item => waiting.includes(item.runtimeId) ? { ...item, status: 'waiting' } : item);
+        await this.hydrateDelegations(valid);
+        if (!valid()) return;
         this.phase = 'ready';
         this.pruneChildParents();
         await this.hydrateSubagents(valid);
@@ -208,6 +253,6 @@ export class SessionAttention {
     const finished = task.finally(() => { if (this.flight === finished) { this.flight = undefined; this.schedule(raced ? 100 : this.intervalMs); } });
     this.flight = finished; return finished;
   }
-  clear() { ++this.epoch; this.flight = undefined; clearTimeout(this.timer); this.enabled = false; this.items = []; this.owners.clear(); this.current = undefined; this.phase = 'empty'; this.childPrunes.forEach(clearTimeout); this.childPrunes.clear(); this.children.clear(); this.childMisses.clear(); this.discovering.clear(); this.publish(); }
+  clear() { ++this.epoch; this.flight = undefined; clearTimeout(this.timer); this.enabled = false; this.items = []; this.owners.clear(); this.current = undefined; this.phase = 'empty'; this.childPrunes.forEach(clearTimeout); this.childPrunes.clear(); this.children.clear(); this.childMisses.clear(); this.globalMisses.clear(); this.discovering.clear(); this.publish(); }
   dispose() { this.disposed = true; this.clear(); this.cleanups.forEach(fn => fn()); this.listeners.clear(); }
 }

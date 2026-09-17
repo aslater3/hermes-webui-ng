@@ -64,9 +64,12 @@ partial-patch projection, additive hydration, fixed display language) and the ch
 Known boundaries, stated so they are not mistaken for completion:
 
 - Child identity comes from `subagent_id`. A payload without one is dropped rather than attributed by title.
-- Roster authority is per transport. The attention poll metadata-attaches this browser to at most 12 active
-  background parents with `session.activate(..., omit_messages:true)` before reading their rosters. This is an
-  additive viewer attach: it does not select the conversation, replace its owner or load its transcript.
+- `delegation.status` provides process-wide live children with `owner_agent_session_id`; the renderer associates
+  them only with a unique active row whose durable `session_key` matches. Ambiguous duplicate ids fail closed.
+  This also promotes an otherwise-idle parent to working while its asynchronous children run.
+- The transport-owned roster remains additive. The poll metadata-attaches this browser to at most 12 active
+  background parents with `session.activate(..., omit_messages:true)` so later child events can reach it. This
+  viewer attach does not select the conversation, replace its owner or load its transcript.
 - The list is bounded (24 tracked children, four rendered per parent) and child status labels are fixed client
   language, not upstream copy.
 - No steer, interrupt or tail control is rendered. Hermes advertises `subagent.steer`/`interrupt`/`tail`, but

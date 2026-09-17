@@ -136,11 +136,13 @@ Unknown events are ignored safely but retained in debug traces when diagnostics 
 
 The Active sessions list nests live child agents under their parent session.
 
-- `subagent.list({session_id})` returns `{subagents, delegations}` for the calling transport's live session.
-  Authority is transport-scoped: a session this client never attached answers `4001`. For an active background
-  row, the attention poll responds by calling `session.activate({session_id, omit_messages:true})` once, then
-  retries the roster. Activate adds this browser as a viewer without changing the selected conversation or
-  loading its transcript; subsequent child events are delivered to the browser's transport.
+- `delegation.status` is process-wide and reports live children with `owner_agent_session_id`. That durable owner
+  id is matched to an active row's `session_key` only when the match is unique; duplicate cross-profile ids fail
+  closed. This path also keeps an otherwise-idle parent in Active sessions while its asynchronous children run.
+- `subagent.list({session_id})` remains an additive transport-owned roster. A session this client never attached
+  answers `4001`; for a working background row the attention poll calls
+  `session.activate({session_id, omit_messages:true})` once, then retries. Activate adds this browser as a viewer
+  without changing the selected conversation or loading its transcript, so later child events can reach it.
 - `subagent.start` / `subagent.progress` / `subagent.tool` / `subagent.complete` are relayed on the **parent**
   session id. They are partial patches, so a field the frame omits keeps its previous value; per-token
   `subagent.text` frames are not sent on the parent.
@@ -153,10 +155,10 @@ The Active sessions list nests live child agents under their parent session.
 - A child in a terminal state stays visible until a bounded retention window elapses, then leaves without
   disturbing the parent row.
 
-Because roster authority is per transport, the WebUI metadata-attaches to a bounded set of active background
-parents before hydrating their children. A stale parent, an unsupported Gateway or a transient attach/read
-failure stays silent and preserves children already reported by the stream. The attach is additive and does not
-replace the parent's owner, select the conversation or materialise its transcript.
+The process-wide delegation snapshot supplies the reliable parent/child association; transport-owned roster and
+stream events refine it. A stale parent, unsupported Gateway or transient read/attach failure stays silent and
+preserves prior child state. Both sources have independent bounded omission counters so one empty projection
+cannot prematurely retire a child learned from the other.
 
 ## 7. Pending request management
 

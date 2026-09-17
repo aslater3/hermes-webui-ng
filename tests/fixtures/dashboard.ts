@@ -6,7 +6,7 @@ import { ModelScenarios } from './model-scenarios.js';
 import { AgentScenarios } from './agent-scenarios.js';
 import { WS_PROTOCOL } from '../../src/hermes/dashboard-client.js';
 
-export async function startFixture(port = 0, options: { sessionToken?: string; beforeWsTicket?: () => Promise<void>; beforePromptComplete?: (text: string) => Promise<void>; requireSubagentActivation?: boolean } = {}) {
+export async function startFixture(port = 0, options: { sessionToken?: string; beforeWsTicket?: () => Promise<void>; beforePromptComplete?: (text: string) => Promise<void>; requireSubagentActivation?: boolean; emptyOwnedSubagentRoster?: boolean } = {}) {
   const cookie = `fixture_auth=${randomBytes(24).toString('hex')}`;
   const tickets = new Set<string>();
   const interactions = new AgentScenarios();
@@ -116,9 +116,16 @@ export async function startFixture(port = 0, options: { sessionToken?: string; b
       const error = () => client.send(JSON.stringify({ jsonrpc: '2.0', id, error: { code: 4001, message: 'Not found' } }));
       if (models.handle(method, params, reply, error, event)) return;
       if (method === 'session.active_list') { reply({ sessions: [...sessions].map(([id, row]) => ({ id, session_key: row.key, last_active: row.updated, title: row.messages.find(message => message.role === 'user')?.text.slice(0, 120) || 'New conversation', status: interactions.waiting(id) ? 'waiting' : row.running ? 'working' : 'idle' })) }); return; }
+      if (method === 'delegation.status') {
+        const active = [...children].flatMap(([runtimeId, rows]) => {
+          const owner = sessions.get(runtimeId)?.key;
+          return owner ? rows.map(row => ({ ...row, owner_agent_session_id: owner })) : [];
+        });
+        reply({ active, paused:false, max_spawn_depth:1, max_concurrent_children:10 }); return;
+      }
       if (method === 'subagent.list') {
         if (options.requireSubagentActivation && !attached.has(String(params.session_id))) { error(); return; }
-        reply({ subagents: children.get(String(params.session_id)) ?? [], delegations: [] }); return;
+        reply({ subagents: options.emptyOwnedSubagentRoster ? [] : children.get(String(params.session_id)) ?? [], delegations: [] }); return;
       }
       if (method === 'gateway.ping') { reply({ ok: true }); return; }
       if (method === 'session.create') {
@@ -206,7 +213,7 @@ export async function startFixture(port = 0, options: { sessionToken?: string; b
     seedActiveSubagent: (title: string) => {
       const sid = randomUUID(), key = randomUUID();
       sessions.set(sid, { key, profile:'default', messages:[{role:'user', text:title}],
-        running:true, updated:Date.now()/1000, turn:1, inflight:'Background work is running…' });
+        running:false, updated:Date.now()/1000, turn:1, inflight:'' });
       children.set(sid, [{ subagent_id:'sa-background', goal:'Background child', model:'deepseek-v4.1-flash',
         status:'running', started_at:Date.now()/1000 - 120, tool_count:4, last_tool:'terminal' }]);
       return { sid, key };
