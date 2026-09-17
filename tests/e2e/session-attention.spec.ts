@@ -18,8 +18,7 @@ test('an unselected pending credential stays discoverable without keeping the en
   await expect(activeButton).toHaveAttribute('data-attention', 'required');
   expect(await activeButton.evaluate(element => getComputedStyle(element).boxShadow)).not.toBe('none');
   const savedButton = page.getByRole('button', { name: `Open conversation: ${prompt}`, exact: true });
-  await expect(savedButton).toHaveAttribute('data-attention', 'required');
-  expect(await savedButton.evaluate(element => getComputedStyle(element).boxShadow)).not.toBe('none');
+  await expect(savedButton).toHaveCount(0);
   await activeButton.click();
   await expect(field).toBeVisible(); await expect(field).toHaveValue('');
   await field.fill('SYNTHETIC_RESPONSE_VALUE'); await page.getByRole('button', { name: 'Save in Hermes', exact: true }).click();
