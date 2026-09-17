@@ -107,7 +107,7 @@ test('a running parent shows its child agents nested beneath it and clears them 
 
 test('a background parent is attached metadata-only before its subagent roster is rendered', async ({ page }, info) => {
   const title = `Background parent ${info.project.name}`;
-  const network = await pwaNetwork(false);
+  const network = await pwaNetwork(false, { requireSubagentActivation: true });
   network.seedActiveSubagent(title);
   try {
     await loginPwa(page, network.origin); await conversations(page);
