@@ -194,6 +194,17 @@ If the connected Hermes exposes subagent snapshots/events, render compact child-
 - optional tail/details on demand;
 - interrupt/steer only when native authority/capability is present.
 
+Implemented presentation: live children are nested under their parent row in the Active sessions list, four at a
+time with an explicit "+N more subagents" count. Each child shows its goal, its exact `subagent_id`, fixed status
+language with elapsed time, the child model, the last started tool and a bounded tool count. A working or
+starting child uses the same spin indicator as a working parent; waiting and failed children are flagged. A
+child in a terminal state remains visible for a bounded retention window so the transition is observable, then
+leaves without moving its parent.
+
+Authority is not re-derived in the renderer: the list shows children only for sessions whose roster this client
+may read, and no control is fabricated for a capability Hermes has not advertised. Elapsed time, model, tool and
+counts are optional — the row renders without them rather than inventing a value.
+
 ## 6. Composer
 
 The composer is a core product surface.

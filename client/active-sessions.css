@@ -14,3 +14,13 @@
 .active-session-row strong { display: block; font-size: 12px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .active-session-row small { display: block; color: var(--muted); margin-top: 3px; font-size: 11px; }
 .active-more { min-height: 44px; color: var(--muted); font-size: 12px; text-align: left; padding: 8px; }
+/* Nested child agents: subordinate to the parent row, never a second top-level conversation. */
+.active-subagents { list-style: none; margin: 0 0 6px; padding: 0 0 0 30px; }
+.active-subagent { display: flex; align-items: flex-start; gap: 8px; min-height: 40px; padding: 6px 8px; border-left: 2px solid var(--border); }
+.active-subagent > svg { flex-shrink: 0; margin-top: 2px; color: var(--muted); }
+.active-subagent[data-status='waiting'] > svg, .active-subagent[data-status='failed'] > svg { color: var(--text); }
+.active-subagent > span { min-width: 0; flex: 1; }
+.active-subagent strong { display: block; font-size: 11px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.active-subagent small { display: block; color: var(--muted); margin-top: 2px; font-size: 10px; overflow-wrap: anywhere; }
+.active-subagent code { font-family: var(--mono, ui-monospace, monospace); }
+.active-subagent-more { color: var(--muted); font-size: 10px; padding: 2px 8px 2px 10px; border-left: 2px solid var(--border); }

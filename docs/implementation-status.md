@@ -53,3 +53,22 @@ Runtime-certified Hermes remains **`NousResearch/hermes-agent@b6b53c69a6ed49cb09
 Keep the existing private `.env`, TLS, token, project path, runtime UID/GID, NG Compose project and browser port. For deliberate writes, use `compose.workspace-write.yaml` **instead of** `compose.workspace.yaml`, with exactly one base (`compose.host.yaml` or `compose.yaml`). Do not remove host ACL/security policy or make folders world-writable to enable an incompatible project. Full procedure: **`phase6-deployment.md`**. No operator host, actual project, unrelated legacy service or Docker data-root has been changed.
 
 Required Phase 6 file writes and Phase 7 are accepted; optional Git mutations, actual iOS/Android Web Push, physical-device certification, Phases 8–10 management/attachments/voice and release-wide hardening remain open. Every completed implementation increment was committed and pushed before the next; current acceptance documentation does not turn an unverified feature into a completed one.
+
+## Nested subagent presence
+
+The Active sessions list nests live child agents under their parent session, projected from `subagent.list`
+plus the parent-scoped `subagent.*` stream. New source is `src/hermes/subagent-catalog.ts` (validated
+partial-patch projection, additive hydration, fixed display language) and the child store/hydration in
+`src/hermes/session-attention.ts`.
+
+Known boundaries, stated so they are not mistaken for completion:
+
+- Child identity comes from `subagent_id`. A payload without one is dropped rather than attributed by title.
+- Roster authority is per transport. Children are shown for sessions this client drives or has attached to; a
+  session running under another transport shows its row without children. This is an upstream boundary.
+- The list is bounded (24 tracked children, four rendered per parent) and child status labels are fixed client
+  language, not upstream copy.
+- No steer, interrupt or tail control is rendered. Hermes advertises `subagent.steer`/`interrupt`/`tail`, but
+  wiring a control is a separate slice with its own authority and confirmation design.
+- Verification is synthetic-fixture browser coverage plus unit projection tests. It is not vanilla-Hermes
+  evidence, physical-device certification or a claim that a real subagent run was observed by an operator.

@@ -14,6 +14,8 @@ export async function startFixture(port = 0, options: { sessionToken?: string; b
   const validCookies = new Set([cookie]);
   const sessions = new Map<string, { key: string; messages: {role:string; text:string}[]; running: boolean; profile: string; updated: number; turn: number; inflight: string }>();
   const metrics = { tickets: 0, creates: 0, submits: 0, upgrades: 0 };
+  // Live child agents per parent runtime, mirroring Hermes' `subagent.list` roster shape.
+  const children = new Map<string, Record<string, unknown>[]>();
   const timers = new Set<ReturnType<typeof setTimeout>>();
   let closed = false;
   const ws = new WebSocketServer({ noServer: true, handleProtocols: () => options.sessionToken ? false : WS_PROTOCOL });
@@ -111,6 +113,7 @@ export async function startFixture(port = 0, options: { sessionToken?: string; b
       const error = () => client.send(JSON.stringify({ jsonrpc: '2.0', id, error: { code: 4001, message: 'Not found' } }));
       if (models.handle(method, params, reply, error, event)) return;
       if (method === 'session.active_list') { reply({ sessions: [...sessions].map(([id, row]) => ({ id, session_key: row.key, last_active: row.updated, title: row.messages.find(message => message.role === 'user')?.text.slice(0, 120) || 'New conversation', status: interactions.waiting(id) ? 'waiting' : row.running ? 'working' : 'idle' })) }); return; }
+      if (method === 'subagent.list') { reply({ subagents: children.get(String(params.session_id)) ?? [], delegations: [] }); return; }
       if (method === 'gateway.ping') { reply({ ok: true }); return; }
       if (method === 'session.create') {
         const sid = randomUUID(); const key = randomUUID(); metrics.creates++;
@@ -139,12 +142,20 @@ export async function startFixture(port = 0, options: { sessionToken?: string; b
         if(interactions.start(params.session_id,String(params.text),emitAgent,(text)=>{session.messages.push({role:'assistant',text});session.running=false;session.inflight='';session.updated=Date.now()/1000;}))return;
         const slow = String(params.text).startsWith('[slow-test]');
         const streaming = String(params.text).startsWith('[stream-test]');
+        const childAgent = String(params.text).startsWith('[subagent-test]');
         const later = (callback: () => void, delay: number) => {
           const timer = setTimeout(() => { timers.delete(timer); if (session.turn === turn) callback(); }, delay);
           timers.add(timer);
         };
         const delta = (text: string) => { session.inflight += text; if (client.readyState === 1) event('message.delta', params.session_id, {text}); };
         if (slow) delta('Controlled turn is running…');
+        // Nested child agents: the roster arrives by hydration AND the streamed frames exercise the live path.
+        if (childAgent) {
+          const child = { subagent_id: 'sa-0-1054fd14', goal: 'Nested fixture child', model: 'deepseek-v4.1-flash', status: 'running', started_at: Date.now()/1000, tool_name: 'terminal', tool_count: 3 };
+          // The roster stays consistent with the stream, as Hermes builds it from the live child records.
+          later(() => { children.set(String(params.session_id), [child]); event('subagent.start', params.session_id, child); }, 200);
+          later(() => { child.tool_name = 'read_file'; child.tool_count = 4; event('subagent.tool', params.session_id, { subagent_id: child.subagent_id, tool_name: 'read_file', tool_count: 4 }); }, 500);
+        }
         if (streaming) for (let i=0; i<30; i++) later(() => delta(`Streaming line ${i} ${'text '.repeat(20)}\n`), i*100);
         const complete = () => {
           if (closed || session.turn !== turn) return;
@@ -152,6 +163,12 @@ export async function startFixture(port = 0, options: { sessionToken?: string; b
           session.messages.push({ role: 'assistant', text }); session.updated = Date.now()/1000;
           if (client.readyState === 1) {
             if (!streaming) delta(text);
+            const spawned = children.get(String(params.session_id));
+            if (spawned) {
+              children.delete(String(params.session_id));
+              for (const child of spawned)
+                event('subagent.complete', params.session_id, { subagent_id: child.subagent_id, status: 'completed', duration_seconds: 12 });
+            }
             event('message.complete', params.session_id, { text });
           }
           later(() => { session.running = false; session.inflight = '';

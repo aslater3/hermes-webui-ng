@@ -1,6 +1,10 @@
 import type { GatewayClient } from './gateway-client.js';
 import { ClientError, record, type GatewayEvent } from './protocol.js';
 import { sessionId, profileName, type SessionRef } from './session-rest.js';
+import {
+  reconcileHydration, subagentPatch, subagentRosterPatches, subagentTerminal, upsertSubagent,
+  type SubagentSnapshot,
+} from './subagent-catalog.js';
 
 type Gateway = Pick<GatewayClient, 'call' | 'onEvent' | 'onState' | 'state'>;
 export type AttentionStatus = 'idle' | 'working' | 'waiting' | 'starting' | 'unknown';
@@ -12,6 +16,12 @@ export class SessionAttention {
   items: AttentionItem[] = [];
   phase: 'empty' | 'ready' | 'unknown' | 'unsupported' = 'empty';
   private owners = new Map<string, SessionRef>();
+  private children = new Map<string, SubagentSnapshot[]>();
+  private childPrunes = new Map<string, ReturnType<typeof setTimeout>>();
+  /** Consecutive roster omissions per child, so a transiently scoped roster cannot retire live work. */
+  private childMisses = new Map<string, Map<string, number>>();
+  /** Parents that produced a child event before their session row was known; one discovery refresh each. */
+  private discovering = new Set<string>();
   private current?: string;
   private enabled = false;
   private visible = true;
@@ -22,7 +32,8 @@ export class SessionAttention {
   private disposed = false;
   private listeners = new Set<() => void>();
   private cleanups: (() => void)[];
-  constructor(private readonly gateway: Gateway, private readonly intervalMs = 5000) {
+  constructor(private readonly gateway: Gateway, private readonly intervalMs = 5000,
+    private readonly subagentPruneMs = 20_000) {
     this.cleanups = [gateway.onState(state => {
       ++this.epoch; this.flight = undefined; clearTimeout(this.timer);
       this.phase = state.phase === 'ready' ? 'empty' : 'unknown';
@@ -44,6 +55,8 @@ export class SessionAttention {
     this.items = this.items.map(item => item.runtimeId === runtimeId ? { ...item, review: false } : item);
   }
   forSession(ref: SessionRef): AttentionItem | undefined { return this.items.find(item => item.owner && same(item.owner, ref)); }
+  /** Nested child agents for one parent runtime. Only parents this client received events for have children. */
+  subagents(parentRuntimeId: string): SubagentSnapshot[] { return this.children.get(parentRuntimeId) ?? []; }
   setEnabled(value: boolean) {
     if (value === this.enabled) return;
     this.enabled = value;
@@ -59,6 +72,8 @@ export class SessionAttention {
   }
   private event(event: GatewayEvent) {
     if (!this.enabled || !event.session_id || this.gateway.state.phase !== 'ready') return;
+    // Subagent lifecycle is parent-scoped application state, not a reason to re-run the session poll.
+    if (event.type.startsWith('subagent.')) { this.subagentEvent(event); return; }
     if (!['message.start', 'message.complete', 'session.info', 'session.interrupted', 'error'].includes(event.type) &&
       !/^(approval|clarify|sudo|secret)\.(request|expire)$/.test(event.type)) return;
     ++this.revision;
@@ -67,6 +82,64 @@ export class SessionAttention {
       this.publish();
     }
     this.schedule(100);
+  }
+  /**
+   * Only a parent this client actually tracks can gain children: an untracked session id must not create a row.
+   * A child can start between two polls, so an unknown parent schedules one discovery refresh instead of
+   * dropping the frame and waiting for the next 5s tick.
+   */
+  private subagentEvent(event: GatewayEvent) {
+    const parent = event.session_id;
+    if (!parent) return;
+    if (!this.items.some(item => item.runtimeId === parent)) {
+      if (this.discovering.has(parent)) return;
+      this.discovering.add(parent);
+      this.schedule(100);
+      return;
+    }
+    const patch = subagentPatch(event.payload);
+    if (!patch) return;
+    this.children.set(parent, upsertSubagent(this.children.get(parent) ?? [], patch));
+    // A finished child lingers briefly so the operator sees the terminal state, then leaves the parent alone.
+    if (subagentTerminal(patch.status ?? 'unknown')) this.scheduleChildPrune(parent, patch.subagentId);
+    this.publish();
+  }
+  private scheduleChildPrune(parent: string, subagentId: string) {
+    const key = `${parent}\u0000${subagentId}`;
+    const existing = this.childPrunes.get(key);
+    if (existing) clearTimeout(existing);
+    const timer = setTimeout(() => {
+      this.childPrunes.delete(key);
+      const current = this.children.get(parent);
+      if (!current) return;
+      const next = current.filter(item => !(item.subagentId === subagentId && subagentTerminal(item.status)));
+      if (next.length) this.children.set(parent, next); else this.children.delete(parent);
+      this.publish();
+    }, this.subagentPruneMs);
+    this.childPrunes.set(key, timer);
+  }
+  private pruneChildParents(): void {
+    const live = new Set(this.items.map(item => item.runtimeId));
+    for (const parent of [...this.children.keys()]) if (!live.has(parent)) this.children.delete(parent);
+    for (const parent of [...this.childMisses.keys()]) if (!live.has(parent)) this.childMisses.delete(parent);
+    for (const parent of [...this.discovering]) if (live.has(parent)) this.discovering.delete(parent);
+  }
+  /**
+   * Best-effort roster hydration. Hermes only answers for a session this transport owns, so 4001/unsupported
+   * and transient failures all stay silent: the live stream already proved which children exist here.
+   */
+  private async hydrateSubagents(valid: () => boolean): Promise<void> {
+    const targets = this.items.filter(item => this.owners.has(item.runtimeId) &&
+      ['working', 'starting', 'waiting'].includes(item.status)).slice(0, 4).map(item => item.runtimeId);
+    await Promise.all(targets.map(async parent => {
+      try {
+        const roster = subagentRosterPatches(await this.gateway.call('subagent.list', { session_id: parent }));
+        if (!valid()) return;
+        const misses = this.childMisses.get(parent) ?? new Map<string, number>();
+        this.childMisses.set(parent, misses);
+        this.children.set(parent, reconcileHydration(this.children.get(parent) ?? [], roster, misses));
+      } catch { /* not owned here, unsupported, or transient: keep what the stream showed */ }
+    }));
   }
   refresh(): Promise<void> {
     if (this.flight) return this.flight;
@@ -109,6 +182,8 @@ export class SessionAttention {
         if (revision !== this.revision) { raced = true; return; }
         this.items = this.items.map(item => waiting.includes(item.runtimeId) ? { ...item, status: 'waiting' } : item);
         this.phase = 'ready';
+        this.pruneChildParents();
+        await this.hydrateSubagents(valid);
       } catch (error) {
         if (!valid()) return;
         this.phase = error instanceof ClientError && error.rpcCode === -32601 ? 'unsupported' : 'unknown';
@@ -118,6 +193,6 @@ export class SessionAttention {
     const finished = task.finally(() => { if (this.flight === finished) { this.flight = undefined; this.schedule(raced ? 100 : this.intervalMs); } });
     this.flight = finished; return finished;
   }
-  clear() { ++this.epoch; this.flight = undefined; clearTimeout(this.timer); this.enabled = false; this.items = []; this.owners.clear(); this.current = undefined; this.phase = 'empty'; this.publish(); }
+  clear() { ++this.epoch; this.flight = undefined; clearTimeout(this.timer); this.enabled = false; this.items = []; this.owners.clear(); this.current = undefined; this.phase = 'empty'; this.childPrunes.forEach(clearTimeout); this.childPrunes.clear(); this.children.clear(); this.childMisses.clear(); this.discovering.clear(); this.publish(); }
   dispose() { this.disposed = true; this.clear(); this.cleanups.forEach(fn => fn()); this.listeners.clear(); }
 }
