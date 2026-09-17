@@ -16,6 +16,8 @@ test('an unselected pending credential stays discoverable without keeping the en
   await expect(active).toContainText('Needs your input');
   const activeButton = page.getByRole('button', { name: `Open active session: ${prompt}`, exact: true });
   await expect(activeButton).toHaveAttribute('data-attention', 'required');
+  const activeIcon = activeButton.locator('svg');
+  await expect(activeIcon).toHaveCSS('animation-name', 'hermes-active-session-spin');
   expect(await activeButton.evaluate(element => getComputedStyle(element).boxShadow)).not.toBe('none');
   const savedButton = page.getByRole('button', { name: `Open conversation: ${prompt}`, exact: true });
   await expect(savedButton).toHaveCount(0);
