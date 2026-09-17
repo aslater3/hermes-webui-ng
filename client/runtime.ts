@@ -34,6 +34,7 @@ export class AppRuntime {
   steerRuntimeId?: string;
   private revision = 0;
   private frame = 0;
+  private frameTimer: ReturnType<typeof setTimeout> | 0 = 0;
   private started = false;
   private openedLocation = false;
   private listeners = new Set<() => void>();
@@ -52,14 +53,19 @@ export class AppRuntime {
   subscribe = (listener: () => void) => { this.listeners.add(listener); return () => { this.listeners.delete(listener); }; };
   notify = () => {
     if (this.frame) return;
-    this.frame = requestAnimationFrame(() => {
-      this.frame = 0;
+    // A dropped animation frame (occluded, backgrounded or a busy engine) must not wedge every later
+    // update: without the fallback the pending flag would never clear and this store would go silent.
+    const publish = () => {
+      if (!this.frame) return;
+      clearTimeout(this.frameTimer); this.frame = 0; this.frameTimer = 0;
       if (this.chat.selected && !this.chat.busy && this.readable) {
         const hash = navigation(this.chat.selected);
         if (location.hash !== hash) history.replaceState(null, '', hash);
       }
       ++this.revision; this.listeners.forEach(listener => listener());
-    });
+    };
+    this.frame = requestAnimationFrame(publish);
+    this.frameTimer = setTimeout(publish, 250);
   };
   run = (operation: () => Promise<unknown>) => {
     if (this.pwa.state.updating) return;
