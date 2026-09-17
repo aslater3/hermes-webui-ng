@@ -17,7 +17,8 @@ test('an unselected pending credential stays discoverable without keeping the en
   const activeButton = page.getByRole('button', { name: `Open active session: ${prompt}`, exact: true });
   await expect(activeButton).toHaveAttribute('data-attention', 'required');
   const activeIcon = activeButton.locator('svg');
-  await expect(activeIcon).toHaveCSS('animation-name', 'hermes-active-session-spin');
+  // A waiting row uses the alert indicator; only working/starting children spin (covered by the nested test).
+  await expect(activeIcon).not.toHaveCSS('animation-name', 'hermes-active-session-spin');
   expect(await activeButton.evaluate(element => getComputedStyle(element).boxShadow)).not.toBe('none');
   const savedButton = page.getByRole('button', { name: `Open conversation: ${prompt}`, exact: true });
   await expect(savedButton).toHaveCount(0);
@@ -64,6 +65,41 @@ test('native completion in another conversation produces a review badge without 
     await expect(userMessages).not.toContainText('Current foreground response');
     expect(network.metrics.submits).toBe(2);
     expect(network.metrics.creates).toBe(2);
+  } finally {
+    release(); await page.goto('about:blank'); await network.close();
+  }
+});
+
+test('a running parent shows its child agents nested beneath it and clears them when they finish', async ({ page }, info) => {
+  const prompt = `[subagent-test] nested child ${info.project.name}`;
+  let release!: () => void;
+  const permit = new Promise<void>(resolve => { release = resolve; });
+  const network = await pwaNetwork(false, {
+    beforePromptComplete: text => text === prompt ? permit : Promise.resolve(),
+  });
+  try {
+    await loginPwa(page, network.origin); await send(page, prompt);
+    await conversations(page);
+    const active = page.getByRole('region', { name: 'Active agent sessions' });
+    await expect(active.getByRole('button', { name: `Open active session: ${prompt}`, exact: true })).toContainText('Working');
+    // The child is nested inside the parent's own list item, never a second top-level conversation row.
+    const parentItem = active.locator('li').filter({ has: page.getByRole('button', { name: `Open active session: ${prompt}`, exact: true }) });
+    await expect(parentItem.getByRole('list', { name: 'Subagents', exact: true })).toHaveCount(1);
+    const child = parentItem.locator('.active-subagent');
+    await expect(child).toHaveCount(1);
+    await expect(child).toContainText('sa-0-1054fd14');
+    await expect(child).toContainText('Running');
+    await expect(child).toContainText('deepseek-v4.1-flash');
+    await expect(child).toContainText('last tool: read_file');
+    expect(await child.locator('svg').first().evaluate(element => getComputedStyle(element).animationName))
+      .toBe('hermes-active-session-spin');
+    expect(await active.getByRole('button', { name: `Open conversation: ${prompt}`, exact: true }).count()).toBe(0);
+    release();
+    await expect(child).toContainText('Completed');
+    await idle(page);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
+    await page.screenshot({ path: info.outputPath('session-subagents.png') });
   } finally {
     release(); await page.goto('about:blank'); await network.close();
   }

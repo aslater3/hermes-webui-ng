@@ -132,6 +132,29 @@ Renderer should normalize at least:
 
 Unknown events are ignored safely but retained in debug traces when diagnostics are enabled.
 
+## Subagent roster and child events
+
+The Active sessions list nests live child agents under their parent session.
+
+- `subagent.list({session_id})` returns `{subagents, delegations}` for the calling transport's live session.
+  Authority is transport-scoped: a session this client never attached answers `4001` and is treated as
+  "no children here", never as an error or as an empty roster that erases what the stream reported.
+- `subagent.start` / `subagent.progress` / `subagent.tool` / `subagent.complete` are relayed on the **parent**
+  session id. They are partial patches, so a field the frame omits keeps its previous value; per-token
+  `subagent.text` frames are not sent on the parent.
+- A child is projected only from fields Hermes states explicitly. Identity comes from `subagent_id`; a payload
+  without one is dropped rather than attributed by title or by local process discovery.
+- Hydration is additive. A roster read may add or update children and may retire a terminal child it no longer
+  reports, but it never removes a child the live stream still shows as running.
+- A `subagent.*` frame for a parent that is not yet in the session list schedules one discovery refresh instead
+  of being dropped, so a child that starts between two polls still appears.
+- A child in a terminal state stays visible until a bounded retention window elapses, then leaves without
+  disturbing the parent row.
+
+Because roster authority is per transport, children are shown for sessions this client drives or has attached
+to. A session running under a different transport shows its own session row but not its children. This is a
+deliberate upstream boundary, not a rendering fallback.
+
 ## 7. Pending request management
 
 `GatewayClient` maintains:
