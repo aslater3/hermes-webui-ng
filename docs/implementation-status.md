@@ -64,8 +64,9 @@ partial-patch projection, additive hydration, fixed display language) and the ch
 Known boundaries, stated so they are not mistaken for completion:
 
 - Child identity comes from `subagent_id`. A payload without one is dropped rather than attributed by title.
-- Roster authority is per transport. Children are shown for sessions this client drives or has attached to; a
-  session running under another transport shows its row without children. This is an upstream boundary.
+- Roster authority is per transport. The attention poll metadata-attaches this browser to at most 12 active
+  background parents with `session.activate(..., omit_messages:true)` before reading their rosters. This is an
+  additive viewer attach: it does not select the conversation, replace its owner or load its transcript.
 - The list is bounded (24 tracked children, four rendered per parent) and child status labels are fixed client
   language, not upstream copy.
 - No steer, interrupt or tail control is rendered. Hermes advertises `subagent.steer`/`interrupt`/`tail`, but

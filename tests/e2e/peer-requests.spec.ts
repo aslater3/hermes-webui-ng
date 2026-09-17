@@ -9,7 +9,10 @@ async function fixture(page: Page) {
     const server = socket.connectToServer(); emit = frame => socket.send(JSON.stringify(frame));
     socket.onMessage(raw => {
       const frame = JSON.parse(String(raw));
-      if (typeof frame.params?.session_id === 'string') runtime = frame.params.session_id;
+      // Pin the test bridge to the conversation that submitted the prompt. Background attention polling may
+      // legitimately send session-scoped RPCs for other runtimes and must not retarget this injected request.
+      if (frame.method === 'prompt.submit' && typeof frame.params?.session_id === 'string')
+        runtime = frame.params.session_id;
       if (!frame.method && frame.id) { replies.push(frame); return; }
       server.send(raw);
     });

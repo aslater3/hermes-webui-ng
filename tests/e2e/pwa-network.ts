@@ -17,6 +17,7 @@ export async function pwaNetwork(tls = false, fixtureOptions: Parameters<typeof 
   return {
     origin: config.publicOrigin.origin,
     metrics: upstream.metrics,
+    seedActiveSubagent: upstream.seedActiveSubagent,
     async stop(page: Page) {
       await app.close(); stopped = true;
       await assert.rejects(fetch(`${config.publicOrigin.origin}/healthz`, { signal: AbortSignal.timeout(2000) }));

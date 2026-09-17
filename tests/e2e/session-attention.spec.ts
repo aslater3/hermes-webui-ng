@@ -104,3 +104,27 @@ test('a running parent shows its child agents nested beneath it and clears them 
     release(); await page.goto('about:blank'); await network.close();
   }
 });
+
+test('a background parent is attached metadata-only before its subagent roster is rendered', async ({ page }, info) => {
+  const title = `Background parent ${info.project.name}`;
+  const network = await pwaNetwork(false, { requireSubagentActivation: true });
+  network.seedActiveSubagent(title);
+  try {
+    await loginPwa(page, network.origin); await conversations(page);
+    const active = page.getByRole('region', { name: 'Active agent sessions' });
+    const parentButton = active.getByRole('button', { name: `Open active session: ${title}`, exact: true });
+    await expect(parentButton).toContainText('Working');
+    const parentItem = active.locator('li').filter({ has: page.getByRole('button', { name: `Open active session: ${title}`, exact: true }) });
+    const child = parentItem.locator('.active-subagent');
+    await expect(child).toHaveCount(1);
+    await expect(child).toContainText('sa-background');
+    await expect(child).toContainText('Background child');
+    await expect(child).toContainText('deepseek-v4.1-flash');
+    await expect(child).toContainText('last tool: terminal');
+    // The metadata-only attach must not select the background conversation or paint its transcript.
+    await expect(page.locator('[data-role="user"]')).toHaveCount(0);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  } finally {
+    await page.goto('about:blank'); await network.close();
+  }
+});
