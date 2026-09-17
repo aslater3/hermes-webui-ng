@@ -2,7 +2,7 @@ import type { GatewayClient } from './gateway-client.js';
 import { ClientError, record, type GatewayEvent } from './protocol.js';
 import { sessionId, profileName, type SessionRef } from './session-rest.js';
 import {
-  mergeRoster, subagentPatch, subagentRosterPatches, subagentTerminal, upsertSubagent,
+  reconcileHydration, subagentPatch, subagentRosterPatches, subagentTerminal, upsertSubagent,
   type SubagentSnapshot,
 } from './subagent-catalog.js';
 
@@ -18,6 +18,8 @@ export class SessionAttention {
   private owners = new Map<string, SessionRef>();
   private children = new Map<string, SubagentSnapshot[]>();
   private childPrunes = new Map<string, ReturnType<typeof setTimeout>>();
+  /** Consecutive roster omissions per child, so a transiently scoped roster cannot retire live work. */
+  private childMisses = new Map<string, Map<string, number>>();
   /** Parents that produced a child event before their session row was known; one discovery refresh each. */
   private discovering = new Set<string>();
   private current?: string;
@@ -119,6 +121,7 @@ export class SessionAttention {
   private pruneChildParents(): void {
     const live = new Set(this.items.map(item => item.runtimeId));
     for (const parent of [...this.children.keys()]) if (!live.has(parent)) this.children.delete(parent);
+    for (const parent of [...this.childMisses.keys()]) if (!live.has(parent)) this.childMisses.delete(parent);
     for (const parent of [...this.discovering]) if (live.has(parent)) this.discovering.delete(parent);
   }
   /**
@@ -132,7 +135,9 @@ export class SessionAttention {
       try {
         const roster = subagentRosterPatches(await this.gateway.call('subagent.list', { session_id: parent }));
         if (!valid()) return;
-        this.children.set(parent, mergeRoster(this.children.get(parent) ?? [], roster));
+        const misses = this.childMisses.get(parent) ?? new Map<string, number>();
+        this.childMisses.set(parent, misses);
+        this.children.set(parent, reconcileHydration(this.children.get(parent) ?? [], roster, misses));
       } catch { /* not owned here, unsupported, or transient: keep what the stream showed */ }
     }));
   }
@@ -188,6 +193,6 @@ export class SessionAttention {
     const finished = task.finally(() => { if (this.flight === finished) { this.flight = undefined; this.schedule(raced ? 100 : this.intervalMs); } });
     this.flight = finished; return finished;
   }
-  clear() { ++this.epoch; this.flight = undefined; clearTimeout(this.timer); this.enabled = false; this.items = []; this.owners.clear(); this.current = undefined; this.phase = 'empty'; this.childPrunes.forEach(clearTimeout); this.childPrunes.clear(); this.children.clear(); this.discovering.clear(); this.publish(); }
+  clear() { ++this.epoch; this.flight = undefined; clearTimeout(this.timer); this.enabled = false; this.items = []; this.owners.clear(); this.current = undefined; this.phase = 'empty'; this.childPrunes.forEach(clearTimeout); this.childPrunes.clear(); this.children.clear(); this.childMisses.clear(); this.discovering.clear(); this.publish(); }
   dispose() { this.disposed = true; this.clear(); this.cleanups.forEach(fn => fn()); this.listeners.clear(); }
 }

@@ -89,9 +89,11 @@ export function subagentPatch(input: unknown): SubagentPatch | undefined {
   };
 }
 
-/** Fold one patch over the child we already know, keeping every field the patch did not restate. */
+/** A terminal child is final for this attachment: no later frame or snapshot reopens it. */
 export function mergeSubagent(current: SubagentSnapshot | undefined, patch: SubagentPatch, nowMs = Date.now()): SubagentSnapshot {
   const derived = patch.durationSeconds === undefined ? undefined : Math.max(0, nowMs / 1000 - patch.durationSeconds);
+  const previous = current?.status;
+  const stated = patch.status ?? previous ?? 'unknown';
   return {
     subagentId: patch.subagentId,
     parentId: patch.parentId ?? current?.parentId,
@@ -99,7 +101,7 @@ export function mergeSubagent(current: SubagentSnapshot | undefined, patch: Suba
     goal: patch.goal || current?.goal || '',
     model: patch.model ?? current?.model,
     startedAt: patch.startedAt ?? current?.startedAt ?? derived,
-    status: patch.status ?? current?.status ?? 'unknown',
+    status: previous !== undefined && subagentTerminal(previous) && !subagentTerminal(stated) ? previous : stated,
     toolCount: patch.toolCount ?? current?.toolCount,
     lastTool: patch.lastTool ?? current?.lastTool,
     acceptingSteer: patch.acceptingSteer ?? current?.acceptingSteer ?? false,
@@ -138,17 +140,41 @@ export function subagentRoster(input: unknown): SubagentSnapshot[] {
 }
 
 /**
- * Hydration is additive. The roster can legitimately omit a child whose turn belongs to another transport,
- * and a live `subagent.*` frame proves the child exists here — so only a terminal child the roster has
- * stopped reporting is dropped.
+ * Hydration is additive: a roster read adds and updates children but never removes one, because the roster can
+ * legitimately omit a child whose turn belongs to another transport. Retirement is a separate, bounded decision
+ * (`reconcileHydration`).
  */
 export function mergeRoster(current: readonly SubagentSnapshot[], roster: readonly SubagentPatch[]): SubagentSnapshot[] {
   const known = new Map(current.map(item => [item.subagentId, item]));
   const reported = new Set(roster.map(item => item.subagentId));
   return ordered([
     ...roster.map(item => mergeSubagent(known.get(item.subagentId), item)),
-    ...current.filter(item => !reported.has(item.subagentId) && !subagentTerminal(item.status)),
+    ...current.filter(item => !reported.has(item.subagentId)),
   ]);
+}
+
+/** Consecutive successful roster reads that omit a live child before it is treated as ended. */
+export const SUBAGENT_OMISSION_LIMIT = 3;
+
+/**
+ * Fold one roster read over the children we hold.
+ *
+ * A live child the roster omits is not immediately wrong — the roster may simply be scoped to another
+ * transport — so `misses` counts consecutive omissions and only a bounded run retires it. A terminal child is
+ * never retired here: its own retention window owns that, so the completion stays observable.
+ */
+export function reconcileHydration(
+  current: readonly SubagentSnapshot[], roster: readonly SubagentPatch[], misses: Map<string, number>,
+): SubagentSnapshot[] {
+  const reported = new Set(roster.map(item => item.subagentId));
+  const survivors: SubagentSnapshot[] = [];
+  for (const child of current) {
+    if (subagentTerminal(child.status) || reported.has(child.subagentId)) { misses.delete(child.subagentId); survivors.push(child); continue; }
+    const count = (misses.get(child.subagentId) ?? 0) + 1;
+    if (count >= SUBAGENT_OMISSION_LIMIT) { misses.delete(child.subagentId); continue; }
+    misses.set(child.subagentId, count); survivors.push(child);
+  }
+  return mergeRoster(survivors, roster);
 }
 
 export function subagentElapsedSeconds(item: SubagentSnapshot, nowMs = Date.now()): number | undefined {

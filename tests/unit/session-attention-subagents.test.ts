@@ -100,6 +100,28 @@ test('a child event for a parent that is not listed yet triggers one discovery r
   assert.deepEqual(store.subagents('late').map(item => item.subagentId), ['sa-late']);
 });
 
+test('a late roster read cannot reopen a completed child, and an empty one does not retire live work at once', async t => {
+  const wire = new Wire(), store = new SessionAttention(wire);
+  t.after(() => store.dispose()); store.setEnabled(true);
+  wire.rows = [wire.row('working', 'owned')]; store.bind('owned', { id: 'saved', profile: 'default' });
+  await store.refresh();
+  wire.emit('subagent.start', 'owned', { subagent_id: 'sa-0', goal: 'Work', status: 'running' });
+  wire.emit('subagent.complete', 'owned', { subagent_id: 'sa-0', status: 'completed', duration_seconds: 12 });
+  assert.equal(store.subagents('owned')[0]?.status, 'completed');
+  // A host that still lists the child as running must not move a finished child back to running.
+  wire.subagents = { subagents: [{ subagent_id: 'sa-0', goal: 'Work', status: 'running', tool_count: 2 }] };
+  await store.refresh();
+  assert.equal(store.subagents('owned')[0]?.status, 'completed');
+  assert.equal(store.subagents('owned')[0]?.toolCount, 2);
+  // A second child with no roster entry survives a bounded run of omissions, then leaves.
+  wire.emit('subagent.start', 'owned', { subagent_id: 'sa-1', goal: 'Silent child', status: 'running' });
+  wire.subagents = { subagents: [] };
+  await store.refresh(); await store.refresh();
+  assert.deepEqual(store.subagents('owned').map(item => item.subagentId), ['sa-0', 'sa-1']);
+  await store.refresh();
+  assert.deepEqual(store.subagents('owned').map(item => item.subagentId), ['sa-0']);
+});
+
 test('account clearing and session removal drop nested children', async t => {
   const wire = new Wire(), store = new SessionAttention(wire, 5000, 20_000);
   t.after(() => store.dispose()); store.setEnabled(true);

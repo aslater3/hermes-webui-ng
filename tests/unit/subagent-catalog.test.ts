@@ -1,8 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  SUBAGENT_LIMIT, mergeRoster, mergeSubagent, subagentElapsedSeconds, subagentPatch,
-  subagentRoster, subagentRosterPatches, subagentStatusLabel, subagentSummary,
+  SUBAGENT_LIMIT, mergeRoster, mergeSubagent, reconcileHydration, subagentElapsedSeconds, subagentPatch,
+  subagentRoster, subagentRosterPatches, subagentStatusLabel, subagentSummary, upsertSubagent,
 } from '../../src/hermes/subagent-catalog.js';
 
 /** Test-only: a fixture that silently lost its identity would make every later assertion meaningless. */
@@ -62,14 +62,42 @@ test('a duration-only event derives a start time so elapsed time is still shown'
   assert.equal(subagentElapsedSeconds(item, 1_000_000), 360);
 });
 
-test('hydration adds and updates but never erases a child the live stream reported as running', () => {
+test('hydration adds and updates but never removes a child the live stream reported as running', () => {
   const live = mergeSubagent(undefined, patch({ subagent_id: 'sa-live', goal: 'Running work', status: 'working' }));
   const done = mergeSubagent(undefined, patch({ subagent_id: 'sa-done', status: 'completed' }));
   const roster = subagentRosterPatches({ subagents: [{ subagent_id: 'sa-live', goal: 'Running work', tool_count: 4 }] });
-  const merged = mergeRoster([live, done], roster);
-  assert.deepEqual(merged.map(item => item.subagentId), ['sa-live']);
-  assert.equal(merged[0]?.toolCount, 4);
-  assert.equal(merged[0]?.status, 'working');
+  const misses = new Map<string, number>();
+  const merged = reconcileHydration([live, done], roster, misses);
+  const byId = new Map(merged.map(item => [item.subagentId, item]));
+  assert.deepEqual([...byId.keys()].sort(), ['sa-done', 'sa-live']);
+  assert.equal(byId.get('sa-live')?.toolCount, 4);
+  assert.equal(byId.get('sa-live')?.status, 'working');
+  assert.equal(byId.get('sa-done')?.status, 'completed');
+});
+
+test('a live child the roster keeps omitting is retired only after a bounded run of misses', () => {
+  const live = mergeSubagent(undefined, patch({ subagent_id: 'sa-live', status: 'working' }));
+  const misses = new Map<string, number>();
+  const empty = subagentRosterPatches({ subagents: [] });
+  assert.deepEqual(reconcileHydration([live], empty, misses).map(item => item.subagentId), ['sa-live']);
+  assert.equal(misses.get('sa-live'), 1);
+  assert.deepEqual(reconcileHydration([live], empty, misses).map(item => item.subagentId), ['sa-live']);
+  assert.deepEqual(reconcileHydration([live], empty, misses).map(item => item.subagentId), []);
+  assert.equal(misses.has('sa-live'), false);
+  // A roster that reports the child again clears the run instead of retiring it.
+  reconcileHydration([live], empty, misses);
+  const reporting = subagentRosterPatches({ subagents: [{ subagent_id: 'sa-live', status: 'running' }] });
+  assert.deepEqual(reconcileHydration([live], reporting, misses).map(item => item.subagentId), ['sa-live']);
+  assert.equal(misses.has('sa-live'), false);
+});
+
+test('a terminal child is final: no later snapshot or frame reopens it', () => {
+  const finished = mergeSubagent(undefined, patch({ subagent_id: 'sa-0', status: 'completed' }));
+  const reopenedByRoster = mergeRoster([finished], subagentRosterPatches({ subagents: [{ subagent_id: 'sa-0', status: 'running', tool_count: 9 }] }));
+  assert.equal(reopenedByRoster[0]?.status, 'completed');
+  assert.equal(reopenedByRoster[0]?.toolCount, 9);
+  assert.equal(upsertSubagent([finished], patch({ subagent_id: 'sa-0', status: 'running' }))[0]?.status, 'completed');
+  assert.equal(upsertSubagent([finished], patch({ subagent_id: 'sa-0', tool_name: 'terminal' }))[0]?.status, 'completed');
 });
 
 test('summary text is fixed language, bounded and derived only from validated fields', () => {
