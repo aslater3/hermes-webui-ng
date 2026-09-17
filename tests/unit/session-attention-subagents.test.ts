@@ -9,12 +9,15 @@ class Wire {
   events = new Set<(e: GatewayEvent) => void>(); states = new Set<(s: ConnectionState) => void>();
   rows: unknown[] = []; calls: { method: string; params: Record<string, unknown> }[] = [];
   subagents: Record<string, unknown> = { subagents: [] };
+  delegations: Record<string, unknown> = { active: [] };
   subagentError?: ClientError;
+  delegationError?: ClientError;
   requireActivation = false;
   attached = new Set<string>();
   call = async (method: string, params: Record<string, unknown> = {}) => {
     this.calls.push({ method, params });
     if (method === 'session.active_list') return { sessions: this.rows };
+    if (method === 'delegation.status') { if (this.delegationError) throw this.delegationError; return this.delegations; }
     if (method === 'session.activate') { this.attached.add(String(params.session_id)); return { running: true, status: 'working' }; }
     if (method === 'subagent.list') {
       if (this.subagentError) throw this.subagentError;
@@ -67,6 +70,37 @@ test('a completed child is pruned after the retention window without disturbing 
   assert.deepEqual(store.subagents('live'), []);
   assert.equal(store.items.length, 1);
   assert.equal(store.items[0]?.runtimeId, 'live');
+});
+
+test('global delegation status nests children under an idle parent and makes the parent active', async t => {
+  const wire = new Wire(), store = new SessionAttention(wire);
+  t.after(() => store.dispose()); store.setEnabled(true);
+  wire.rows = [wire.row('idle', 'parent-runtime', 'parent-durable')];
+  wire.delegations = { active: [{
+    subagent_id:'sa-global', owner_agent_session_id:'parent-durable', goal:'Global child',
+    status:'running', model:'deepseek-v4.1-flash', started_at:100, tool_count:8, last_tool:'terminal',
+  }] };
+  // Keep the transport-owned path empty: this reproduces the live Hermes integration boundary.
+  wire.subagents = { subagents: [], delegations: [] };
+  await store.refresh();
+  assert.equal(store.items[0]?.status, 'working');
+  const child = store.subagents('parent-runtime')[0];
+  assert.equal(child?.subagentId, 'sa-global');
+  assert.equal(child?.goal, 'Global child');
+  assert.equal(child?.model, 'deepseek-v4.1-flash');
+  assert.equal(child?.lastTool, 'terminal');
+  assert.equal(child?.toolCount, 8);
+});
+
+test('global children are never assigned when a durable parent id is ambiguous', async t => {
+  const wire = new Wire(), store = new SessionAttention(wire);
+  t.after(() => store.dispose()); store.setEnabled(true);
+  wire.rows = [wire.row('idle', 'runtime-a', 'same-durable'), wire.row('idle', 'runtime-b', 'same-durable')];
+  wire.delegations = { active: [{ subagent_id:'sa-global', owner_agent_session_id:'same-durable', status:'running' }] };
+  await store.refresh();
+  assert.deepEqual(store.subagents('runtime-a'), []);
+  assert.deepEqual(store.subagents('runtime-b'), []);
+  assert.deepEqual(store.items.map(item => item.status), ['idle','idle']);
 });
 
 test('background active parents attach as metadata-only viewers before roster hydration', async t => {
