@@ -5,12 +5,14 @@ import type { AppRuntime } from './runtime.js';
 import { Brand, IconButton } from './primitives.js';
 import { dateGroup } from './preferences.js';
 import { draftKey } from '../src/hermes/chat-controller.js';
+import { visibleSessionRows } from '../src/hermes/session-visibility.js';
 import './sidebar-attention.css';
 
 export function Sidebar({ runtime: rt, onChoose, onSettings, onCommands, onCollapse, compact = false }: {
   runtime: AppRuntime; onChoose: () => void; onSettings: () => void; onCommands: () => void; onCollapse?: () => void; compact?: boolean;
 }) {
   const index = rt.chat.browser.index, [query, setQuery] = useState(index.query);
+  const rows = index.query ? index.rows : visibleSessionRows(index.rows, rt.attention.items);
   const search = useRef<HTMLInputElement>(null);
   useEffect(() => { setQuery(index.query); }, [rt.accountGeneration, index.query]);
   useEffect(() => {
@@ -28,8 +30,8 @@ export function Sidebar({ runtime: rt, onChoose, onSettings, onCommands, onColla
         <ActiveSessions runtime={rt} onChoose={onChoose}/>
         {index.phase === 'loading' && !index.rows.length && <div className="list-loading" role="status">Loading conversations…<i/><i/><i/></div>}
         {index.phase === 'error' && <div className="sidebar-notice" role="status">Could not load conversations. <button onClick={() => rt.run(() => rt.chat.browser.refresh())}>Retry</button></div>}
-        {index.phase === 'ready' && !index.rows.length && <div className="empty-list"><MessageSquare size={22}/><p>{query ? 'No matching conversations' : 'A fresh start'}</p><span>{query ? 'Try a different search.' : 'Your conversations will appear here.'}</span></div>}
-        <ul aria-label="Saved conversations">{index.rows.map(row => {
+        {index.phase === 'ready' && !rows.length && <div className="empty-list"><MessageSquare size={22}/><p>{query ? 'No matching conversations' : index.total ? 'No inactive conversations' : 'A fresh start'}</p><span>{query ? 'Try a different search.' : index.total ? 'Active sessions appear above while they are running.' : 'Your conversations will appear here.'}</span></div>}
+        <ul aria-label="Saved conversations">{rows.map(row => {
           const group = index.query ? 'Search results' : dateGroup(row.lastActive), heading = group !== previous; previous = group;
           const selected = draftKey(row) === draftKey(rt.chat.selected), view = rt.chat.viewFor(row), active = rt.attention.forSession(row);
           const waiting = rt.ready && (active?.status === 'waiting' || view?.state.phase === 'waiting' || view?.activity.state.inputs.some(input => input.status === 'pending'));
