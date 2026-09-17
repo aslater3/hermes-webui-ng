@@ -10,10 +10,18 @@ class Wire {
   rows: unknown[] = []; calls: { method: string; params: Record<string, unknown> }[] = [];
   subagents: Record<string, unknown> = { subagents: [] };
   subagentError?: ClientError;
+  requireActivation = false;
+  attached = new Set<string>();
   call = async (method: string, params: Record<string, unknown> = {}) => {
     this.calls.push({ method, params });
     if (method === 'session.active_list') return { sessions: this.rows };
-    if (method === 'subagent.list') { if (this.subagentError) throw this.subagentError; return this.subagents; }
+    if (method === 'session.activate') { this.attached.add(String(params.session_id)); return { running: true, status: 'working' }; }
+    if (method === 'subagent.list') {
+      if (this.subagentError) throw this.subagentError;
+      if (this.requireActivation && !this.attached.has(String(params.session_id)))
+        throw new ClientError('rpc', 'Hermes RPC rejected (4001)', 4001);
+      return this.subagents;
+    }
     if (method === 'approval.pending') return { approvals: [] };
     return {};
   };
@@ -61,18 +69,39 @@ test('a completed child is pruned after the retention window without disturbing 
   assert.equal(store.items[0]?.runtimeId, 'live');
 });
 
-test('hydration reads the roster only for owned parents and stays silent when Hermes refuses', async t => {
+test('background active parents attach as metadata-only viewers before roster hydration', async t => {
   const wire = new Wire(), store = new SessionAttention(wire);
   t.after(() => store.dispose()); store.setEnabled(true);
-  wire.rows = [wire.row('working', 'owned'), wire.row('working', 'unowned', 'saved2')];
-  store.bind('owned', { id: 'saved', profile: 'default' });
+  wire.requireActivation = true;
+  wire.rows = [wire.row('working', 'selected'), wire.row('working', 'background', 'saved2')];
+  store.bind('selected', { id: 'saved', profile: 'default' });
+  wire.attached.add('selected');
   wire.subagents = { subagents: [{ subagent_id: 'sa-7', goal: 'Hydrated', status: 'working', last_tool: 'read_file' }], delegations: [] };
   await store.refresh();
-  assert.deepEqual(wire.subagentCalls().map(entry => entry.params.session_id), ['owned']);
-  assert.deepEqual(store.subagents('owned').map(item => item.subagentId), ['sa-7']);
-  wire.subagentError = new ClientError('rpc', 'Hermes RPC rejected (4001)', 4001);
+  assert.deepEqual(wire.calls.filter(entry => entry.method === 'session.activate').map(entry => entry.params), [
+    { session_id: 'background', omit_messages: true },
+  ]);
+  assert.deepEqual(wire.subagentCalls().map(entry => entry.params.session_id), ['selected', 'background', 'background']);
+  assert.deepEqual(store.subagents('selected').map(item => item.subagentId), ['sa-7']);
+  assert.deepEqual(store.subagents('background').map(item => item.subagentId), ['sa-7']);
+  // The attach is sticky for this transport; the next poll reads the roster without another activate.
+  wire.calls = [];
   await store.refresh();
-  assert.deepEqual(store.subagents('owned').map(item => item.subagentId), ['sa-7']);
+  assert.deepEqual(wire.calls.filter(entry => entry.method === 'session.activate'), []);
+  assert.deepEqual(wire.subagentCalls().map(entry => entry.params.session_id), ['selected', 'background']);
+});
+
+test('unsupported or non-ownership roster failures stay silent and preserve streamed children', async t => {
+  const wire = new Wire(), store = new SessionAttention(wire);
+  t.after(() => store.dispose()); store.setEnabled(true);
+  wire.rows = [wire.row('working', 'owned')];
+  store.bind('owned', { id: 'saved', profile: 'default' });
+  await store.refresh();
+  wire.emit('subagent.start', 'owned', { subagent_id: 'sa-live', goal: 'Still running', status: 'running' });
+  wire.subagentError = new ClientError('rpc', 'Unsupported', -32601);
+  await store.refresh();
+  assert.deepEqual(wire.calls.filter(entry => entry.method === 'session.activate'), []);
+  assert.deepEqual(store.subagents('owned').map(item => item.subagentId), ['sa-live']);
 });
 
 test('hydration never erases a child the live stream reported as running', async t => {

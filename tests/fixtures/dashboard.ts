@@ -104,6 +104,9 @@ export async function startFixture(port = 0, options: { sessionToken?: string; b
     metrics.upgrades++; ws.handleUpgrade(req, socket, head, (client) => ws.emit('connection', client));
   });
   ws.on('connection', (client: WebSocket) => {
+    // Mirrors Hermes transport authority: process-wide active_list is readable, but a child roster requires
+    // this exact client to have created/resumed/activated the parent runtime.
+    const attached = new Set<string>();
     const event = (type: string, session_id?: string, payload: unknown = {}) =>
       client.send(JSON.stringify({ jsonrpc: '2.0', method: 'event', params: { type, session_id, payload } }));
     event('gateway.ready', undefined, { heartbeat: true, change_events: true });
@@ -113,17 +116,21 @@ export async function startFixture(port = 0, options: { sessionToken?: string; b
       const error = () => client.send(JSON.stringify({ jsonrpc: '2.0', id, error: { code: 4001, message: 'Not found' } }));
       if (models.handle(method, params, reply, error, event)) return;
       if (method === 'session.active_list') { reply({ sessions: [...sessions].map(([id, row]) => ({ id, session_key: row.key, last_active: row.updated, title: row.messages.find(message => message.role === 'user')?.text.slice(0, 120) || 'New conversation', status: interactions.waiting(id) ? 'waiting' : row.running ? 'working' : 'idle' })) }); return; }
-      if (method === 'subagent.list') { reply({ subagents: children.get(String(params.session_id)) ?? [], delegations: [] }); return; }
+      if (method === 'subagent.list') {
+        if (!attached.has(String(params.session_id))) { error(); return; }
+        reply({ subagents: children.get(String(params.session_id)) ?? [], delegations: [] }); return;
+      }
       if (method === 'gateway.ping') { reply({ ok: true }); return; }
       if (method === 'session.create') {
         const sid = randomUUID(); const key = randomUUID(); metrics.creates++;
         models.create(sid, typeof params.profile === 'string' ? params.profile : 'default');
-        sessions.set(sid, { key, messages: [], running: false, profile: typeof params.profile === 'string' ? params.profile : 'default', updated: Date.now()/1000, turn: 0, inflight: '' }); reply({ session_id: sid, stored_session_id: key, info: models.info(sid) }); return;
+        sessions.set(sid, { key, messages: [], running: false, profile: typeof params.profile === 'string' ? params.profile : 'default', updated: Date.now()/1000, turn: 0, inflight: '' }); attached.add(sid); reply({ session_id: sid, stored_session_id: key, info: models.info(sid) }); return;
       }
       if (method === 'session.resume') {
         const entry = [...sessions].find(([sid, session]) => sid === params.session_id || session.key === params.session_id);
         if (!entry || (params.profile && entry[1].profile !== params.profile)) { error(); return; }
         if (!('model' in models.info(entry[0]))) models.create(entry[0], entry[1].profile);
+        attached.add(entry[0]);
         reply({ session_id: entry[0], session_key: entry[1].key, info: { ...models.info(entry[0]), profile_name: entry[1].profile } }); return;
       }
       const session = sessions.get(params.session_id);
@@ -131,7 +138,7 @@ export async function startFixture(port = 0, options: { sessionToken?: string; b
       const emitAgent = (type:string,payload:unknown) => {if(client.readyState===1)event(type,params.session_id,payload);};
       if(interactions.respond(params.session_id,method,params,reply))return;
       if (method === 'session.history') { reply({ messages: session.messages }); return; }
-      if (method === 'session.activate') { reply({ info: models.info(String(params.session_id)), running: session.running, status: session.running ? 'working' : 'idle', inflight: { assistant: session.inflight },...interactions.snapshot(params.session_id,emitAgent) }); return; }
+      if (method === 'session.activate') { attached.add(String(params.session_id)); reply({ info: models.info(String(params.session_id)), running: session.running, status: session.running ? 'working' : 'idle', inflight: { assistant: session.inflight },...interactions.snapshot(params.session_id,emitAgent) }); return; }
       if (method === 'session.interrupt') { interactions.interrupt(params.session_id); session.turn++; session.running = false; session.inflight = ''; reply({ ok: true }); event('session.info', params.session_id, { running: false }); return; }
       if (method === 'prompt.submit') {
         if (session.running) { error(); return; }
@@ -195,6 +202,14 @@ export async function startFixture(port = 0, options: { sessionToken?: string; b
       for (let i=0; i<count; i++) sessions.set(`seed-live-${i}`, { key:`seed-${i}`, profile:'default',
         messages: Array.from({length: messageCount}, (_, j) => ({ role:j%2 ? 'assistant' : 'user', text:`Seed ${i} entry ${j}` })),
         running:false, updated:i, turn:0, inflight:'' });
+    },
+    seedActiveSubagent: (title: string) => {
+      const sid = randomUUID(), key = randomUUID();
+      sessions.set(sid, { key, profile:'default', messages:[{role:'user', text:title}],
+        running:true, updated:Date.now()/1000, turn:1, inflight:'Background work is running…' });
+      children.set(sid, [{ subagent_id:'sa-background', goal:'Background child', model:'deepseek-v4.1-flash',
+        status:'running', started_at:Date.now()/1000 - 120, tool_count:4, last_tool:'terminal' }]);
+      return { sid, key };
     },
     disconnect: () => { for (const client of ws.clients) client.terminate(); },
     close: async () => {

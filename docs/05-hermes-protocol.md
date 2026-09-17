@@ -137,8 +137,10 @@ Unknown events are ignored safely but retained in debug traces when diagnostics 
 The Active sessions list nests live child agents under their parent session.
 
 - `subagent.list({session_id})` returns `{subagents, delegations}` for the calling transport's live session.
-  Authority is transport-scoped: a session this client never attached answers `4001` and is treated as
-  "no children here", never as an error or as an empty roster that erases what the stream reported.
+  Authority is transport-scoped: a session this client never attached answers `4001`. For an active background
+  row, the attention poll responds by calling `session.activate({session_id, omit_messages:true})` once, then
+  retries the roster. Activate adds this browser as a viewer without changing the selected conversation or
+  loading its transcript; subsequent child events are delivered to the browser's transport.
 - `subagent.start` / `subagent.progress` / `subagent.tool` / `subagent.complete` are relayed on the **parent**
   session id. They are partial patches, so a field the frame omits keeps its previous value; per-token
   `subagent.text` frames are not sent on the parent.
@@ -151,9 +153,10 @@ The Active sessions list nests live child agents under their parent session.
 - A child in a terminal state stays visible until a bounded retention window elapses, then leaves without
   disturbing the parent row.
 
-Because roster authority is per transport, children are shown for sessions this client drives or has attached
-to. A session running under a different transport shows its own session row but not its children. This is a
-deliberate upstream boundary, not a rendering fallback.
+Because roster authority is per transport, the WebUI metadata-attaches to a bounded set of active background
+parents before hydrating their children. A stale parent, an unsupported Gateway or a transient attach/read
+failure stays silent and preserves children already reported by the stream. The attach is additive and does not
+replace the parent's owner, select the conversation or materialise its transcript.
 
 ## 7. Pending request management
 

@@ -125,20 +125,35 @@ export class SessionAttention {
     for (const parent of [...this.discovering]) if (live.has(parent)) this.discovering.delete(parent);
   }
   /**
-   * Best-effort roster hydration. Hermes only answers for a session this transport owns, so 4001/unsupported
-   * and transient failures all stay silent: the live stream already proved which children exist here.
+   * Read one parent roster. `session.active_list` is process-wide, while `subagent.list` requires this exact
+   * transport to be attached to the live session. A background row therefore gets one metadata-only
+   * `session.activate` on 4001, then the roster is retried. Activate is additive (viewer/fanout), does not
+   * change the selected conversation, and `omit_messages` prevents a transcript load.
+   */
+  private async subagentRoster(parent: string) {
+    try {
+      return subagentRosterPatches(await this.gateway.call('subagent.list', { session_id: parent }));
+    } catch (error) {
+      if (!(error instanceof ClientError) || error.rpcCode !== 4001) throw error;
+      record(await this.gateway.call('session.activate', { session_id: parent, omit_messages: true }));
+      return subagentRosterPatches(await this.gateway.call('subagent.list', { session_id: parent }));
+    }
+  }
+  /**
+   * Best-effort roster hydration. Active rows are process-wide, so attach this transport as a metadata-only
+   * viewer when needed; unsupported and transient failures stay silent and preserve streamed children.
    */
   private async hydrateSubagents(valid: () => boolean): Promise<void> {
-    const targets = this.items.filter(item => this.owners.has(item.runtimeId) &&
-      ['working', 'starting', 'waiting'].includes(item.status)).slice(0, 4).map(item => item.runtimeId);
+    const targets = this.items.filter(item => ['working', 'starting', 'waiting'].includes(item.status))
+      .slice(0, 12).map(item => item.runtimeId);
     await Promise.all(targets.map(async parent => {
       try {
-        const roster = subagentRosterPatches(await this.gateway.call('subagent.list', { session_id: parent }));
+        const roster = await this.subagentRoster(parent);
         if (!valid()) return;
         const misses = this.childMisses.get(parent) ?? new Map<string, number>();
         this.childMisses.set(parent, misses);
         this.children.set(parent, reconcileHydration(this.children.get(parent) ?? [], roster, misses));
-      } catch { /* not owned here, unsupported, or transient: keep what the stream showed */ }
+      } catch { /* stale parent, unsupported, or transient: keep what the stream showed */ }
     }));
   }
   refresh(): Promise<void> {
