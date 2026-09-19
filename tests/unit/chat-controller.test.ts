@@ -60,6 +60,18 @@ test('ended API-server history without a durable session key stays read-only and
   await h.chat.latest(); assert.deepEqual(h.resumes(),[]); assert.equal(h.chat.readOnly,true); assert.equal(h.chat.historical,true);
   h.chat.dispose();
 });
+test('ended WebUI history without a durable session key stays read-only and preserves Gateway transport',async()=>{
+  const h=fixture(); await h.chat.browser.list();
+  const row:SessionRow={id:'webui-ended',profile:'owner',title:'Ended WebUI conversation',preview:'saved reply',source:'webui-ng',
+    lastActive:1712345678,messageCount:1581,endedAt:1712345680.5,endReason:'ws_orphan_reap'};
+  h.chat.browser.index={phase:'ready',rows:[row],query:'',offset:0,total:1,hasNext:false};
+  await h.chat.open(row);
+  assert.deepEqual(h.resumes(),[]); assert.equal(h.chat.browser.history.phase,'ready');
+  assert.equal(h.chat.historical,true); assert.equal(h.chat.readOnly,true); assert.equal(h.chat.error,undefined);
+  assert.equal(h.gateway.state.phase,'ready'); assert.equal(h.chat.native.state.phase,'empty');
+  h.chat.setDraft('must not send'); await h.chat.send(); assert.equal(h.prompts(),0);
+  h.chat.dispose();
+});
 test('active-session opening prefers the durable key over a stale process runtime id',async()=>{
   const h=fixture(); await h.chat.openLive('stale-runtime','durable-saved','owner');
   assert.deepEqual(h.resumes(),['durable-saved']); assert.ok(!h.resumes().includes('stale-runtime'));

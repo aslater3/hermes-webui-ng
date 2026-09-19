@@ -100,9 +100,10 @@ export class ChatController {
     return rows.length === 1 ? rows[0] : undefined;
   }
   private static restOnly(row?: SessionRow): boolean {
-    // API-server rows are readable through Dashboard REST, but an ended row with no session_key
-    // has no durable TUI-Gateway resume identity. Other sources keep the established resume path.
-    return !!row && row.source.toLowerCase() === 'api_server' && row.endedAt !== undefined && !row.sessionKey;
+    // An ended row without a durable session key cannot be attached to the native Gateway,
+    // regardless of which Hermes surface created it. Keep the transport healthy and show the
+    // authoritative Dashboard REST transcript instead of attempting a session-scoped resume.
+    return !!row && row.endedAt !== undefined && !row.sessionKey;
   }
   private static missingNative(error: unknown): error is ClientError {
     return error instanceof ClientError && error.rpcCode === 4007;
