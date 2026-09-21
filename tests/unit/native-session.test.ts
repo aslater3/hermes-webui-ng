@@ -153,6 +153,21 @@ test('settled session.info clears running after message.complete before idle cle
   session.dispose();
 });
 
+test('an attach never asks the gateway to inline the transcript', async () => {
+  // A large conversation's inline transcript exceeds the client's frame cap, which is reported as a
+  // Gateway protocol failure for a session the gateway can still resume. refresh() loads the
+  // transcript through session.history/session.activate regardless, so the attach must omit it.
+  const rpc = new Rpc();
+  const session = new NativeSession(rpc);
+  await session.create();
+  await session.resume('durable');
+  const attach = rpc.calls.filter((call) => ['session.create', 'session.resume'].includes(call.method));
+  assert.equal(attach.length, 2);
+  for (const call of attach)
+    assert.equal(call.params.omit_messages, true, `${call.method} inlines the transcript`);
+  session.dispose();
+});
+
 test('settled session.info invalidates a snapshot already fetching while ignoring other sessions', async () => {
   const rpc = new Rpc();
   const session = new NativeSession(rpc);
