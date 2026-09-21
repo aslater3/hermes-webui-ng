@@ -8,6 +8,17 @@ import { profileName, sessionId, type SessionRef, type SessionRow } from './sess
 
 type Gateway = Pick<GatewayClient, 'call' | 'onEvent' | 'onState' | 'state'>;
 type Reader = Pick<DashboardClient, 'sessions' | 'searchSessions' | 'sessionMessages'>;
+
+/**
+ * Ends Hermes stamps when a runtime went away rather than the conversation ending deliberately
+ * (upstream ``_AUTOMATIC_END_REASONS`` in hermes_state_common.py). A row ended this way is still
+ * resumable by its own id: Dashboard ``session_key`` is only populated for messaging-gateway routes,
+ * so for TUI/WebUI sessions the row id IS the durable gateway key.
+ */
+const RESUMABLE_END_REASONS: ReadonlySet<string> = new Set([
+  'agent_close', 'ws_orphan_reap', 'superseded_by_resume', 'startup_orphan_reap',
+  'tui_shutdown', 'ws_disconnect', 'idle_timeout', 'lru_evict',
+]);
 export function navigation(ref?: SessionRef): string {
   if (!ref) return '';
   const query = new URLSearchParams({ session: sessionId(ref.id) });
@@ -100,10 +111,13 @@ export class ChatController {
     return rows.length === 1 ? rows[0] : undefined;
   }
   private static restOnly(row?: SessionRow): boolean {
-    // An ended row without a durable session key cannot be attached to the native Gateway,
-    // regardless of which Hermes surface created it. Keep the transport healthy and show the
-    // authoritative Dashboard REST transcript instead of attempting a session-scoped resume.
-    return !!row && row.endedAt !== undefined && !row.sessionKey;
+    // A session reclaimed by a runtime going away (browser socket dropped, gateway restart, TTL/LRU
+    // reaper) is NOT ended as far as resume is concerned: the gateway revives those rows by id and
+    // returns the full transcript, so the attach must still be attempted. open() keeps the read-only
+    // fallback for a refused attach (4007) and for a missing transcript. A deliberate boundary — or an
+    // end stamp we cannot classify — stays read-only, which is the conservative reading.
+    if (!row || row.endedAt === undefined) return false;
+    return !RESUMABLE_END_REASONS.has((row.endReason ?? '').toLowerCase());
   }
   private static missingNative(error: unknown): error is ClientError {
     return error instanceof ClientError && error.rpcCode === 4007;

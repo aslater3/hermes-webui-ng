@@ -47,29 +47,52 @@ test('session browsing resolves canonical owning profile and never creates on re
   const h=fixture(); await h.chat.open({id:'existing'});
   assert.equal(h.resumed(),'existing'); assert.equal(h.chat.selected?.profile,'owner'); assert.equal(h.creates(),0); h.chat.dispose();
 });
-test('ended API-server history without a durable session key stays read-only and never resumes',async()=>{
-  const h=fixture(); await h.chat.browser.list();
+test('ended API-server history stays read-only when the gateway refuses the attach',async()=>{
+  const h=fixture({resumeError:new ClientError('rpc','Hermes RPC rejected (4007)',4007)}); await h.chat.browser.list();
   const row:SessionRow={id:'api-ended',profile:'owner',title:'Ended API conversation',preview:'saved reply',source:'api_server',
     lastActive:1712345678,messageCount:415,endedAt:1712345680.5,endReason:'ws_orphan_reap'};
   h.chat.browser.index={phase:'ready',rows:[row],query:'',offset:0,total:1,hasNext:false};
   await h.chat.open(row);
-  assert.deepEqual(h.resumes(),[]); assert.equal(h.chat.browser.history.phase,'ready');
+  assert.deepEqual(h.resumes(),['api-ended']); assert.equal(h.chat.browser.history.phase,'ready');
   assert.equal(h.chat.historical,true); assert.equal(h.chat.readOnly,true); assert.equal(h.chat.error,undefined);
   assert.equal(h.chat.native.state.phase,'empty'); assert.equal(h.chat.native.state.error,undefined);
+  assert.ok(!JSON.stringify(h.chat.native.state).includes('4007'));
   h.chat.setDraft('must not send'); await h.chat.send(); assert.equal(h.prompts(),0);
-  await h.chat.latest(); assert.deepEqual(h.resumes(),[]); assert.equal(h.chat.readOnly,true); assert.equal(h.chat.historical,true);
+  await h.chat.latest(); assert.equal(h.chat.readOnly,true); assert.equal(h.chat.historical,true);
   h.chat.dispose();
 });
-test('ended WebUI history without a durable session key stays read-only and preserves Gateway transport',async()=>{
+test('session reclaimed by a vanished runtime resumes natively instead of opening read-only',async()=>{
   const h=fixture(); await h.chat.browser.list();
   const row:SessionRow={id:'webui-ended',profile:'owner',title:'Ended WebUI conversation',preview:'saved reply',source:'webui-ng',
     lastActive:1712345678,messageCount:1581,endedAt:1712345680.5,endReason:'ws_orphan_reap'};
   h.chat.browser.index={phase:'ready',rows:[row],query:'',offset:0,total:1,hasNext:false};
   await h.chat.open(row);
+  assert.deepEqual(h.resumes(),['webui-ended']); assert.equal(h.chat.historical,false);
+  assert.equal(h.chat.readOnly,false); assert.equal(h.chat.error,undefined);
+  assert.equal(h.chat.native.state.phase,'idle');
+  h.chat.setDraft('continue where we left off'); const pending=h.chat.send();
+  assert.equal(h.prompts(),1); h.finish(); await pending;
+  h.chat.dispose();
+});
+test('deliberate session boundary stays read-only and never resumes',async()=>{
+  const h=fixture(); await h.chat.browser.list();
+  const row:SessionRow={id:'reset-ended',profile:'owner',title:'Reset conversation',preview:'saved reply',source:'webui-ng',
+    lastActive:1712345678,messageCount:42,endedAt:1712345680.5,endReason:'session_reset'};
+  h.chat.browser.index={phase:'ready',rows:[row],query:'',offset:0,total:1,hasNext:false};
+  await h.chat.open(row);
   assert.deepEqual(h.resumes(),[]); assert.equal(h.chat.browser.history.phase,'ready');
   assert.equal(h.chat.historical,true); assert.equal(h.chat.readOnly,true); assert.equal(h.chat.error,undefined);
-  assert.equal(h.gateway.state.phase,'ready'); assert.equal(h.chat.native.state.phase,'empty');
+  assert.equal(h.chat.native.state.phase,'empty');
   h.chat.setDraft('must not send'); await h.chat.send(); assert.equal(h.prompts(),0);
+  h.chat.dispose();
+});
+test('an ended row with no end stamp stays read-only rather than guessing',async()=>{
+  const h=fixture(); await h.chat.browser.list();
+  const row:SessionRow={id:'unclassified',profile:'owner',title:'Unclassified end',preview:'saved reply',source:'webui-ng',
+    lastActive:1712345678,messageCount:7,endedAt:1712345680.5};
+  h.chat.browser.index={phase:'ready',rows:[row],query:'',offset:0,total:1,hasNext:false};
+  await h.chat.open(row);
+  assert.deepEqual(h.resumes(),[]); assert.equal(h.chat.readOnly,true); assert.equal(h.chat.historical,true);
   h.chat.dispose();
 });
 test('active-session opening prefers the durable key over a stale process runtime id',async()=>{
