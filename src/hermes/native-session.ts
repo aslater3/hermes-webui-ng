@@ -140,6 +140,11 @@ export class NativeSession {
           ...(profile ? { profile } : {}),
           source: 'webui-ng',
           close_on_disconnect: false,
+          // The transcript is loaded by refresh() (session.history + session.activate); inlining it in
+          // the attach reply duplicates that transfer and, for a large conversation, produces a frame
+          // bigger than the client accepts, which surfaces as a Gateway protocol failure for a session
+          // the gateway can resume. Measured: a 4.5 MB attach reply for a 331-message session.
+          omit_messages: true,
         }),
       );
       this.valid(epoch);
