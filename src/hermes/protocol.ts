@@ -37,8 +37,33 @@ export type Frame =
   | { kind: 'request'; id: string | number; method: string; params: unknown }
   | { kind: 'reply'; id: string | number; result?: unknown; error?: { code: number } };
 
+/** Largest frame the renderer accepts. A reply above this is refused rather than parsed. */
+export const MAX_FRAME_CHARS = 4_194_304;
+
+/**
+ * Reply id of a frame that is too large to parse, read from a bounded header slice.
+ *
+ * Without it an oversized reply is indistinguishable from a malformed one, and the only
+ * remaining failure scope is the whole connection — which the UI reports as the Gateway being
+ * gone for every conversation in the tab. Attributing the frame to its own RPC keeps the
+ * damage to the one call that was waiting on it.
+ */
+export function oversizedReplyId(raw: unknown): string | number | undefined {
+  if (typeof raw !== 'string' || raw.length <= MAX_FRAME_CHARS) return undefined;
+  const header = /"id"\s*:\s*("(?:[^"\\]|\\.)*"|-?\d+)/.exec(raw.slice(0, 256));
+  if (!header) return undefined;
+  const token = header[1]!;
+  if (!token.startsWith('"')) return Number(token);
+  try {
+    const id: unknown = JSON.parse(token);
+    return typeof id === 'string' ? id : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 export function parseFrames(raw: unknown): Frame[] {
-  if (typeof raw !== 'string' || raw.length > 4_194_304) {
+  if (typeof raw !== 'string' || raw.length > MAX_FRAME_CHARS) {
     throw new ClientError('protocol', 'Unsupported or oversized Gateway frame');
   }
   try {

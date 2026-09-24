@@ -1,7 +1,7 @@
 import { PeerRequests } from './peer-requests.js';
 import { WS_PROTOCOL, type WsCredential } from './ws-auth.js';
 import type { DiagnosticsRing } from './diagnostics.js';
-import { ClientError, parseFrames, record, type GatewayEvent } from './protocol.js';
+import { ClientError, MAX_FRAME_CHARS, oversizedReplyId, parseFrames, record, type GatewayEvent } from './protocol.js';
 
 export type Phase =
   'disconnected' | 'authenticating' | 'connecting' | 'ready' | 'reconnecting' | 'auth-required' | 'error';
@@ -198,7 +198,21 @@ export class GatewayClient {
               for (const listener of this.events) this.notify(() => listener(frame.event));
             }
           }
-        } catch { this.fail(generation, new ClientError('protocol', 'Invalid Gateway protocol data')); }
+        } catch {
+          const oversized = oversizedReplyId(message.data);
+          const pending = oversized === undefined ? undefined : this.pending.get(oversized);
+          if (oversized === undefined || !pending) {
+            this.fail(generation, new ClientError('protocol', 'Invalid Gateway protocol data'));
+            return;
+          }
+          // One reply past the frame cap fails its own RPC. Marking the connection failed here is what
+          // the UI renders as "the Gateway is gone", read-only for every conversation in the tab.
+          clearTimeout(pending.timer);
+          this.pending.delete(oversized);
+          this.options.diagnostics?.add({ event: 'rpc.failed', method: pending.method, kind: 'oversized', generation });
+          pending.reject(new ClientError('protocol',
+            `Hermes replied to ${pending.method} with a frame above the ${MAX_FRAME_CHARS}-character limit`));
+        }
       });
       socket.addEventListener('error', () => {
         /* close/handshake deadline classifies browser handshake failures */

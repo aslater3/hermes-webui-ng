@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { ClientError, parseFrames } from '../../src/hermes/protocol.js';
+import { ClientError, MAX_FRAME_CHARS, oversizedReplyId, parseFrames } from '../../src/hermes/protocol.js';
 import { DashboardClient, WS_PROTOCOL } from '../../src/hermes/dashboard-client.js';
 
 test('parses newline-separated JSON-RPC replies and forward-compatible events', () => {
@@ -33,6 +33,19 @@ test('malformed frames fail without including content or upstream error messages
   assert.deepEqual(parseFrames('{"jsonrpc":"2.0","id":1,"error":{"code":4001,"message":"private-secret"}}'), [
     { kind: 'reply', id: 1, error: { code: 4001 } },
   ]);
+});
+
+test('an oversized frame is refused, and only an oversized reply gives up its own id', () => {
+  const reply = `{"jsonrpc":"2.0","id":"ng-1-7","result":{"messages":"${'x'.repeat(MAX_FRAME_CHARS)}"}}`;
+  const event = `{"jsonrpc":"2.0","method":"event","params":{"type":"message.delta","payload":"${'x'.repeat(MAX_FRAME_CHARS)}"}}`;
+  assert.throws(() => parseFrames(reply), (err: unknown) => err instanceof ClientError && err.kind === 'protocol');
+  // Attributing the frame is what keeps the refusal scoped to one RPC instead of the connection.
+  assert.equal(oversizedReplyId(reply), 'ng-1-7');
+  assert.equal(oversizedReplyId(`{"jsonrpc":"2.0","id":42,"result":{"messages":"${'x'.repeat(MAX_FRAME_CHARS)}"}}`), 42);
+  // An event carries no id, and a frame the parser accepts was never oversized: both stay unattributed.
+  assert.equal(oversizedReplyId(event), undefined);
+  assert.equal(oversizedReplyId('{"jsonrpc":"2.0","id":"small","result":{}}'), undefined);
+  assert.equal(oversizedReplyId(undefined), undefined);
 });
 
 test('each admission mints a fresh one-use ticket; no credential is placed in the URL', async () => {

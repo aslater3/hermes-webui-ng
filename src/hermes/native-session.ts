@@ -1,4 +1,4 @@
-import { sessionId } from './session-rest.js';
+import { HISTORY_LIMIT, sessionId } from './session-rest.js';
 import { NativeCommands } from './native-commands.js';
 import { displayMessage, type DisplayMessage } from './history-message.js';
 import { infoUsage, reconcileUsage, type SessionUsage } from './session-usage.js';
@@ -25,6 +25,12 @@ export interface SessionState {
   agent?: AgentMetadata;
   agentStarting?: boolean;
   usage?: SessionUsage;
+}
+
+/** ``count`` is the whole transcript even when the reply is a bounded window; older Hermes sends only the window. */
+function historyTotal(history: Record<string, unknown>, returned: number): number {
+  const total = history.count;
+  return typeof total === 'number' && Number.isSafeInteger(total) && total >= returned ? total : returned;
 }
 
 /** Disposable view of upstream state. Nothing is written to browser or server storage. */
@@ -188,8 +194,11 @@ export class NativeSession {
       const revision = this.revision;
       const streamRevision = this.streamRevision;
       const usageRevision = this.usageRevision;
+      // The wire window is the same page size the REST paging below uses, so "older" continues from
+      // an authoritative offset. Hermes returns the whole transcript only when `limit` is absent — a
+      // frame the client's own transport refuses for a long conversation.
       const [rawHistory, rawLive] = await Promise.all([
-        this.foreground ? this.gateway.call('session.history', { session_id: runtimeId }) : Promise.resolve({ messages: [] }),
+        this.foreground ? this.gateway.call('session.history', { session_id: runtimeId, limit: HISTORY_LIMIT }) : Promise.resolve({ messages: [] }),
         this.gateway.call('session.activate', { session_id: runtimeId, omit_messages: true }),
       ]);
       this.valid(epoch);
@@ -226,7 +235,7 @@ export class NativeSession {
         // Preserve a newer event while a slower history/activate pair is in flight, and reject
         // Hermes' transient post-turn zero counters within the same attached runtime.
         usage: !this.foreground ? undefined : usageRevision === this.usageRevision ? reconcileUsage(this.state.usage, infoUsage(live.info)) : this.state.usage,
-        totalMessages: history.messages.length,
+        totalMessages: historyTotal(history, history.messages.length),
         agent: { ...this.state.agent, ...agentMetadata(live.info) },
         agentStarting: live.status === 'starting' || (live.info !== null && typeof live.info === 'object' && !Array.isArray(live.info) && record(live.info).lazy === true),
         streaming: this.foreground ? streaming : '',

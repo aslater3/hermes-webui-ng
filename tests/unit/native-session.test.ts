@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { NativeSession } from '../../src/hermes/native-session.js';
+import { HISTORY_LIMIT } from '../../src/hermes/session-rest.js';
 import type { ConnectionState } from '../../src/hermes/gateway-client.js';
 import type { GatewayEvent } from '../../src/hermes/protocol.js';
 
@@ -11,6 +12,7 @@ class Rpc {
   calls: { method: string; params: Record<string, unknown> }[] = [];
   runtime = 'live-1';
   messages = [{ role: 'user', text: 'initial' }];
+  historyCount?: number;
   running = false;
   historyHook?: () => Promise<unknown>;
   call = async (method: string, params: Record<string, unknown> = {}): Promise<unknown> => {
@@ -18,7 +20,7 @@ class Rpc {
     if (method === 'session.create') return { session_id: this.runtime, stored_session_id: 'durable' };
     if (method === 'session.resume') return { session_id: this.runtime, session_key: params.session_id };
     if (method === 'session.history')
-      return this.historyHook ? this.historyHook() : { messages: this.messages };
+      return this.historyHook ? this.historyHook() : { messages: this.messages, ...(this.historyCount === undefined ? {} : { count: this.historyCount }) };
     if (method === 'session.activate')
       return { running: this.running, status: this.running ? 'working' : 'idle' };
     if (method === 'prompt.submit') {
@@ -53,6 +55,29 @@ class Rpc {
   }
 }
 const tick = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
+
+test('the transcript snapshot asks for the rendered window and keeps the reported total', async () => {
+  const rpc = new Rpc();
+  rpc.messages = Array.from({ length: HISTORY_LIMIT * 3 }, (_, index) => ({ role: 'user', text: `m${index}` }));
+  rpc.historyCount = 1086;
+  const session = new NativeSession(rpc);
+  await session.create();
+  assert.ok(rpc.calls.filter((call) => call.method === 'session.history')
+    .every((call) => call.params.limit === HISTORY_LIMIT));
+  assert.equal(session.state.messages.length, HISTORY_LIMIT);
+  // `count` is the whole transcript (`messages` is the window), so "older" paging has an authority.
+  assert.equal(session.state.totalMessages, 1086);
+  session.dispose();
+});
+
+test('a reply without the total falls back to the returned window', async () => {
+  const rpc = new Rpc();
+  rpc.messages = Array.from({ length: 12 }, (_, index) => ({ role: 'user', text: `m${index}` }));
+  const session = new NativeSession(rpc);
+  await session.create();
+  assert.equal(session.state.totalMessages, 12);
+  session.dispose();
+});
 
 test('native durable and runtime IDs remain distinct; a fresh client resumes without local history', async () => {
   const rpc = new Rpc();
