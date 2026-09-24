@@ -9,6 +9,7 @@ class FakeSocket extends EventTarget {
   close() { this.readyState = 3; }
   open() { this.readyState = 1; this.dispatchEvent(new Event('open')); }
   frame(data: unknown) { this.dispatchEvent(new MessageEvent('message', { data: JSON.stringify(data) })); }
+  raw(data: string) { this.dispatchEvent(new MessageEvent('message', { data })); }
   ready() { this.open(); this.frame({ jsonrpc: '2.0', method: 'event', params: { type: 'gateway.ready', payload: { heartbeat: true } } }); }
 }
 const tick = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
@@ -40,4 +41,27 @@ test('REST auth expiry cancels admission and pending RPCs even during a lifecycl
   await resume; await h.client.ensureLive();
   assert.equal(h.client.state.phase, 'auth-required'); assert.deepEqual(h.client.advertised(), {});
   assert.equal(h.tickets(), 1); assert.equal(h.sockets[0]!.readyState, 3);
+});
+
+test('a reply above the frame cap fails its own RPC and leaves the connection usable', async (t) => {
+  const h = harness(); t.after(() => h.client.close());
+  const ready = h.client.connect(); await tick(); h.sockets[0]!.ready(); await ready;
+  const oversized = h.client.call('session.history', { session_id: 'durable' });
+  const request = h.sockets[0]!.sent.at(-1)!;
+  h.sockets[0]!.raw(`{"jsonrpc":"2.0","id":${JSON.stringify(request.id)},"result":{"messages":"${'x'.repeat(4_200_000)}"}}`);
+  await assert.rejects(oversized, (err: unknown) => err instanceof ClientError && err.kind === 'protocol');
+  // The whole-tab consequence was the defect: one refused reply must not read as "the Gateway is gone".
+  assert.equal(h.client.state.phase, 'ready'); assert.equal(h.sockets[0]!.readyState, 1);
+  const following = h.client.call('session.activate', { session_id: 'durable' });
+  const next = h.sockets[0]!.sent.at(-1)!;
+  h.sockets[0]!.frame({ jsonrpc: '2.0', id: next.id, result: { running: false } });
+  assert.deepEqual(await following, { running: false });
+});
+
+test('a frame the client cannot attribute still fails the connection', async (t) => {
+  const h = harness(); t.after(() => h.client.close());
+  const ready = h.client.connect(); await tick(); h.sockets[0]!.ready(); await ready;
+  h.sockets[0]!.raw('x'.repeat(4_200_000));
+  assert.equal(h.client.state.phase, 'error');
+  assert.equal(h.client.state.error?.kind, 'protocol');
 });
