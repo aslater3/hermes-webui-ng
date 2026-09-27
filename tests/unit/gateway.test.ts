@@ -77,8 +77,9 @@ test('open is not ready; RPC calls correlate independently of response order', a
   assert.equal(h.client.state.phase, 'ready');
   const first = h.client.call('session.create');
   const second = h.client.call('session.list');
-  socket.frame({ jsonrpc: '2.0', id: socket.sent[1]!.id, result: { second: true } });
-  socket.frame({ jsonrpc: '2.0', id: socket.sent[0]!.id, result: { first: true } });
+  const request = (method: string) => socket.sent.find((frame) => frame.method === method)!;
+  socket.frame({ jsonrpc: '2.0', id: request('session.list').id, result: { second: true } });
+  socket.frame({ jsonrpc: '2.0', id: request('session.create').id, result: { first: true } });
   assert.deepEqual(await first, { first: true });
   assert.deepEqual(await second, { second: true });
 });
@@ -138,7 +139,8 @@ test('network reconnect mints again and never replays an unacknowledged prompt',
     method: 'event',
     params: { type: 'message.delta', payload: { text: 'stale' } },
   });
-  assert.equal(h.sockets[1]!.sent.length, 0);
+  // Only the handshake may have been sent: no replay of the unacknowledged prompt into the new socket.
+  assert.deepEqual(h.sockets[1]!.sent.map((frame) => frame.method), ['client.capabilities']);
   assert.equal(h.client.state.phase, 'ready');
 });
 
@@ -177,7 +179,8 @@ test('RPC acknowledgement timeout rejects without sending a second request', asy
     h.client.call('prompt.submit', {}, 5),
     (err: unknown) => err instanceof ClientError && err.kind === 'timeout',
   );
-  assert.equal(h.sockets[0]!.sent.length, 1);
+  // Exactly one attempt: the acknowledgement timeout must not retry the request.
+  assert.equal(h.sockets[0]!.sent.filter((frame) => frame.method === 'prompt.submit').length, 1);
   assert.equal(h.client.state.phase, 'ready');
 });
 

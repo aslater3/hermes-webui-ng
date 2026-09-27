@@ -16,14 +16,16 @@ test('modern questions coexist with in-flight RPCs, answer by peer id, and never
   t.after(() => client.close());
   const ready = client.connect(); await new Promise(resolve => setTimeout(resolve, 0));
   socket.frame({ jsonrpc: '2.0', method: 'event', params: { type: 'gateway.ready', payload: {} } }); await ready;
-  const read = client.call('session.status', { session_id: 'live-a' }), id = socket.sent[0]!.id;
+  // The handshake frame is not a test frame: index the socket's own traffic by leaving it out.
+  const frames = () => socket.sent.filter((frame) => frame.method !== 'client.capabilities');
+  const read = client.call('session.status', { session_id: 'live-a' }), id = frames()[0]!.id;
   socket.frame({ jsonrpc: '2.0', id: 'srq-secret', method: 'secret', params: { session_id: 'live-a', env_var: 'API_KEY', prompt: 'Enter key' } });
   assert.equal(client.state.phase, 'ready'); assert.equal(client.requests.getSnapshot().length, 1);
   client.requests.respond(client.requests.getSnapshot()[0]!, { value: 'PRIVATE-ANSWER-123' });
-  assert.deepEqual(socket.sent[1], { jsonrpc: '2.0', id: 'srq-secret', result: { value: 'PRIVATE-ANSWER-123' } });
+  assert.deepEqual(frames()[1], { jsonrpc: '2.0', id: 'srq-secret', result: { value: 'PRIVATE-ANSWER-123' } });
   socket.frame({ jsonrpc: '2.0', id, result: { output: 'Native state' } }); assert.deepEqual(await read, { output: 'Native state' });
   socket.frame({ jsonrpc: '2.0', id: 'unknown-peer', method: 'unavailable.bridge', params: { session_id: 'live-a' } });
-  assert.equal((socket.sent[2]!.error as Record<string, unknown>).code, -32601); assert.equal(client.state.phase, 'ready');
+  assert.equal((frames()[2]!.error as Record<string, unknown>).code, -32601); assert.equal(client.state.phase, 'ready');
   assert.ok(!JSON.stringify(diagnostics).includes('PRIVATE-ANSWER'));
   client.close(); assert.equal(client.requests.getSnapshot().length, 0);
 });
