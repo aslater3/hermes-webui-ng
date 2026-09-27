@@ -1,4 +1,4 @@
-import { HISTORY_LIMIT, sessionId } from './session-rest.js';
+import { sessionId } from './session-rest.js';
 import { NativeCommands } from './native-commands.js';
 import { displayMessage, type DisplayMessage } from './history-message.js';
 import { infoUsage, reconcileUsage, type SessionUsage } from './session-usage.js';
@@ -194,11 +194,12 @@ export class NativeSession {
       const revision = this.revision;
       const streamRevision = this.streamRevision;
       const usageRevision = this.usageRevision;
-      // The wire window is the same page size the REST paging below uses, so "older" continues from
-      // an authoritative offset. Hermes returns the whole transcript only when `limit` is absent — a
-      // frame the client's own transport refuses for a long conversation.
+      // Hermes' `session.history` declares only {session_id, profile} and rejects an unknown
+      // parameter with JSON-RPC 4000, so the reply cannot be bounded on the wire — it is the whole
+      // lineage. The rendered window is bounded on this side by the slice below, and "older" pages
+      // continue from the offset the REST paging below reports.
       const [rawHistory, rawLive] = await Promise.all([
-        this.foreground ? this.gateway.call('session.history', { session_id: runtimeId, limit: HISTORY_LIMIT }) : Promise.resolve({ messages: [] }),
+        this.foreground ? this.gateway.call('session.history', { session_id: runtimeId }) : Promise.resolve({ messages: [] }),
         this.gateway.call('session.activate', { session_id: runtimeId, omit_messages: true }),
       ]);
       this.valid(epoch);

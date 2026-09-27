@@ -56,16 +56,18 @@ class Rpc {
 }
 const tick = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
 
-test('the transcript snapshot asks for the rendered window and keeps the reported total', async () => {
+test('the transcript snapshot sends no window parameter and keeps the reported total', async () => {
   const rpc = new Rpc();
   rpc.messages = Array.from({ length: HISTORY_LIMIT * 3 }, (_, index) => ({ role: 'user', text: `m${index}` }));
   rpc.historyCount = 1086;
   const session = new NativeSession(rpc);
   await session.create();
+  // session.history declares only {session_id, profile}: an extra key is refused with JSON-RPC 4000
+  // and the transcript never loads, so the reply is taken whole and windowed on this side.
   assert.ok(rpc.calls.filter((call) => call.method === 'session.history')
-    .every((call) => call.params.limit === HISTORY_LIMIT));
+    .every((call) => Object.keys(call.params).every((key) => ['session_id', 'profile'].includes(key))));
   assert.equal(session.state.messages.length, HISTORY_LIMIT);
-  // `count` is the whole transcript (`messages` is the window), so "older" paging has an authority.
+  // `count` is the whole transcript, so "older" paging has an authority.
   assert.equal(session.state.totalMessages, 1086);
   session.dispose();
 });
