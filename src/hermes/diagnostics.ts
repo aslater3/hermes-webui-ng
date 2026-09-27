@@ -15,6 +15,9 @@ const METHODS = [
   'session.history', 'session.interrupt', 'prompt.submit',
   'model.options', 'profiles.list', 'config.get', 'config.set', 'commands.catalog', 'slash.exec',
   'session.active_list', 'approval.pending', 'approval.respond', 'clarify.respond', 'sudo.respond', 'secret.respond',
+  // The outbound server→client request capability handshake: kept here so a later investigation can see
+  // whether a connection actually advertised, rather than inferring it from "not sent" server-side logs.
+  'client.capabilities',
 ];
 const ROUTES = ['access', 'status', 'providers', 'identity', 'ticket', 'login', 'logout', 'schema', 'capabilities', 'sessions', 'sessionSearch', 'sessionHistory'];
 export interface DiagnosticEntry {

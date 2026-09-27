@@ -191,6 +191,7 @@ export class GatewayClient {
               this.attempts = 0;
               this.publish('ready');
               resolve?.(this.readyPayload);
+              this.advertiseServerRequests();
               this.startHeartbeat(generation);
             } else if (this.state.phase === 'ready') {
               this.options.diagnostics?.add({ event: 'gateway.event', generation });
@@ -228,6 +229,22 @@ export class GatewayClient {
     })().catch((error: unknown) => this.fail(generation,
       error instanceof ClientError ? error : new ClientError('network', 'Gateway connection failed')));
     return promise;
+  }
+  /**
+   * Tell the gateway this connection answers server→client requests (approval, clarify, sudo, secret,
+   * vault prompts). Without it the backend refuses to send one at all: it logs "server request approval
+   * for <client> not sent: the attached client predates server→client requests" and the tool call fails
+   * with "the attached client cannot answer approval requests". The approval card then never reaches the
+   * tab, which reads as approvals having silently stopped working.
+   *
+   * The advertisement is per transport, so every reconnect repeats it — a new socket is a new transport
+   * and starts out unadvertised. A rejected advertisement is not fatal: the connection stays usable for
+   * ordinary RPCs (the failure is already recorded as an rpc.failed diagnostic by the reply handler) and
+   * PeerRequests still answers whatever does arrive, refusing surfaces it does not implement with -32601
+   * rather than silence.
+   */
+  private advertiseServerRequests(): void {
+    void this.call('client.capabilities', { server_requests: true }, 10_000).catch(() => {});
   }
   private startHeartbeat(generation: number): void {
     const interval = this.options.heartbeatMs ?? 15_000;
