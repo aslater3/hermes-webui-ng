@@ -56,6 +56,25 @@ class Rpc {
 }
 const tick = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
 
+test('creating a session sends only the keys session.create declares', async () => {
+  const rpc = new Rpc();
+  const session = new NativeSession(rpc);
+  await session.create();
+  const create = rpc.calls.find((call) => call.method === 'session.create');
+  assert.ok(create, 'create() should call session.create');
+  // session.create declares {profile, cols, source, cwd, cwd_explicit, messages, parent_session_id,
+  // title, model, provider, reasoning_effort, fast, close_on_disconnect, hidden, room_plumbing,
+  // follow_profile_config}. `omit_messages` is NOT among them, and the param models are
+  // extra="forbid", so sending it is a JSON-RPC 4000 that makes every new session fail to open.
+  const declared = ['profile', 'cols', 'source', 'cwd', 'cwd_explicit', 'messages', 'parent_session_id',
+    'title', 'model', 'provider', 'reasoning_effort', 'fast', 'close_on_disconnect', 'hidden',
+    'room_plumbing', 'follow_profile_config'];
+  assert.deepEqual(Object.keys(create.params).filter((key) => !declared.includes(key)), [],
+    'an undeclared key here is a hard JSON-RPC 4000');
+  assert.equal(create.params.source, 'webui-ng');
+  assert.equal(create.params.close_on_disconnect, false);
+});
+
 test('the transcript snapshot sends no window parameter and keeps the reported total', async () => {
   const rpc = new Rpc();
   rpc.messages = Array.from({ length: HISTORY_LIMIT * 3 }, (_, index) => ({ role: 'user', text: `m${index}` }));
@@ -183,15 +202,21 @@ test('settled session.info clears running after message.complete before idle cle
 test('an attach never asks the gateway to inline the transcript', async () => {
   // A large conversation's inline transcript exceeds the client's frame cap, which is reported as a
   // Gateway protocol failure for a session the gateway can still resume. refresh() loads the
-  // transcript through session.history/session.activate regardless, so the attach must omit it.
+  // transcript through session.history/session.activate regardless, so an attach that *has* a
+  // transcript must ask for it to be omitted. session.create has none — and the gateway's create
+  // contract does not declare the key at all (extra="forbid" -> JSON-RPC 4000), so there the correct
+  // request is the absent flag.
   const rpc = new Rpc();
   const session = new NativeSession(rpc);
   await session.create();
   await session.resume('durable');
   const attach = rpc.calls.filter((call) => ['session.create', 'session.resume'].includes(call.method));
   assert.equal(attach.length, 2);
-  for (const call of attach)
-    assert.equal(call.params.omit_messages, true, `${call.method} inlines the transcript`);
+  const created = attach.find((call) => call.method === 'session.create');
+  const resumed = attach.find((call) => call.method === 'session.resume');
+  assert.equal(resumed?.params.omit_messages, true, 'session.resume inlines the transcript');
+  assert.ok(created && !('omit_messages' in created.params),
+    'session.create has no transcript to omit, and the gateway refuses the key with a 4000');
   session.dispose();
 });
 
