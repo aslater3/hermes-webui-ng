@@ -150,7 +150,13 @@ export class NativeSession {
           // the attach reply duplicates that transfer and, for a large conversation, produces a frame
           // bigger than the client accepts, which surfaces as a Gateway protocol failure for a session
           // the gateway can resume. Measured: a 4.5 MB attach reply for a 331-message session.
-          omit_messages: true,
+          //
+          // Only the methods that actually have a transcript to omit declare this key: session.resume
+          // and session.activate accept it, session.create does not. The param models are
+          // extra="forbid", so sending it on create is a hard JSON-RPC 4000 ("invalid params for
+          // session.create: omit_messages: Extra inputs are not permitted") and every new session
+          // fails to open. A brand-new session has no transcript, so the flag is a no-op there anyway.
+          ...(storedId ? { omit_messages: true } : {}),
         }),
       );
       this.valid(epoch);
