@@ -24,7 +24,7 @@
 </p>
 
 > [!IMPORTANT]
-> **HermesUI NG is under active development.** Native chat, Phase 5 read-only Workspace and Phase 7 session controls are accepted for the supported baseline. Phase 6 adds explicitly opted-in file editing and operations. Phase 4C supplies self-signed HTTPS/WSS, an installable static-only PWA, guarded updates and a conversation-details pane. Physical iPhone/Android acceptance and production-release certification remain open. See [`docs/implementation-status.md`](docs/implementation-status.md) for the exact verified state.
+> **HermesUI NG is not yet a published release.** Software delivery is complete through Phase 9: native chat, tools and interactive prompts, the HTTPS/PWA shell, read-only and opt-in writable workspace, session controls, read-first management with gated cron actions, and attachments and browser voice. Phase 10 hardening and release-readiness documentation are in progress. Still open: physical iPhone/Android and installed-PWA certification, VoiceOver/TalkBack, acceptance of the image vulnerability baseline (report-only), and the release tag and publication, which are human steps. Certified upstream Hermes: `NousResearch/hermes-agent@c5a3c0f8767a72203363d249add14142dbcf3cc7`. See [`docs/implementation-status.md`](docs/implementation-status.md) for the exact verified state and [`docs/release-notes-v1.0.0-draft.md`](docs/release-notes-v1.0.0-draft.md) for the draft notes.
 
 ## What is HermesUI NG?
 
@@ -57,49 +57,122 @@ It is deliberately **not** a forked agent runtime, a second conversation databas
 - **Authentication modes** — normal Hermes Dashboard authentication, plus an explicit trusted-LAN mode for intentionally ungated loopback Hermes deployments.
 - **Opt-in workspace editing** — explicit Save/Discard, version conflicts and readback, confirmed folder/rename/delete and bounded no-clobber uploads. Read-only remains the default.
 - **Native commands and usage** — official command catalogue and safe slash handling, plus reported usage/context without guessed bills or a second usage ledger.
+- **Management (read-first)** — Skills, Memory, Cron, MCP and Diagnostics views over official Dashboard reads, capability-gated and profile-scoped. Cron pause, resume and run-now are available only in gated mode, behind confirmation.
+- **Attachments and browser voice** — images and PDFs attach to the queued turn through native Gateway RPC; dictation fills the draft for review and is never sent automatically; read-aloud is available for assistant replies. Voice is hidden in trusted-local mode.
 - **Diagnostics** — the modern application is served at `/`; the retained troubleshooting interface is at `/diagnostic`.
 
 ### Not yet delivered or certified
 
-Physical Home Screen/standalone installation, keyboard and OS-background certification, optional Git mutations, background Web Push, global provider/profile management, voice/attachments, OAuth, broader management surfaces, multi-architecture publication and public-internet release hardening remain future work.
+Physical Home Screen/standalone installation, keyboard and OS-background certification, VoiceOver and TalkBack smoke tests, optional Git mutations, non-image file attachments, cron create/edit/delete, MCP and provider/config management, background Web Push, OAuth and public-internet release hardening remain future work. Multi-architecture images are out of scope: only `linux/amd64` is built (operator decision, 2026-10-20).
 
 ## Quick start
 
-### Default: authenticated Hermes Dashboard
+### Requirements
 
-Requirements: **Docker Compose**, **OpenSSL on the deployment host** and a reachable Hermes Dashboard. The supplied Compose files require TLS certificates; prepare them before recreating a service.
+**Docker Compose v2**, **OpenSSL on the deployment host** and a Hermes Dashboard that is reachable from the WebUI container and has authentication configured. The supplied Compose files require TLS certificate files; generate them with `scripts/setup-https.sh` before the first start. The image is built from source for `linux/amd64` only (see [Compatibility](#compatibility)).
 
 ```sh
 git clone https://github.com/aslater3/hermes-webui-ng.git
 cd hermes-webui-ng
-
 cp .env.example .env
-# Set HERMES_DASHBOARD_URL and configure Hermes authentication.
-bash scripts/setup-https.sh localhost 8787
-
-docker compose up --build -d
+# Edit .env: HERMES_DASHBOARD_URL, PUBLIC_ORIGIN and the port. No Hermes credentials go here.
 ```
 
-The default Compose topology publishes the WebUI on host loopback. The browser authenticates through Hermes and each WebSocket connection uses a fresh one-use ticket.
+### Environment variables
 
-### Hermes is bound to host loopback on Linux
+Only non-secret deployment settings belong in `.env`; see `.env.example`. Hermes credentials stay in Hermes.
 
-Use the standalone host-network Compose file rather than merging it with the bridge-network configuration:
+| Variable | Used by | Meaning |
+|---|---|---|
+| `HERMES_DASHBOARD_URL` | all | Hermes Dashboard origin (`http(s)://host:port`). Credentials, path, query and fragment are rejected. |
+| `PUBLIC_ORIGIN` | all | Exact browser-facing origin. Host and Origin checks compare against its host and port. |
+| `WEBUI_TLS_DIR` | all | Host directory with `server.crt`, `server.key` and `ca.crt`, mounted read-only. Default `./.local/tls/server`. |
+| `WEBUI_PORT` | `compose.yaml` (default `8787`), `compose.host.yaml` (default `8788`) | Published loopback port (bridge) or listening port (host network). |
+| `WEBUI_HOST` | `compose.host.yaml` | Listening address for host networking. Default `127.0.0.1`. |
+| `WEBUI_UID` / `WEBUI_GID` | all | Runtime user. Default `10001:10001`. Project mounts must be owned by this user. |
+| `HERMES_AUTH_MODE` | `compose.host.yaml` | `dashboard` (default) or `trusted-local` (see the collapsed section below). |
+| `HERMES_DASHBOARD_SESSION_TOKEN` | `compose.host.yaml`, trusted-local only | Token for an intentionally ungated Hermes. Stays server-side. |
+| `WORKSPACE_HOST_PATH` | `compose.workspace*.yaml` | Existing dedicated project folder, mounted at `/workspace`. Never a home or Hermes state directory. |
+| `GIT_ENABLED` | workspace overrides | `true` or `false` for read-only Git inspection. `GIT_WRITE_ENABLED=true` is rejected at startup. |
+
+### Example A: containerized Hermes
+
+Use this when Hermes runs as a Compose service (here in another project) on a Docker network that the WebUI can join. Hermes must keep its Dashboard authenticated.
+
+`.env`:
+
+```text
+HERMES_DASHBOARD_URL=http://<hermes-service-name>:9119
+PUBLIC_ORIGIN=https://localhost:8787
+WEBUI_PORT=8787
+```
+
+Operator-owned override file (not part of this repository; the network name is yours):
+
+```yaml
+# compose.hermes-net.yaml
+services:
+  webui:
+    networks: [default, hermes]
+networks:
+  hermes:
+    external: true
+    name: <existing-hermes-network>
+```
 
 ```sh
-# Preserve the existing .env/token first; run as your normal deployment user.
-bash scripts/setup-https.sh 192.168.0.63 8788
-# Replace EXISTING_NG_PROJECT with the current NG Compose project label.
-docker compose -p EXISTING_NG_PROJECT -f compose.host.yaml up --build -d
-curl --fail --cacert .local/tls/ca/ca.crt https://192.168.0.63:8788/healthz
+bash scripts/setup-https.sh localhost 8787
+docker compose -f compose.yaml -f compose.hermes-net.yaml up --build -d
+curl --fail --cacert .local/tls/ca/ca.crt https://localhost:8787/healthz
 ```
 
-`compose.host.yaml` defaults to loopback; the setup command above deliberately selects the LAN bind and HTTPS port `8788`. It privately backs up `.env`, preserves Hermes authentication/token/upstream settings and records TLS mount and non-root key ownership. Use the new HTTPS URL; HTTP no longer works on that port. Reuse the existing NG project and leave the separate legacy service on 8787 and Docker storage untouched.
+### Example B: bare-metal Hermes on a bridge network
+
+Use `compose.yaml`. Hermes must listen on an address the container can reach (not only `127.0.0.1`), with authentication enabled and a host firewall in place. `compose.yaml` maps `host.docker.internal` to the Docker host gateway.
+
+`.env`:
+
+```text
+HERMES_DASHBOARD_URL=http://host.docker.internal:9119
+PUBLIC_ORIGIN=https://localhost:8787
+WEBUI_PORT=8787
+```
+
+```sh
+bash scripts/setup-https.sh localhost 8787
+docker compose up --build -d
+curl --fail --cacert .local/tls/ca/ca.crt https://localhost:8787/healthz
+```
+
+The default topology publishes the WebUI on host loopback only. The browser authenticates through Hermes and each WebSocket connection uses a fresh one-use ticket.
+
+### Example C: bare-metal Hermes bound to loopback on Linux
+
+When Hermes stays on `127.0.0.1`, use the standalone host-network file rather than merging it with the bridge configuration:
+
+`.env`:
+
+```text
+HERMES_DASHBOARD_URL=http://127.0.0.1:9119
+PUBLIC_ORIGIN=https://<webui-host>:8788
+WEBUI_HOST=<webui-host>
+WEBUI_PORT=8788
+```
+
+```sh
+# Preserve the existing .env and token first; run as your normal deployment user.
+bash scripts/setup-https.sh <webui-host> 8788
+# Replace EXISTING_NG_PROJECT with the current NG Compose project name.
+docker compose -p EXISTING_NG_PROJECT -f compose.host.yaml up --build -d
+curl --fail --cacert .local/tls/ca/ca.crt https://<webui-host>:8788/healthz
+```
+
+`setup-https.sh` privately backs up `.env`, preserves Hermes authentication, token and upstream settings, and records the TLS mount and non-root key ownership. Use the new HTTPS URL; HTTP no longer works on that port. Reuse the existing NG project, and leave any separate legacy service and Docker storage untouched.
 
 <details>
 <summary><strong>Trusted-LAN mode for an intentionally ungated local Hermes instance</strong></summary>
 
-An ungated Hermes instance on literal loopback can be bridged only when you explicitly configure:
+An ungated Hermes instance on literal loopback can be bridged only when you explicitly configure these variables with `compose.host.yaml` (`compose.yaml` does not pass them through):
 
 ```text
 HERMES_AUTH_MODE=trusted-local
@@ -184,15 +257,17 @@ HermesUI NG intentionally contains **no Hermes Python imports, `AIAgent`, `Sessi
 
 REST health, authentication and Gateway readiness are treated independently. Late responses remain scoped to their account/session/connection generation, and connection loss must not cause automatic replay of prompts, settings changes or secret responses.
 
-## Supported Hermes baseline
+## Compatibility
 
-The runtime-tested baseline is:
+| Item | Value |
+|---|---|
+| Certified Hermes ref | `NousResearch/hermes-agent@c5a3c0f8767a72203363d249add14142dbcf3cc7` (upstream `main`, 2026-10-20) |
+| Previous certified ref | `NousResearch/hermes-agent@b6b53c69a6ed49cb099cf1bfe76b5e6edd718e5a` (superseded by the recertification in [`implementation-status.md`](docs/implementation-status.md)) |
+| Python for the CI Hermes install | **Python 3.14**: `uv sync --project upstream --frozen --no-dev --extra web --python 3.14` in `.github/workflows/vanilla-hermes.yml` |
+| Node.js | 22 (Docker build and runtime use `node:22-trixie` and `node:22-trixie-slim`, digest-pinned) |
+| Image architecture | `linux/amd64` only (operator decision, 2026-10-20). `linux/arm64` is out of scope. |
 
-```text
-NousResearch/hermes-agent@b6b53c69a6ed49cb099cf1bfe76b5e6edd718e5a
-```
-
-Newer upstream source inspection does not automatically mean runtime certification. Compatibility evidence and known limits are recorded under [`docs/evidence/`](docs/evidence/) and in [`docs/implementation-status.md`](docs/implementation-status.md).
+**Newer Hermes is not certified** until the pinned vanilla-Hermes workflow (`.github/workflows/vanilla-hermes.yml`) passes against that ref, covering gated and trusted-local deployments, approval, sudo, secret, the workspace modes and HTTPS/WSS. Upstream source inspection, or a passing unit or contract test, does not count as runtime certification. Until then, NG is supported only against the certified ref above. Procedure for re-certifying is in [`docs/upgrade-and-recovery.md`](docs/upgrade-and-recovery.md). Evidence and known limits are under [`docs/evidence/`](docs/evidence/) and in [`docs/implementation-status.md`](docs/implementation-status.md).
 
 ## Develop and verify
 
@@ -283,6 +358,9 @@ Read [`AGENTS.md`](AGENTS.md) and [`BUILD-BRIEF.md`](BUILD-BRIEF.md) before maki
 | [`docs/phase5-workspace.md`](docs/phase5-workspace.md) | Read-only project deployment, file/Git UI and supported boundaries |
 | [`docs/phase6-deployment.md`](docs/phase6-deployment.md) | Explicit file-write opt-in, editor/recovery and permission limits |
 | [`docs/adr-027-phase6-write-review.md`](docs/adr-027-phase6-write-review.md) | File-write security review and optional Git-write deferral |
+| [`docs/upgrade-and-recovery.md`](docs/upgrade-and-recovery.md) | Operator upgrade, rollback, Hermes re-certification and recovery notes |
+| [`docs/release-notes-v1.0.0-draft.md`](docs/release-notes-v1.0.0-draft.md) | Draft release notes (not a release) with known limitations |
+| [`docs/adr-030-attachments-and-browser-voice.md`](docs/adr-030-attachments-and-browser-voice.md) | Phase 9 attachments and browser voice |
 
 Delivered behaviour and deviations are documented in the phase notes and ADRs under [`docs/`](docs/).
 

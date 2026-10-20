@@ -32,30 +32,30 @@ Use 100-entry history windows and stable completed DOM nodes rather than introdu
 
 Reduced-height tests exposed sticky composer overlap; the alpha uses normal flow so messages and jump controls remain reachable. Physical keyboard/PWA behaviour is not certified by those tests. Phase 2 sign-off requires both browser fixture coverage and separate unmodified-Hermes acceptance; neither substitutes for the remaining physical-device/release gates.
 
-## ADR-028 — Management surfaces, read-first Skills slice
-
-Accepted for Phase 8 slice 1. A Manage dialog renders only available tabs; Skills is read-only over official `GET /api/skills` and `GET /api/skills/content`. Trusted-local adds exactly those two GET routes to its allowlist, with contract tests proving that writes and hub/cron routes stay 403. Install, edit, toggle and hub browsing are deferred. Full decision: `adr-028-management-surfaces.md`.
-
 ## Recovery discipline
 
 Every completed recovery or implementation slice must be committed AND pushed to the remote branch before starting the next slice. A local commit or unreferenced Git object is not a checkpoint. Verify the remote ref after publishing. Never accumulate a monolithic end-of-session push. Record current test evidence separately from historical results; milestone sign-off requires the relevant real-upstream and browser gates, not synthetic tests alone.
-
-## ADR-P7-001 — Parallel native session polish
-
-Accepted 14 September 2026 for the requested Phase 7 branch. Phase 7 depends on existing native session/settings contracts, not Phase 6 workspace writes. Selected-session usage/context is allowlisted and generation-scoped, with no new persistence or polling. Commands and destructive rewind remain separately gated. Full decision: `adr-phase7-parallel-session-polish.md`. Existing phase acceptance and physical-device requirements are unchanged.
 
 ## ADR-025–027 — Opt-in workspace file mutations
 
 Phase 6 retains the native Hermes boundary and adds only dedicated project-file mutations. ADR-025 defines versioned atomic saves and the external-writer race boundary; ADR-026 resolves plain-metadata policy and kernel locking/no-clobber primitives; ADR-027 records the required file-write scope, security review and explicit deferral of optional Git mutations. Writes remain off by default and require a separately selected writable project mount, actual TLS and live Hermes admission. The iOS Web Push proposal is a separate, unimplemented feature. Final code/CI acceptance is recorded in `implementation-status.md`, not inferred from this ADR index.
 
+## ADR-P7-001 — Parallel native session polish
+
+Accepted 14 September 2026 for the requested Phase 7 branch. Phase 7 depends on existing native session/settings contracts, not Phase 6 workspace writes. Selected-session usage/context is allowlisted and generation-scoped, with no new persistence or polling. Commands and destructive rewind remain separately gated. Full decision: `adr-phase7-parallel-session-polish.md`. Existing phase acceptance and physical-device requirements are unchanged.
+
+## ADR-028 — Management surfaces, read-first Skills slice
+
+Accepted for Phase 8 slice 1. A Manage dialog renders only available tabs; Skills is read-only over official `GET /api/skills` and `GET /api/skills/content`. Trusted-local adds exactly those two GET routes to its allowlist, with contract tests proving that writes and hub/cron routes stay 403. Install, edit, toggle and hub browsing are deferred. Full decision: `adr-028-management-surfaces.md`.
+
 ## ADR-029 — Memory and Cron management, cron actions gated to the Dashboard
 
 Phase 8 slices B1 and B2. Memory is read-only (`GET /api/memory`; provider config is never fetched). Cron has reads plus pause, resume and run-now behind explicit confirmation, single-flight, no automatic retry, and a re-read after each action. Actions are available only in gated mode. Trusted-local gains four GET routes and keeps every write refused. Full decision: `adr-029-memory-cron-management.md`.
 
-## ADR-031 — MCP and Diagnostics read views, Dashboard guidance, Phase 8 completion
-
-Phase 8 slice C. MCP server list is read-only (`GET /api/mcp/servers`; URLs, commands, args, env, headers and OAuth material dropped; no test, auth, catalog or install). Diagnostics reads `GET /api/status`, `/api/health` and `/api/system/stats` as bounded projections, and hands the support report to Settings. The Dashboard tab is text guidance with no links. Trusted-local gains exactly three GET routes; every write and secret-bearing route stays 403. Full decision: `adr-031-mcp-diagnostics-dashboard-guidance.md`.
-
 ## ADR-030 — Phase 9 attachments and browser voice
 
 Accepted 20 October 2026. Full decision: `adr-030-attachments-and-browser-voice.md`. Attachments use native gateway RPC (`image.attach_bytes`, `pdf.attach`, `image.detach`) because the queued-for-next-turn state lives only there; the existing `/image` and `/paste` commands now share that pipeline. Non-image files are deferred (`file.attach` stages into the workspace). Browser voice uses only the gated Dashboard audio REST routes; trusted-local hides voice and its GET/HEAD-only route allowlist is unchanged. Hermes does not advertise RPC methods, so attachment support is detected by use and reported honestly. Physical-device verification is not claimed.
+
+## ADR-031 — MCP and Diagnostics read views, Dashboard guidance, Phase 8 completion
+
+Phase 8 slice C. MCP server list is read-only (`GET /api/mcp/servers`; URLs, commands, args, env, headers and OAuth material dropped; no test, auth, catalog or install). Diagnostics reads `GET /api/status`, `/api/health` and `/api/system/stats` as bounded projections, and hands the support report to Settings. The Dashboard tab is text guidance with no links. Trusted-local gains exactly three GET routes; every write and secret-bearing route stays 403. Full decision: `adr-031-mcp-diagnostics-dashboard-guidance.md`.

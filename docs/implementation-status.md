@@ -1,5 +1,31 @@
 # Implementation Status
 
+## Current state — release readiness (20 October 2026)
+
+**Certified upstream:** `NousResearch/hermes-agent@c5a3c0f8767a72203363d249add14142dbcf3cc7`. Newer Hermes is not certified until the pinned vanilla-Hermes workflow passes on it.
+
+**Software phases done:** 0 (contract spike), 1 (connection, auth and capabilities), 2 (native chat alpha), 3 (tools, reasoning and interactive prompts), 4 (modern shell, HTTPS and PWA), 5 (read-only workspace and Git), 6 (opt-in workspace writes), 7 (profiles, models, commands and usage), 8 (read-first management with gated cron actions), 9 (attachments and browser voice).
+
+**Phase 10 (hardening and release readiness), in progress:**
+
+- Image: Debian 13 base, npm and corepack removed from the runtime, non-root UID 10001, read-only root and `cap-drop ALL` in Compose, HEALTHCHECK on `/healthz`.
+- CI: amd64 build, SPDX SBOM and Trivy report. The Trivy gate is report-only.
+- Performance: initial chat bundle excludes editor and heavy chunks (automated test).
+- Hardening: legacy diagnostic-page flakes fixed; `npm audit` clean after the patch-only lockfile fix.
+- Documentation: README Compose examples and Compatibility section, `upgrade-and-recovery.md`, draft release notes, ADR index order, and an acceptance triage in `13-acceptance-criteria.md`.
+
+**Open in software:**
+
+- Image vulnerability baseline: 43 HIGH OS findings, report-only. Triage or documented acceptance is required before the gate is enforced.
+- Packaging acceptance items in `13-acceptance-criteria.md` stay unticked until a green `image-build` run on the merge head is recorded here. The most recent completed run on `main` (`e1fbe485`) was green, but the current head's run was still in progress when this summary was written.
+- Legacy event-driven prompt path is retained. Removing it needs the synthetic fixture converted to JSON-RPC server requests and the `[agent-test]` specs re-verified.
+- One open follow-up in the legacy diagnostic-page flake work: a narrow-320 "two conversations" test failed twice in a repeat run without an established cause.
+- Deferred by design: Git stage and commit, cron create, edit and delete, MCP management, config and provider editing, skill install and edit, non-image attachments, voice conversation mode, Web Push, OAuth, and `linux/arm64`.
+
+**Open for humans (not closable by software):** physical iPhone and Android smoke and installed-PWA checks (`phase4-device-smoke.md`), VoiceOver and TalkBack smoke, Samsung Internet, mid-range Android performance, acceptance of the vulnerability baseline, and release tagging and publication.
+
+The per-item acceptance state is in [`13-acceptance-criteria.md`](13-acceptance-criteria.md). Draft release notes are in [`release-notes-v1.0.0-draft.md`](release-notes-v1.0.0-draft.md).
+
 ## Upstream recertification — 20 October 2026
 
 Branch `fix/hermes-main-recertify` (PR #39) moves the certified runtime from `b6b53c69` (12 Sep 2026) to **`NousResearch/hermes-agent@c5a3c0f8767a72203363d249add14142dbcf3cc7`** (upstream `main`, 20 Oct 2026; 22,735 commits later). The pinned vanilla-Hermes workflow passed on `2cb462b` (run `39392640296`): gated and trusted-local deployment acceptance, Phase 3/M3 approval, sudo and secret in both modes, Phase 4b, read-only and writable workspace in both modes, and HTTPS/WSS — 94 distinct live gates. The certified runtime becomes `c5a3c0f` once this PR merges; the final head's own CI is the record.
@@ -131,6 +157,20 @@ Known boundaries, stated so they are not mistaken for completion:
   "pinned to the bottom, request tail on screen, nothing after it" rather than full visibility.
 - The `attention-strip` button remains the recovery path when the operator has deliberately scrolled away.
 
+## Phase 10 release-readiness documentation (branch `docs/phase10-release-readiness`)
+
+Documentation only; no application code changed.
+
+- README: status blurb corrected; Compose examples for containerised Hermes, bridge-network bare metal and Linux host-network bare metal, matching the repository Compose files; environment-variable table; Compatibility section naming the certified ref, the Python 3.14 CI install and the rule that newer Hermes is uncertified until the pinned workflow passes. Multi-architecture claims removed; `linux/amd64` only.
+- `docs/09-docker-deployment.md` rewritten to match the current Dockerfile, Compose files and implemented environment variables. Unimplemented design knobs are marked as such.
+- `docs/upgrade-and-recovery.md` added: upgrade, verification, rollback, Hermes re-certification and recovery notes. Generic paths only.
+- `docs/release-notes-v1.0.0-draft.md` added. It is a draft, not a release; tagging and publication remain human steps.
+- `docs/13-acceptance-criteria.md` triaged item by item. Result: 53 ticked with evidence on the same line, 38 open with the reason stated, and 1 struck out (`linux/arm64`, out of scope). Open items are either physical-device, human review or not implemented. Human-only remaining items are listed at the end of the file.
+- `docs/architecture-decisions.md` index reordered numerically (013–016, Recovery discipline, 025–027, P7-001, 028, 029, 030, 031). No entry text changed.
+- `docs/12-phased-delivery-plan.md`: one status line under each phase heading. The plan itself is not rewritten.
+
+Known boundaries: the Compose examples were checked against the repository files, not run against a live Hermes in this pass. The Trivy numbers are in the Phase 10 hardening section above. Packaging acceptance items stay open until a green image-build run on the merge head is recorded.
+
 ## Phase 10 packaging: image build, SBOM and vulnerability scan
 
 Source: `.github/workflows/image-build.yml` (new; `docker.yml` production smoke is unchanged). Runs on pull requests and pushes to `main`, plus manual dispatch. It builds the production `Dockerfile` for `linux/amd64` with `docker/build-push-action` (`push: false`, image loaded locally), uses no registry login and no secrets, and has `contents: read` only.
@@ -181,7 +221,17 @@ Expected effect (to be confirmed, not claimed, by the `image-build` run on this 
 
 - The eleven HIGH Node findings from the bundled npm tree should disappear with npm removed. Any findings in the production `node_modules` would still appear and must be triaged separately.
 - The OS count should drop where trixie carries fixed Debian packages. Findings with no fix upstream (for example the zlib `will_not_fix` entry) are expected to remain.
-- Actual before and after numbers: TBD, filled by the orchestrator from the `image-vuln-scan-amd64` artifact of the first CI run on this branch. The gate stays report-only (`exit-code: '0'`).
+Observed result (Trivy, amd64 runtime image, report-only; from the `image-vuln-scan-amd64` report of the Debian 13 build):
+
+| Image | OS packages | OS HIGH | OS CRITICAL | Node packages |
+|---|---|---|---|---|
+| `node:22-bookworm-slim` (baseline) | 64 | 60 | 4 | 11 HIGH (npm/corepack trees) |
+| `node:22-trixie-slim` (current) | **43** | **43** | **0** | **0** |
+
+- The Node-package findings went from 11 HIGH to 0. The baseline attributed them to the npm and corepack trees that the runtime now omits.
+- The OS count fell from 64 to 43, and the CRITICAL findings are gone. All 43 remaining OS findings are HIGH.
+- The gate stays report-only (`exit-code: '0'`). A clean report is still not evidence of no vulnerabilities.
+- Next step: triage the 43 HIGH findings. Options are a newer base image where Debian has fixed packages, or a documented acceptance per finding with a reason and a review date. Do not switch the gate to enforcing until the agreed threshold is recorded in this section.
 
 Local evidence: none for the image. Docker is not available in this environment; the Dockerfile change was reviewed by hand and is validated only by the CI image build, smoke and native-helper ELF check.
 
