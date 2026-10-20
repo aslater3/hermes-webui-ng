@@ -3,7 +3,8 @@ const object = (v: unknown): Record<string, unknown> => v !== null && typeof v =
 /** Model decisions only. Commands are confined to a newly-created disposable CI lab. */
 export function m3Tool(messages: unknown[], tools: unknown, lab = process.env.HERMES_M3_LAB): FixtureToolCall | undefined {
   let at = messages.length - 1; while (at >= 0 && object(messages[at]).role !== 'user') at--;
-  const prompt = object(messages[at]).content;
+  // Current Hermes appends a first-message onboarding note to a fresh home's first prompt; match the stage line only.
+  const content = object(messages[at]).content, prompt = typeof content === 'string' ? content.split('\n', 1)[0]!.trim() : content;
   if (typeof prompt !== 'string' || !/^M3_(APPROVAL_(ALLOW|DENY|EXPIRE)|SUDO(_SKIP)?|SECRET(_CHECK|_SKIP)?)$/.test(prompt)) return;
   if (messages.slice(at + 1).some(row => object(row).role === 'tool')) return;
   if (!lab || !/^\/tmp\/hermes-m3-[A-Za-z0-9]+$/.test(lab)) throw new Error('Missing isolated M3 lab');
