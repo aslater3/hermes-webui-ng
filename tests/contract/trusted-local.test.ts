@@ -98,7 +98,36 @@ test('local wire: skill reads are allowed only as exact GET routes; writes and h
   for (const [method, path] of [
     ['POST', '/__hermes/api/skills'], ['PUT', '/__hermes/api/skills/content'], ['PUT', '/__hermes/api/skills/toggle'],
     ['POST', '/__hermes/api/skills/hub/install'], ['GET', '/__hermes/api/skills/hub/search?q=x'], ['GET', '/__hermes/api/skills/content/extra'],
-    ['GET', '/__hermes/api/skills?token=leak'], ['GET', '/__hermes/api/cron/jobs'], ['POST', '/__hermes/api/cron/jobs'],
+    ['GET', '/__hermes/api/skills?token=leak'], ['POST', '/__hermes/api/cron/jobs'],
   ] as const) assert.equal((await fetch(h.origin + path, { method, headers: { Origin: h.origin } })).status, 403, `${method} ${path}`);
+  assert.ok(!JSON.stringify(h.logs).includes(TOKEN));
+});
+
+test('local wire: memory and cron reads are proxied and redacted; actions, memory writes, provider config and fire stay 403', async t => {
+  const h = await setup(t);
+  const { DashboardClient } = await import('../../src/hermes/dashboard-client.js');
+  const dashboard = new DashboardClient(h.origin);
+  await dashboard.status();
+  const memory = await dashboard.memory('default');
+  assert.equal(memory.active, 'honcho'); assert.equal(memory.providers.length, 2);
+  const jobs = await dashboard.cronJobs('default');
+  assert.deepEqual(jobs.map(job => job.name), ['morning-digest', 'backup-check', 'weekly-report']);
+  assert.equal(jobs[2]!.state, 'paused');
+  const failing = await dashboard.cronJob('0f1e2d3c4b5a', 'default');
+  assert.equal(failing.lastError, 'Delivery failed: api_key=[redacted]');
+  const runs = await dashboard.cronRuns('0f1e2d3c4b5a', 'default', 5);
+  assert.equal(runs[0]!.title, 'FAILED · Delivery failed');
+  const rendered = JSON.stringify({ memory, jobs, failing, runs });
+  for (const secret of ['FIXTURE_PROVIDER_SECRET_VALUE', 'HONCHO_API_KEY', 'FIXTURE_URL_PASSWORD', 'Summarise overnight mail', '/srv/hermes', 'FIXTURE_JOB_KEY_VALUE', 'FIXTURE_BEARER_VALUE'])
+    assert.equal(rendered.includes(secret), false, secret);
+  // The client offers no action in local mode, so no write request leaves the browser.
+  await assert.rejects(dashboard.cronAction('pause', 'a1b2c3d4e5f6', 'default'), /Dashboard/);
+  for (const [method, path] of [
+    ['POST', '/__hermes/api/cron/jobs/a1b2c3d4e5f6/pause?profile=default'], ['POST', '/__hermes/api/cron/jobs/a1b2c3d4e5f6/resume?profile=default'],
+    ['POST', '/__hermes/api/cron/jobs/a1b2c3d4e5f6/trigger?profile=default'], ['DELETE', '/__hermes/api/cron/jobs/a1b2c3d4e5f6?profile=default'],
+    ['POST', '/__hermes/api/cron/fire'], ['GET', '/__hermes/api/cron/blueprints'], ['POST', '/__hermes/api/memory/reset?profile=default'],
+    ['GET', '/__hermes/api/memory/providers/honcho/config?profile=default'], ['PUT', '/__hermes/api/memory/providers/honcho/config'],
+  ] as const) assert.equal((await fetch(h.origin + path, { method, headers: { Origin: h.origin } })).status, 403, `${method} ${path}`);
+  assert.equal(h.upstream.metrics.cronActions, 0);
   assert.ok(!JSON.stringify(h.logs).includes(TOKEN));
 });

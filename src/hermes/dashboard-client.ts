@@ -1,6 +1,8 @@
 import { ClientError, record, textField } from './protocol.js';
 import { WsAuthClient } from './ws-auth.js';
 import { skillList, skillDocument, skillName, type SkillDocument, type SkillRow } from './skills.js';
+import { memoryStatus, type MemoryStatus } from './memory.js';
+import { cronJob, cronJobId, cronJobList, cronRunPage, CRON_ACTIONS, type CronActionKind, type CronJob, type CronRun } from './cron.js';
 import { sessionQuery, sessionPage, searchPage, historyPage, firstMessage, sessionId, profileName, HISTORY_LIMIT, type SessionQuery, type SessionRef } from './session-rest.js';
 import type { DiagnosticsRing } from './diagnostics.js';
 export { WS_PROTOCOL, type WsCredential } from './ws-auth.js';
@@ -21,6 +23,8 @@ const ROUTES = {
   sessions: '/__hermes/api/sessions', sessionSearch: '/__hermes/api/sessions/search', sessionHistory: '/__hermes/api/sessions',
   audioTranscribe: '/__hermes/api/audio/transcribe', audioSpeak: '/__hermes/api/audio/speak', audioVoice: '/__hermes/api/audio/voice-config',
   skills: '/__hermes/api/skills', skillContent: '/__hermes/api/skills/content',
+  memory: '/__hermes/api/memory',
+  cronJobs: '/__hermes/api/cron/jobs', cronJob: '/__hermes/api/cron/jobs', cronRuns: '/__hermes/api/cron/jobs', cronAction: '/__hermes/api/cron/jobs',
 } as const;
 type Route = keyof typeof ROUTES;
 
@@ -223,6 +227,37 @@ export class DashboardClient {
     const query = new URLSearchParams({ name: skillName(name) });
     if (profileName(profile)) query.set('profile', profile!);
     return skillDocument(await this.request('skillContent', 'GET', undefined, signal, `?${query}`), name);
+  }
+  /** Read-only memory status. Provider config and setup/reset/provider-switch routes are deliberately not in this client. */
+  async memory(profile?: string, signal?: AbortSignal): Promise<MemoryStatus> {
+    const query = new URLSearchParams();
+    if (profileName(profile)) query.set('profile', profile!);
+    return memoryStatus(await this.request('memory', 'GET', undefined, signal, query.size ? `?${query}` : ''));
+  }
+  /** Cron jobs are always read for one explicit profile: the upstream default `profile=all` would cross profile boundaries. */
+  private cronQuery(profile?: string): string {
+    return `?${new URLSearchParams({ profile: profileName(profile) ?? 'default' })}`;
+  }
+  async cronJobs(profile?: string, signal?: AbortSignal): Promise<CronJob[]> {
+    return cronJobList(await this.requestValue('cronJobs', 'GET', undefined, signal, this.cronQuery(profile)));
+  }
+  async cronJob(id: string, profile?: string, signal?: AbortSignal): Promise<CronJob> {
+    return cronJob(await this.request('cronJob', 'GET', undefined, signal, `/${encodeURIComponent(cronJobId(id))}${this.cronQuery(profile)}`));
+  }
+  async cronRuns(id: string, profile?: string, limit = 20, signal?: AbortSignal): Promise<CronRun[]> {
+    if (!Number.isSafeInteger(limit) || limit < 1 || limit > 100) throw new ClientError('protocol', 'Run limit must be 1–100');
+    const query = new URLSearchParams({ profile: profileName(profile) ?? 'default', limit: String(limit) });
+    return cronRunPage(await this.request('cronRuns', 'GET', undefined, signal, `/${encodeURIComponent(cronJobId(id))}/runs?${query}`));
+  }
+  /**
+   * The only cron write in the client: pause, resume or run-now for one job. Gated mode only; trusted-local
+   * never reaches this (the local allowlist is GET-only and the capability is hidden). Callers must not retry
+   * automatically: an error after the request was sent has an unknown outcome.
+   */
+  async cronAction(kind: CronActionKind, id: string, profile?: string, signal?: AbortSignal): Promise<CronJob> {
+    if (!(CRON_ACTIONS as readonly string[]).includes(kind)) throw new ClientError('protocol', 'Unsupported cron action');
+    if (this.admissionMode === 'trusted-local') throw new ClientError('protocol', 'Cron actions are available when signed in through the Hermes Dashboard');
+    return cronJob(await this.request('cronAction', 'POST', {}, signal, `/${encodeURIComponent(cronJobId(id))}/${kind}${this.cronQuery(profile)}`));
   }
   async sessionFirstMessage(ref: SessionRef, signal?: AbortSignal) {
     const query = new URLSearchParams({ limit: '1', offset: '0', order: 'oldest' });

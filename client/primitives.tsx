@@ -24,7 +24,7 @@ export function Modal({ title, children, onClose, kind = 'settings' }: { title: 
   }, []);
   return <dialog ref={ref} className={`modal modal-${kind}`} aria-labelledby={titleId}
     onCancel={event => { event.preventDefault(); close.current(); }} onClick={event => { if (event.target === event.currentTarget) close.current(); }}>
-    <div className="modal-inner"><header className="modal-header"><h2 id={titleId}>{title}</h2><IconButton label={`Close ${title.toLowerCase()}`} onClick={onClose}><X size={19}/></IconButton></header>{children}</div>
+    <div className="modal-inner"><div className="modal-header"><h2 id={titleId}>{title}</h2><IconButton label={`Close ${title.toLowerCase()}`} onClick={onClose}><X size={19}/></IconButton></div>{children}</div>
   </dialog>;
 }
 export function Notice({ children, error = false }: { children: ReactNode; error?: boolean }) {

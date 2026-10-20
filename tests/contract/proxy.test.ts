@@ -59,7 +59,7 @@ test('synthetic wire: proxied login, fresh ticket, Upgrade, native prompt and st
   h.fixture.disconnect();
   await until(() => h.fixture.metrics.upgrades === 2 && session.state.phase === 'idle');
   assert.equal(session.state.storedId, key);
-  assert.deepEqual(h.fixture.metrics, { creates: 1, submits: 1, tickets: 2, upgrades: 2 });
+  assert.deepEqual(h.fixture.metrics, { creates: 1, submits: 1, tickets: 2, upgrades: 2, cronActions: 0 });
   const log = JSON.stringify(h.logs);
   for (const secret of [h.fixture.cookie, 'wire-test prompt', 'fixture-password', 'hermes-gateway-ticket.'])
     assert.equal(log.includes(secret), false);
@@ -179,4 +179,26 @@ test('gated wire: skill reads go through the authenticated proxy and fail closed
   assert.equal(anonymous.status, 401);
   // Gated mode has no local allowlist: writes are refused by upstream auth, and this client never sends them.
   assert.equal((await fetch(h.origin + '/__hermes/api/skills', { method: 'POST', headers: { Origin: h.origin } })).status, 401);
+});
+
+test('gated wire: memory and cron reads proxy through the session; cron actions need a same-origin POST', async (t) => {
+  const h = await harness(t);
+  await h.dashboard.status();
+  await h.dashboard.login('basic', 'fixture', 'fixture-password');
+  assert.equal((await h.dashboard.memory('default')).active, 'honcho');
+  assert.deepEqual((await h.dashboard.cronJobs('default')).map(job => job.name), ['morning-digest', 'backup-check', 'weekly-report']);
+  const paused = await h.dashboard.cronAction('pause', 'a1b2c3d4e5f6', 'default');
+  assert.equal(paused.enabled, false);
+  assert.equal(h.fixture.metrics.cronActions, 1);
+  // Browser-style cross-site and foreign-origin POSTs never reach the upstream, even with a valid session cookie.
+  const foreign = await fetch(h.origin + '/__hermes/api/cron/jobs/a1b2c3d4e5f6/resume?profile=default', { method: 'POST', headers: { Origin: 'https://evil.example' } });
+  assert.equal(foreign.status, 403);
+  const crossSite = await h.auth.fetcher(h.origin + '/__hermes/api/cron/jobs/a1b2c3d4e5f6/resume?profile=default', { method: 'POST', headers: { 'Sec-Fetch-Site': 'cross-site' } });
+  assert.equal(crossSite.status, 403);
+  // Without an Origin header a POST is refused at the proxy (not forwarded as a browserless write).
+  const noOrigin = await fetch(h.origin + '/__hermes/api/cron/jobs/a1b2c3d4e5f6/resume?profile=default', { method: 'POST' });
+  assert.equal(noOrigin.status, 403);
+  // Anonymous same-origin POST is refused upstream.
+  assert.equal((await fetch(h.origin + '/__hermes/api/cron/jobs/a1b2c3d4e5f6/trigger?profile=default', { method: 'POST', headers: { Origin: h.origin } })).status, 401);
+  assert.equal(h.fixture.metrics.cronActions, 1);
 });

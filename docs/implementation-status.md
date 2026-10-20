@@ -177,6 +177,31 @@ Known boundaries and deferred work:
 - Memory, Automations/Cron, MCP, Config and Diagnostics tabs are not rendered.
 - Skill content is capped at 200,000 characters and the list at 2,000 rows. Larger catalogues are not paginated.
 
+## Phase 8 slices B1 and B2 — Memory and Cron management (ADR-029)
+
+What landed (both slices are in one code commit, because the Management shell, capability store, dashboard client, fixture and trusted-local test are shared; see the commit message):
+
+- **Memory tab (B1, read-only).** `GET /api/memory?profile=` projected to the active provider, provider name, description, configured/available flags and status, and the byte sizes of `MEMORY.md` and `USER.md`. Provider `setup`, `env` and `config` are dropped. Provider config is never fetched. No reset, setup or provider switch.
+- **Cron tab (B2).** Reads: `GET /api/cron/jobs`, `GET /api/cron/jobs/{id}` and `GET /api/cron/jobs/{id}/runs` for one explicit profile. Projection drops prompt, script, URLs, workdir, model, delivery targets and the execution ledger. Free text is redacted and bounded. Failing jobs show the last error and failure streak. Runs show title and preview.
+- **Cron actions (B2, gated mode only).** Pause, resume and run-now behind a confirmation dialog. Single-flight across all jobs, no automatic retry, a re-read after each response, and an "outcome is unknown" message with a refresh path for network, timeout or 5xx failures. A documented 409 reads as "not run".
+- **Capabilities.** `memory`, `cronJobs` (list, detail and runs advertised) and `cronActions` (three POST routes advertised and the mode permits writes). Tabs render only when available.
+- **Trusted-local.** Four GET routes added to `localPathAllowed`. The method rule is unchanged, so cron actions and every other write stay 403. The Cron tab says actions are available when signed in through the Hermes Dashboard.
+- **Gated mode.** Cron POSTs use the existing authenticated proxy. Origin, `Sec-Fetch-Site` and session checks are contract-tested for POSTs.
+
+Evidence (this branch, commit SHA in the PR, synthetic fixture only, not vanilla-Hermes proof):
+
+- `npm run build`, `typecheck`, `lint`: pass. Unit 419/419 (`tests/unit/memory-cron.test.ts`, `trusted-local.test.ts` additions). Contract 43/43 (`proxy.test.ts` gated cron case, `trusted-local.test.ts` memory and cron case).
+- Browser: `tests/e2e/management-memory-cron.spec.ts` 10 tests and `tests/e2e/management-skills.spec.ts` 4 tests, on desktop-chromium, android-chromium and narrow-320 (local probe harness on :8787). Cron state is keyed per signed-in session in the fixture, so parallel tests do not share jobs.
+- Not run locally: iPhone WebKit (CI covers it), physical devices, real Hermes upstream, trusted-local in the browser (contract tests cover the bridge).
+- Not a regression signal: the older shell specs that target the legacy diagnostic DOM (`foundation`, `chat`, `chat-layout`, `admission`, `agent-inputs`, `foundation-evidence`, `diagnostic`, `turn-settle`) fail under this React-only probe harness because they expect `#auth-state` and `#send` on the legacy app. They were not used as evidence for this slice.
+
+Known boundaries and deferred work:
+
+- Cron create, edit, delete, blueprints, `POST /api/cron/fire`, and delivery targets are not implemented. Each needs its own write-review record.
+- The trigger copy on a paused job says it resumes the job. That follows upstream `_trigger_cron_job_sync` (`force` resumes and claims). Verify against a live Hermes before claiming it as product evidence.
+- Memory reset, provider setup, provider switching and provider config are not implemented (ADR-029).
+- Run history is capped at 20 entries per job in the UI and 100 in the projection. There is no pagination.
+
 ## Phase 9 — attachments (slice 9a)
 
 What landed: composer attach button (native picker, no forced camera), drag-and-drop on desktop, paste of image/PDF files from the paste event, a queued chip tray above the composer (thumbnail, name, size, page count for PDFs, 44 px remove control with a screen-reader label), and the shared attach pipeline used by the composer and the existing `/image` and `/paste` browser commands. Images use `image.attach_bytes`; PDFs use `pdf.attach` (bytes from the browser, rendered by the host). Non-image files are deferred because `file.attach` stages into the workspace and needs a draft-reference decision (ADR-030).
