@@ -16,7 +16,7 @@ import { steerOutcomeCopy, steerSession } from '../src/hermes/session-steer.js';
 import { ClientError } from '../src/hermes/protocol.js';
 import type { SessionRef } from '../src/hermes/session-rest.js';
 import { AttachmentTray, type Owner } from '../src/hermes/attachments.js';
-import { DictationMachine, SpeechPlayback, VoiceError, classifyVoiceHttp, dataUrlToBlob, insertTranscript, recordingMime, type PlaybackAudio, type RecorderLike, type StreamLike, type RecordingMime } from '../src/hermes/voice.js';
+import { DictationMachine, scopeTransition, SpeechPlayback, VoiceError, classifyVoiceHttp, dataUrlToBlob, insertTranscript, recordingMime, type PlaybackAudio, type RecorderLike, type StreamLike, type RecordingMime } from '../src/hermes/voice.js';
 
 /** One disposable client lifetime; React never builds RPC envelopes or owns durable sessions. */
 export class AppRuntime {
@@ -43,7 +43,8 @@ export class AppRuntime {
       try { return await this.dashboard.transcribe(dataUrl, payloadType, context.profile, signal); }
       catch (error) { throw voiceFailure(error); }
     },
-    isCurrent: context => context.key === this.viewKeyNow(),
+    isCurrent: context => context.key === this.viewKeyNow() ||
+      (this.adoptedScope?.from === context.key && this.adoptedScope.to === this.viewKeyNow()),
     insert: transcript => this.setDraft(insertTranscript(this.chat.draft, transcript).text),
     now: () => performance.now(),
     schedule: (callback, ms) => { const timer = setTimeout(callback, ms); return () => clearTimeout(timer); },
@@ -63,6 +64,8 @@ export class AppRuntime {
   /** Hermes voice availability from the audio config route. 'unknown' still lets the user try. */
   voiceSupport: 'unknown' | 'available' | 'unavailable' = 'unknown';
   private lastViewKey?: string;
+  /** The last `n|` -> `n|ref` adoption, so a take started before the conversation had an id still lands. */
+  private adoptedScope?: { from: string; to: string };
   readonly attachments: AttachmentTray = new AttachmentTray({
     revoke: url => URL.revokeObjectURL(url),
     discard: (owner, paths) => { void this.discardAttachmentPaths(owner, paths); },
@@ -246,12 +249,15 @@ export class AppRuntime {
     this.notify();
   }
   private syncViewScope(): void {
-    const key = this.viewKeyNow();
-    if (key === this.lastViewKey) return;
-    const initial = this.lastViewKey === undefined;
+    const key = this.viewKeyNow(), transition = scopeTransition(this.lastViewKey, key);
+    if (transition === 'same') return;
+    const previous = this.lastViewKey;
     this.lastViewKey = key;
-    // The first sync only records the scope: it is not a conversation switch and must not drop a take.
-    if (initial) return;
+    // The first sync only records the scope. A new conversation receiving its id keeps the same composer and
+    // draft, so a running take is adopted and lands there; only a real switch drops it.
+    if (transition === 'initial') return;
+    if (transition === 'adopt') { this.adoptedScope = { from: previous!, to: key }; return; }
+    this.adoptedScope = undefined;
     this.speech.stop();
     this.dictation.cancel();
     this.dictation.dismiss();
