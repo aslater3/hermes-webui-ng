@@ -6,7 +6,7 @@ import { ModelScenarios } from './model-scenarios.js';
 import { AgentScenarios } from './agent-scenarios.js';
 import { WS_PROTOCOL } from '../../src/hermes/dashboard-client.js';
 
-export async function startFixture(port = 0, options: { sessionToken?: string; beforeWsTicket?: () => Promise<void>; beforePromptComplete?: (text: string) => Promise<void>; requireSubagentActivation?: boolean; emptyOwnedSubagentRoster?: boolean; uninitializedSessionStore?: boolean } = {}) {
+export async function startFixture(port = 0, options: { sessionToken?: string; beforeWsTicket?: () => Promise<void>; beforePromptComplete?: (text: string) => Promise<void>; requireSubagentActivation?: boolean; emptyOwnedSubagentRoster?: boolean; uninitializedSessionStore?: boolean; voiceUnavailable?: boolean } = {}) {
   const cookie = `fixture_auth=${randomBytes(24).toString('hex')}`;
   const tickets = new Set<string>();
   const interactions = new AgentScenarios();
@@ -47,6 +47,28 @@ export async function startFixture(port = 0, options: { sessionToken?: string; b
       res.end(); return;
     }
     if (!presented) { send(401, {}); return; }
+    if (req.url?.startsWith('/api/audio/')) {
+      // Synthetic audio routes: deterministic results, no provider, no real audio. Unconfigured-provider mode returns 503.
+      const route = req.url.split('?')[0];
+      if (route === '/api/audio/voice-config' && req.method === 'GET') { send(200, { ok: true, stt: { mode: 'relay' }, tts: { mode: 'relay' } }); return; }
+      if ((route === '/api/audio/transcribe' || route === '/api/audio/speak') && req.method === 'POST') {
+        let body = '';
+        req.on('data', (chunk) => { body += String(chunk); if (body.length > 2_000_000) req.destroy(); });
+        req.on('end', () => {
+          if (options.voiceUnavailable) { send(503, { detail: 'No provider is configured on this host' }); return; }
+          let data: Record<string, unknown> = {};
+          try { data = JSON.parse(body); } catch { send(400, { detail: 'Invalid JSON' }); return; }
+          if (route === '/api/audio/transcribe') {
+            if (typeof data.data_url !== 'string' || !data.data_url.startsWith('data:audio/')) { send(400, { detail: 'Invalid audio payload' }); return; }
+            send(200, { ok: true, transcript: 'fixture dictation', provider: 'fixture' }); return;
+          }
+          if (typeof data.text !== 'string' || !data.text.trim()) { send(400, { detail: 'Text is required' }); return; }
+          send(200, { ok: true, data_url: 'data:audio/mpeg;base64,AAEC', mime_type: 'audio/mpeg', provider: 'fixture' });
+        });
+        return;
+      }
+      send(404, { detail: 'Not Found' }); return;
+    }
     if (req.url === '/openapi.json') {
       send(200, { openapi: '3.1.0', paths: { '/api/sessions': { get: {} }, '/api/sessions/search': { get: {} }, '/api/profiles': { get: {} }, '/api/model/options': { get: {} } }, 'x-private': 'must-not-export' }); return;
     }

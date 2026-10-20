@@ -18,6 +18,7 @@ import { HistoryMessage as Message } from './HistoryMessage.js';
 import { subagentSummary } from '../src/hermes/subagent-catalog.js';
 import { AttachButton, AttachmentTray, attachableFiles, attachReason } from './attachments.js';
 import { attachFiles } from './attachment-actions.js';
+import { DictateButton, DictationStatus, SpeechContext, VOICE_TRUSTED_LOCAL_COPY, VOICE_UNSUPPORTED_COPY } from './voice.js';
 
 /** Chronological activity stream. Requests that still block the turn render into the attention host
  *  at the end of the transcript, which is a later sibling, so the shell hands over a mounted node
@@ -94,6 +95,11 @@ export function Conversation({ runtime: rt, revision }: { runtime: AppRuntime; r
       if (files.length) rt.run(() => attachFiles(rt, files));
     },
   };
+  const voiceOffered = rt.voiceAllowed && rt.voiceSupport !== 'unavailable';
+  const dictateEnabled = writable && !historical && !rt.steering && voiceOffered && rt.dictation.state.phase !== 'recording' && rt.dictation.state.phase !== 'transcribing' && rt.dictation.state.phase !== 'requesting';
+  // Hermes voice availability is probed once per ready connection, not per message.
+  useEffect(() => { if (voiceOffered) void rt.probeVoice(); }, [rt, rt.ready, voiceOffered]);
+  const speechControls = { enabled: voiceOffered, state: rt.speech.state, play: (key: string, text: string) => rt.speech.play(key, text), stop: () => rt.speech.stop() };
   const selectedOwner = chat.native;
   const peerCurrent = () => rt.ready && rt.chat.native === selectedOwner && document.visibilityState === 'visible';
   const pending = peerRows.length + chat.native.activity.state.inputs.filter(input => ['pending', 'sending'].includes(input.status)).length;
@@ -119,7 +125,7 @@ export function Conversation({ runtime: rt, revision }: { runtime: AppRuntime; r
   const activityAt = messages.reduce((last, message, index) => message.role === 'user' ? index + 1 : last, messages.length);
   const olderAvailable = !!chat.selected && !busy && !loading && (historical ? saved.page?.returned === 100 : (state.totalMessages ?? saved.page?.returned ?? 0) >= 100);
   const placeholder = chat.subagent ? 'Subagent transcripts are read-only. Steer it from the parent conversation.' : chat.readOnly ? 'This conversation has ended and is read-only' : historical ? 'Return to latest to continue this conversation' : !rt.ready ? 'Connect to Hermes to send a message' : running ? 'Steer Hermes while it works…' : state.phase === 'waiting' ? 'Answer Hermes above or stop the response' : 'Message Hermes…';
-  return <>
+  return <SpeechContext.Provider value={speechControls}>
     <div className="conversation-scroll" id="conversation-scroll" data-following="true" ref={scroller} aria-label="Conversation" tabIndex={0} {...dropHandlers} onScroll={() => {
       const node = scroller.current!; following.current = node.scrollHeight - node.scrollTop - node.clientHeight < 70;
       node.dataset.following = String(following.current); if (following.current) setUnread(false);
@@ -154,18 +160,20 @@ export function Conversation({ runtime: rt, revision }: { runtime: AppRuntime; r
         {commands.popup}
         <label className="sr-only" htmlFor="shell-prompt">Message Hermes</label>
         <AttachmentTray runtime={rt} owner={attachOwner}/>
+        <DictationStatus runtime={rt}/>
         <textarea id="shell-prompt" ref={composer} {...commands.aria} rows={2} placeholder={placeholder} value={draft} maxLength={32768} disabled={!writable} onChange={event => { setDraft(event.target.value); rt.chat.setDraft(event.target.value); }}
           onPaste={event => { const files = attachableFiles(event.clipboardData?.files); if (!files.length) return; event.preventDefault(); rt.run(() => attachFiles(rt, files)); }}
           onKeyDown={event => { if (commands.keyDown(event)) return; if (enterSends(event.nativeEvent, navigator.maxTouchPoints > 0 || matchMedia('(pointer:coarse)').matches)) { event.preventDefault(); send(); } }}/>
         <div className="composer-toolbar"><AgentControls runtime={rt}/>
           <div className="composer-right">{draft.length > 30000 && <span className="small muted">{draft.length.toLocaleString()} / 32,768</span>}
             {!historical && <AttachButton runtime={rt} enabled={attachEnabled} reason={attachReasonText} reasonId="attach-reason"/>}
+            {voiceOffered && rt.dictationCapable && <DictateButton runtime={rt} enabled={dictateEnabled}/>}
             {running && <button type="submit" className="send-button steer-button" aria-label="Steer current response" title="Steer current response" disabled={!writable || rt.steering || !draft.trim()}>{rt.steering ? <LoaderCircle size={18} className="spin"/> : <ArrowUp size={20}/>}</button>}
             {busy ? <button type="button" className="send-button stop-button" aria-label="Stop response" title="Stop response" disabled={!rt.ready || !!state.submitting || !!state.interrupting} onClick={() => rt.run(() => chat.interrupt())}>{state.interrupting ? <LoaderCircle size={18} className="spin"/> : <Square size={15} fill="currentColor"/>}</button> : <button type="submit" className="send-button" aria-label="Send message" title="Send message" disabled={!writable || !draft.trim()}><ArrowUp size={20}/></button>}
           </div>
         </div>
-      </form><div className="composer-caption"><span className="composer-privacy">Your conversations stay in Hermes.</span>{attachReasonText && !historical && <span id="attach-reason" className="small muted">{attachReasonText}</span>}{running && rt.steerRuntimeId === state.runtimeId && rt.steerStatus && <span className="small muted" role="status">{rt.steerStatus}</span>}{commands.button}{!historical && rt.ready && state.runtimeId && <UsageButton key={`${rt.accountGeneration}:${scope}:${state.runtimeId}`} usage={state.usage}/>}<span className="desktop-hint">{running ? 'Enter to steer this turn · Shift + Enter for a new line' : 'Enter to send · Shift + Enter for a new line'}</span></div>
+      </form><div className="composer-caption"><span className="composer-privacy">Your conversations stay in Hermes.</span>{attachReasonText && !historical && <span id="attach-reason" className="small muted">{attachReasonText}</span>}{!rt.voiceAllowed ? <span className="voice-caption">{VOICE_TRUSTED_LOCAL_COPY}</span> : rt.voiceSupport === 'unavailable' && <span className="voice-caption">{VOICE_UNSUPPORTED_COPY}</span>}{running && rt.steerRuntimeId === state.runtimeId && rt.steerStatus && <span className="small muted" role="status">{rt.steerStatus}</span>}{commands.button}{!historical && rt.ready && state.runtimeId && <UsageButton key={`${rt.accountGeneration}:${scope}:${state.runtimeId}`} usage={state.usage}/>}<span className="desktop-hint">{running ? 'Enter to steer this turn · Shift + Enter for a new line' : 'Enter to send · Shift + Enter for a new line'}</span></div>
     </div>
     {commands.overlay}
-  </>;
+  </SpeechContext.Provider>;
 }

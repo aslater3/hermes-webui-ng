@@ -165,3 +165,18 @@ Evidence (local, synthetic WebSocket fixture on the probe harness, not vanilla H
 - Regression: `browser-commands`, `steering` and `shell` specs pass. `chat.spec.ts` asserts `#auth-state` on the legacy app at port 8788 and cannot run under the probe harness; it was not run.
 
 Known boundaries: detection is by use (`-32601`), because Hermes does not advertise RPC methods. Copies already queued upstream cannot be detached while the gateway is disconnected. The tray does not mirror Hermes' queue if another client submits. Physical iPhone/Android pickers, camera and installed-PWA behaviour are not verified. WebKit is not run locally; CI covers iPhone.
+
+## Phase 9 — browser voice (slice 9b)
+
+What landed: a dictation mic control (MediaRecorder with feature detection; explicit start, stop, cancel; elapsed time and a 60 s cap; a transcript is inserted into the draft for review and never sent), and a read-aloud action on assistant replies (one playback at a time; stops on conversation switch and when the page is hidden). Both use only the gated Dashboard audio routes (`/__hermes/api/audio/transcribe`, `/speak`, `/voice-config`). Trusted-local hides voice with honest copy; its route allowlist is unchanged (ADR-030).
+
+The only server change is in the static response headers: `Permissions-Policy` `microphone=(self)` and CSP `media-src 'self' blob:`, which are required for same-origin microphone use and blob playback. Routing, `localPathAllowed` and `headers.ts` are untouched.
+
+Evidence (local, synthetic fixture on the probe harness, not vanilla Hermes):
+
+- Unit: `tests/unit/voice.test.ts` covers error mapping, MIME detection, the recorder state machine (happy path, cancel, cap, permission/no-mic/busy, unsupported before prompt, unavailable/rejected/empty, owner change, oversize, hidden-page abort, recorder error, late stream release) and the read-aloud player (single playback, toggle, stop during fetch, unavailable/blocked/over-long, stale fetch). Suite total 436 pass.
+- Contract: `tests/contract/voice.test.ts` covers gated transcribe/speak through the authenticated proxy, 503 surfaced as a classifiable error, cross-origin/cross-site/Origin-less POST refusal, unauthenticated refusal, the proxy body budget for the largest recording, the exact security headers, and trusted-local refusal of every audio route and POST. Suite total 47 pass.
+- E2E: `tests/e2e/voice.spec.ts` (stubbed devices, no real microphone, no audio played) covers dictation into the draft without sending, append, cancel with no upload, permission denied, no microphone, busy microphone, unavailable provider, no recording support hides the control, touch targets and axe, read aloud one-at-a-time with stop and no autoplay, unavailable speech provider, stop on conversation switch, and trusted-local hidden with axe. 39 pass on desktop-chromium, android-chromium and narrow-320.
+- Regression sample (attachments, voice, browser-commands, steering, shell; three viewports): 148 pass, 2 skipped (drag-and-drop is desktop-only by design).
+
+Known boundaries: no real microphone or audio output was exercised. iPhone autoplay and microphone prompts, the installed Home Screen PWA, and Android hardware are not verified. Voice conversation mode is not implemented. `voice-config` does not prove an STT/TTS provider is configured; an unconfigured provider appears on first use as copy. WebKit is not run locally; CI covers iPhone.

@@ -54,9 +54,52 @@ Attach is enabled only when: a native conversation is open and attached, the ses
 - No upstream "list queued attachments" RPC exists, so NG cannot reconcile the tray after a reconnect.
 - Physical iPhone and Android pickers, camera capture and Home Screen PWA behaviour are **not verified** by these tests. They are covered only by the Chromium viewport emulation recorded in `implementation-status.md`.
 
-## Part B — Browser voice
+## Part B — Browser voice (implemented)
 
-Recorded in the section below once slice 9b lands. The decisions so far, carried forward:
+### Routes and mode policy
 
-- Voice uses only the Dashboard audio REST routes through the gated proxy. Trusted-local hides voice. The method rule in `server/trusted-local.ts` (`localPathAllowed` is GET/HEAD only) is unchanged.
-- The `voice-config` route is read for availability only. `mode: "direct"` (client-side STT/TTS with provider keys) is never used, because it would place provider credentials in browser-visible configuration.
+Voice uses only the Dashboard audio REST routes, through the authenticated gated proxy:
+
+| Browser use | Route | Notes |
+|---|---|---|
+| Dictation | `POST /__hermes/api/audio/transcribe` | One recorded clip (`data_url`, `mime_type`). Returns text; the draft is updated, never sent. |
+| Read aloud | `POST /__hermes/api/audio/speak` | Returns a base64 audio data URL, played from a Blob object URL. |
+| Availability | `GET /__hermes/api/audio/voice-config` | Probe only. Its provider and key fields are not read or kept. `mode: "direct"` (provider keys in the browser) is never used. |
+
+Trusted-local: voice is hidden, and the composer caption says "Voice is available when signed in through the Hermes Dashboard." `localPathAllowed` in `server/trusted-local.ts` is unchanged and remains GET/HEAD-only by design. The contract tests assert that every audio route is refused there, for every method, and that the proxy returns `LOCAL_ROUTE_UNAVAILABLE` for the POSTs. No route was added to the trusted-local allowlist and `server/proxy/headers.ts` was not touched.
+
+Gated mode: the POSTs carry the same-origin `Origin` and cookies. `allowedRequest` refuses cross-site, foreign-Origin and Origin-less POSTs before Hermes is reached (contract-tested). An unauthenticated POST gets 401 with no transcript or audio.
+
+### Response-header change (the only server change)
+
+`server/app.ts` changes two headers on the static HTML/asset response, and nothing else:
+
+- `Permissions-Policy`: `microphone=()` becomes `microphone=(self)`. Without this the browser refuses `getUserMedia` for the page. `camera=()` is unchanged, so NG never requests the camera.
+- `Content-Security-Policy`: adds `media-src 'self' blob:`. Without this, `default-src 'self'` blocks the object URL that plays the reply. `data:` is not allowed for media.
+
+This is not a routing, method, or allowlist change. It does not touch `localPathAllowed`, `headers.ts`, or the proxy. The contract test asserts the exact policy (microphone self-only, camera still denied, no `data:`/remote media sources).
+
+### Dictation
+
+`src/hermes/voice.ts` holds a pure `DictationMachine` (requesting → recording → transcribing → idle/error) with injected ports, so the state machine is unit-tested with fakes.
+
+- MediaRecorder is feature-detected: `audio/webm;codecs=opus`, then `audio/webm`, then `audio/mp4` for Safari. When none is supported, or `getUserMedia` is missing, the mic control is not rendered.
+- The microphone is requested inside the click that starts recording. Explicit start, stop, and cancel. The visible state shows elapsed time against a 60 s cap, which stops the take automatically.
+- Failures map to plain copy: permission denied, no microphone, microphone busy, unavailable provider (404/5xx), too large, network, rejected, empty.
+- Upstream error text is never shown; it can name provider configuration.
+- Recordings are capped at 600,000 raw bytes, so base64 plus the JSON envelope stays under the 1 MiB gated proxy body limit (contract-tested).
+- A transcript is inserted with a single separating space and capped at the 32,768-character draft limit. It is never sent automatically.
+- The context is the view key (account plus conversation). A transcript for a conversation that is no longer selected is discarded with copy. Switching conversation cancels an active take.
+- A hidden page cancels the take and aborts any upload, with "Recording stopped because this page was hidden. Nothing was sent."
+- Audio blobs are not retained after the request. Nothing is logged, and nothing is stored in browser storage.
+
+### Read aloud
+
+`SpeechPlayback` allows one playback at a time. Starting another reply stops the first, and the same control toggles playback off. The audio object URL is revoked when playback ends, stops, or fails. Playback is never autoplayed. It stops on conversation switch and when the page is hidden. Text is capped at 2,000 characters.
+
+### Known boundaries
+
+- Browser autoplay policy: iOS may block `play()` when the audio starts after a network request. The "blocked playback" copy asks the user to tap again. This is not verified on an iPhone.
+- The Chromium e2e suite stubs `MediaRecorder`, `getUserMedia`, and `Audio`. It does not open a real microphone, and no audio is played. Real microphone capture, real speech quality, and iPhone/Android permission prompts are not verified.
+- Voice availability is probed by `voice-config`. That route does not prove an STT or TTS provider is configured. An unconfigured provider is detected on first use (503) and shown as copy.
+- Voice conversation mode (`voice.live`, GPT-Live, host `voice.record`) is not implemented. Only dictation and read-aloud are.

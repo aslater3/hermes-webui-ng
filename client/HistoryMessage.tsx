@@ -1,7 +1,8 @@
 import { HermesMark } from './HermesMark.js';
-import { lazy, memo, Suspense, useState } from 'react';
+import { lazy, memo, Suspense, useContext, useId, useState } from 'react';
 import { Brain, Check, Copy, Wrench } from 'lucide-react';
 import type { DisplayMessage } from '../src/hermes/history-message.js';
+import { SpeechContext, ReadAloudButton } from './voice.js';
 import './history-message.css';
 
 const Markdown = lazy(() => import('./Markdown.js'));
@@ -9,6 +10,7 @@ const Markdown = lazy(() => import('./Markdown.js'));
 /** Native history is a typed projection, not a list of assistant text envelopes. */
 export const HistoryMessage = memo(function HistoryMessage({ role, text, toolName, reasoning, truncated = false, author }: DisplayMessage & { author?: string }) {
   const [copied, setCopied] = useState(false), [note, setNote] = useState('');
+  const speech = useContext(SpeechContext), speechKey = useId();
   const user = role === 'user';
   const limit = truncated && <p className="muted small">This message reached the display limit.</p>;
   if (role === 'tool') return <article className="message message-tool history-tool" data-role="tool">
@@ -24,6 +26,7 @@ export const HistoryMessage = memo(function HistoryMessage({ role, text, toolNam
     {!user && text && <div className="message-actions"><button type="button" aria-label="Copy message" title="Copy message" onClick={() => {
       if (!navigator.clipboard) { setNote('Select the message to copy.'); return; }
       void navigator.clipboard.writeText(text).then(() => { setCopied(true); setNote('Message copied.'); }).catch(() => setNote('Select the message to copy.'));
-    }}>{copied ? <Check size={14} aria-hidden="true" focusable="false"/> : <Copy size={14} aria-hidden="true" focusable="false"/>}</button><span className="sr-only" role="status">{note}</span></div>}
+    }}>{copied ? <Check size={14} aria-hidden="true" focusable="false"/> : <Copy size={14} aria-hidden="true" focusable="false"/>}</button><span className="sr-only" role="status">{note}</span>
+      <ReadAloudButton itemKey={speechKey} text={text} controls={speech}/></div>}
   </article>;
 });
