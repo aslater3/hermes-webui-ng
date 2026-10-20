@@ -13,6 +13,7 @@ const approvalLabels: Record<string, string> = { once: 'Approved once', session:
 const cancelLabels: Record<string, [PeerOutcome['status'], string]> = {
   resolved: ['answered', 'Resolved in another client'], timeout: ['expired', 'Timed out in Hermes'],
   interrupted: ['expired', 'Withdrawn — the turn was interrupted'], shutdown: ['expired', 'Withdrawn — Hermes shut down'],
+  session_closed: ['expired', 'Withdrawn — the session closed'],
 };
 export const peerMethods: ReadonlySet<string> = new Set(['approval', 'clarify', 'sudo', 'secret', 'vault.code', 'vault.unlock_prompt', 'vault.unlock', 'vault.save_login']);
 const string = (value: unknown, limit = 4096, optional = false): string => {
