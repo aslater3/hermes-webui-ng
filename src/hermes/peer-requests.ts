@@ -19,6 +19,7 @@ const strings = (value: unknown): string[] => {
   if (!Array.isArray(value) || value.length > 32) throw new ClientError('protocol', 'Invalid native choices.');
   return [...new Set(value.map(item => string(item, 2048)))];
 };
+const multiAnswer = (text: string): string => JSON.stringify(text.split('\n').filter(item => item.trim()));
 function projection(frame: PeerFrame): PeerRequest {
   const p = record(frame.params), sessionId = string(p.session_id, 256), id = string(frame.id, 128);
   if (!sessionId || !id) throw new ClientError('protocol', 'Native interactive ownership is missing.');
@@ -115,7 +116,9 @@ export class PeerRequests {
     } else if (request.kind === 'clarify') {
       if (cancel) result = request.batch ? {} : { answer: '' };
       else if (!request.batch) result = { answer: string(answer.answer, 32768) };
-      else result = { answers: Object.fromEntries(request.questions.map(q => [q.id, q.locked ?? string(answer.answers?.[q.id], 32768)])) };
+      // Multi-select picks are newline-joined in the form; Hermes splits only a JSON array string.
+      else result = { answers: Object.fromEntries(request.questions.map(q => [q.id, q.locked ?? (q.multiple ?
+        multiAnswer(string(answer.answers?.[q.id], 32768)) : string(answer.answers?.[q.id], 32768))])) };
     } else result = { value: cancel ? '' : string(answer.value, 32768) };
     if (JSON.stringify({ jsonrpc: '2.0', id: request.id, result }).length > 1_048_576)
       throw new ClientError('protocol', 'The combined answer is too large. Shorten it before sending.');

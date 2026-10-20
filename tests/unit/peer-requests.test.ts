@@ -44,7 +44,7 @@ test('batch answers retain native locks; decline cancels without inventing answe
     { qid: 'one', question: 'First' }, { qid: 'two', question: 'Second', multi_select: true, choices: ['A', 'B'] },
   ], answers: { one: 'Locked answer' } }));
   store.respond(store.getSnapshot()[0]!, { answers: { one: 'Changed', two: 'A\nB' } });
-  assert.deepEqual(sent[0]?.result, { answers: { one: 'Locked answer', two: 'A\nB' } });
+  assert.deepEqual(sent[0]?.result, { answers: { one: 'Locked answer', two: '["A","B"]' } });
   store.receive(frame('clarify', 'srq-next', 'live-a', { questions: [{ qid: 'one', question: 'Question' }] }));
   store.respond(store.getSnapshot()[0]!, {}, true); assert.deepEqual(sent[1]?.result, {});
 });
