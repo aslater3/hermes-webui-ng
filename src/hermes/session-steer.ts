@@ -11,7 +11,7 @@ export interface SteerResult { text: string; outcome: SteerOutcome }
 
 /** Honest UI copy for an accepted steer. Never claims more than the acknowledgement proves. */
 export function steerOutcomeCopy(outcome: SteerOutcome): string {
-  return outcome === 'redirected' ? 'Redirected the running turn' : 'Steer queued for the running turn';
+  return outcome === 'redirected' ? 'Redirected the running turn' : 'Steered into current turn';
 }
 
 /**

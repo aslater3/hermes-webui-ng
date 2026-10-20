@@ -15,7 +15,7 @@ test('a redirected steer acknowledgement is accepted and reported with redirect 
   const result = await steerSession({ call: async (_method, params) => ({ status: 'redirected', text: String(params?.text) }) }, 'live-1', 'Use the other file');
   assert.deepEqual(result, { text: 'Use the other file', outcome: 'redirected' });
   assert.equal(steerOutcomeCopy(result.outcome), 'Redirected the running turn');
-  assert.equal(steerOutcomeCopy('queued'), 'Steer queued for the running turn');
+  assert.equal(steerOutcomeCopy('queued'), 'Steered into current turn');
 });
 
 test('a redirected acknowledgement that changes the text is still rejected as unsupported', async () => {

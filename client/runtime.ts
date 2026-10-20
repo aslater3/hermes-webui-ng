@@ -12,7 +12,7 @@ import { DiagnosticsRing } from '../src/hermes/diagnostics.js';
 import { ChatController, draftKey, navigation, navigationRef, navigationView } from '../src/hermes/chat-controller.js';
 import { subagentTerminal } from '../src/hermes/subagent-catalog.js';
 import { slashInput } from '../src/hermes/command-catalog.js';
-import { steerSession } from '../src/hermes/session-steer.js';
+import { steerOutcomeCopy, steerSession } from '../src/hermes/session-steer.js';
 import { ClientError } from '../src/hermes/protocol.js';
 import type { SessionRef } from '../src/hermes/session-rest.js';
 
@@ -200,9 +200,9 @@ export class AppRuntime {
       }
       this.steering = true; this.steerStatus = ''; this.steerRuntimeId = runtimeId; this.notify();
       try {
-        await steerSession(this.gateway, runtimeId, text);
+        const steered = await steerSession(this.gateway, runtimeId, text);
         if (account === this.accountGeneration && native === this.chat.native && native.state.runtimeId === runtimeId && this.chat.draft === text) {
-          this.chat.setDraft(''); this.steerStatus = 'Steered into current turn';
+          this.chat.setDraft(''); this.steerStatus = steerOutcomeCopy(steered.outcome);
         }
       } finally {
         if (this.steerRuntimeId === runtimeId) this.steering = false;
