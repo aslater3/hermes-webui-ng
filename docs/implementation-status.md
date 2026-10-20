@@ -16,7 +16,7 @@ Host gates: production build, both typechecks, lint, **384 unit tests and 39 HTT
 
 Open follow-ups:
 
-- Remove the legacy event-driven input path (`AgentActivity` inputs and `NativeSession.respond` → `*.respond` RPCs) once older runtimes are dropped.
+- Legacy event-driven prompt path (`<kind>.request|expire` intake in `AgentActivity.receive`, `NativeSession.respond` → `<kind>.respond` RPCs, the matching regexes in `session-attention.ts`/`native-session.ts`) is deferred. Analysis: upstream never emits these events or serves `clarify|sudo|secret.respond` at c5a3c0f; `approval.respond` is still used for the upstream `pending_approval` snapshot fallback. The only live driver is the synthetic `tests/fixtures/agent-scenarios.ts`, which backs about ten `[agent-test]` e2e specs (`agent-inputs`, `approval-attention`, `m3-activity`, `shell`, `shell-yolo`, `native-command-parity`, `command-routes`, `reasoning-placement`, `session-attention`) and the `tests/contract/agent` and `m3-session-attention` contracts. Removing it needs that fixture converted to JSON-RPC server requests and those specs re-verified in the browser, so this slice only marks the legacy entry points in code. PR #40 outcome cards (`activity.record`) are unaffected.
 - `contract-reference.yml` still captures reference fixtures at `b6b53c69`.
 - `npm audit` reports two high-severity advisories (not CI-gated); triage under Phase 10.
 - Upstream additions worth adopting: `session.create` `idempotency_key`, `subagent.list` `delegations[]`, `session.events.since`, `subagent.steer/interrupt/tail`.

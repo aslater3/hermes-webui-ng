@@ -96,6 +96,7 @@ export class SessionAttention {
     if (!this.enabled || !event.session_id || this.gateway.state.phase !== 'ready') return;
     // Subagent lifecycle is parent-scoped application state, not a reason to re-run the session poll.
     if (event.type.startsWith('subagent.')) { this.subagentEvent(event); return; }
+    // LEGACY `<kind>.request|expire` (fixture-only) is matched below; live server requests arrive through peerRequest().
     if (!['message.start', 'message.complete', 'session.info', 'session.interrupted', 'error'].includes(event.type) &&
       event.type !== 'request.cancel' && !/^(approval|clarify|sudo|secret)\.(request|expire)$/.test(event.type)) return;
     ++this.revision;
