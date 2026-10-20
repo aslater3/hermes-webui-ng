@@ -11,6 +11,45 @@ const fixtureSkills = [
   { name: 'axolotl', description: 'Fine-tune language models with Axolotl.', category: 'mlops', enabled: true, usage: 0, provenance: 'bundled' },
   { name: 'local-notes', description: 'Hand-written notes helper.', category: 'productivity', enabled: false, usage: 1, provenance: 'agent' },
 ];
+// Memory and cron shapes mirror hermes_cli/web_routers/ops.py and cron.py. Secret-looking fields are seeded on purpose
+// so the projection tests can prove they are dropped (provider env/setup, job prompt/base_url, error text).
+const NOW = 1760950800;
+function fixtureMemory(profile: string) {
+  if (profile !== 'default') return { active: '', providers: [], builtin_files: { memory: 0, user: 0 } };
+  return { active: 'honcho', builtin_files: { memory: 2048, user: 311 }, providers: [
+    { name: 'honcho', description: 'Honcho long-term user model', available: true, configured: true, status: 'ready',
+      env: { HONCHO_API_KEY: 'FIXTURE_PROVIDER_SECRET_VALUE' },
+      setup: { pip_dependencies: ['honcho-ai'], required_env: ['HONCHO_API_KEY'], dependencies_installed: true } },
+    { name: 'mem0', description: 'Mem0 hosted memory', available: true, configured: false, status: 'needs_config', setup: { required_env: ['MEM0_API_KEY'] } },
+  ] };
+}
+function fixtureCronJobs(): Record<string, unknown>[] {
+  return [
+    { id: 'a1b2c3d4e5f6', name: 'morning-digest', prompt: 'Summarise overnight mail', base_url: 'https://user:FIXTURE_URL_PASSWORD@example.test/hook',
+      workdir: '/srv/hermes/profiles/default/work', deliver: 'local', profile_name: 'default', is_default_profile: true,
+      schedule_display: '0 8 * * *', enabled: true, state: 'scheduled', next_run_at: '2026-10-21T08:00:00+00:00', last_run_at: NOW - 3600,
+      last_status: 'ok', last_error: null, last_failure: null, failure_streak: 0, no_agent: false, repeat: { times: null, completed: 14 } },
+    { id: '0f1e2d3c4b5a', name: 'backup-check', prompt: null, script: '/srv/hermes/scripts/backup.sh', deliver: 'local', profile_name: 'default', is_default_profile: true,
+      schedule_display: 'every 6h', enabled: true, state: 'scheduled', next_run_at: '2026-10-20T18:00:00+00:00', last_run_at: NOW - 7200,
+      last_status: 'error', last_error: 'Delivery failed: api_key=FIXTURE_JOB_KEY_VALUE', last_failure: { at: NOW - 7200, detail: 'Delivery failed: api_key=FIXTURE_JOB_KEY_VALUE' },
+      failure_streak: 3, no_agent: true, repeat: { times: null, completed: 9 } },
+    { id: '9a8b7c6d5e4f', name: 'weekly-report', prompt: 'Weekly summary', deliver: 'local', profile_name: 'default', is_default_profile: true,
+      schedule_display: '0 9 * * 1', enabled: false, state: 'paused', paused_reason: 'Paused by operator', next_run_at: null, last_run_at: null,
+      last_status: null, last_error: null, last_failure: null, failure_streak: 0, no_agent: false, repeat: { times: 4, completed: 1 } },
+  ];
+}
+function fixtureCronRuns(id: string): Record<string, unknown>[] {
+  if (id === 'a1b2c3d4e5f6') return [
+    { id: 'run-digest-2', title: 'COMPLETED · Morning digest', preview: 'Three messages need a reply.', started_at: NOW - 3600, last_active: NOW - 3570, ended_at: NOW - 3570, is_active: false, source: 'cron', message_count: 4, model: 'fixture-model', input_tokens: 1200, output_tokens: 300 },
+    { id: 'run-digest-1', title: 'COMPLETED · Morning digest', preview: null, started_at: NOW - 90000, last_active: NOW - 89950, ended_at: NOW - 89950, is_active: false, source: 'cron_output', message_count: 0 },
+  ];
+  if (id === '0f1e2d3c4b5a') return [
+    { id: 'cron_output:0f1e2d3c4b5a:2026-10-20_12-00-00', title: 'FAILED · Delivery failed', preview: 'Exit status 2. Authorization: Bearer FIXTURE_BEARER_VALUE', started_at: NOW - 7200, last_active: NOW - 7190, ended_at: NOW - 7190, is_active: false, source: 'cron_output', message_count: 0 },
+  ];
+  return [];
+}
+function fixtureCronJobFor(profile: string) { return profile === 'default' ? fixtureCronJobs() : profile === 'work' ? [{ id: 'work-sync-01', name: 'work-sync', schedule_display: 'every 1h', enabled: true, state: 'scheduled', next_run_at: '2026-10-20T19:00:00+00:00', last_run_at: null, last_status: null, last_error: null, failure_streak: 0, no_agent: true, repeat: { times: null, completed: 0 }, profile_name: 'work', is_default_profile: false }] : []; }
+
 function skillMarkdown(name: string): string {
   return `---\nname: ${name}\ndescription: Fixture skill ${name}\n---\n\n# ${name}\n\nUse this skill for **${name}** tasks.\n\n- Step one\n- Step two\n`;
 }
@@ -22,7 +61,17 @@ export async function startFixture(port = 0, options: { sessionToken?: string; b
   const models = new ModelScenarios();
   const validCookies = new Set([cookie]);
   const sessions = new Map<string, { key: string; messages: {role:string; text:string}[]; running: boolean; profile: string; updated: number; turn: number; inflight: string }>();
-  const metrics = { tickets: 0, creates: 0, submits: 0, upgrades: 0 };
+  const metrics = { tickets: 0, creates: 0, submits: 0, upgrades: 0, cronActions: 0 };
+  // Mutable cron state, keyed by the signed-in browser session so parallel e2e logins never share jobs.
+  // Trusted-local (token) requests share one 'local' store.
+  const cronStores = new Map<string, Map<string, Record<string, unknown>[]>>();
+  const cronJobsFor = (session: unknown, profile: string) => {
+    const key = typeof session === 'string' ? session : 'local';
+    let store = cronStores.get(key);
+    if (!store) { store = new Map(); cronStores.set(key, store); }
+    if (!store.has(profile)) store.set(profile, fixtureCronJobFor(profile));
+    return store.get(profile)!;
+  };
   // Live child agents per parent runtime, mirroring Hermes' `subagent.list` roster shape.
   const children = new Map<string, Record<string, unknown>[]>();
   // Delegated child transcripts: stored like Hermes subagent sessions, readable by id but never listed.
@@ -57,7 +106,10 @@ export async function startFixture(port = 0, options: { sessionToken?: string; b
     }
     if (!presented) { send(401, {}); return; }
     if (req.url === '/openapi.json') {
-      send(200, { openapi: '3.1.0', paths: { '/api/sessions': { get: {} }, '/api/sessions/search': { get: {} }, '/api/profiles': { get: {} }, '/api/model/options': { get: {} }, '/api/skills': { get: {}, post: {} }, '/api/skills/content': { get: {}, put: {} } }, 'x-private': 'must-not-export' }); return;
+      send(200, { openapi: '3.1.0', paths: { '/api/sessions': { get: {} }, '/api/sessions/search': { get: {} }, '/api/profiles': { get: {} }, '/api/model/options': { get: {} }, '/api/skills': { get: {}, post: {} }, '/api/skills/content': { get: {}, put: {} },
+        '/api/memory': { get: {} }, '/api/memory/reset': { post: {} }, '/api/memory/providers/{name}/config': { get: {}, put: {} },
+        '/api/cron/jobs': { get: {}, post: {} }, '/api/cron/jobs/{job_id}': { get: {}, put: {}, delete: {} }, '/api/cron/jobs/{job_id}/runs': { get: {} },
+        '/api/cron/jobs/{job_id}/pause': { post: {} }, '/api/cron/jobs/{job_id}/resume': { post: {} }, '/api/cron/jobs/{job_id}/trigger': { post: {} }, '/api/cron/fire': { post: {} } }, 'x-private': 'must-not-export' }); return;
     }
     if (req.url === '/api/auth/me') { send(200, { user_id: 'fixture', provider: 'basic' }); return; }
     if (req.url === '/api/auth/ws-ticket' && req.method === 'POST') {
@@ -106,6 +158,30 @@ export async function startFixture(port = 0, options: { sessionToken?: string; b
       const skill = fixtureSkills.find((item) => item.name === name);
       if (!skill || (url.searchParams.get('profile') ?? 'default') === 'missing') { send(404, { detail: `Skill '${name}' not found.` }); return; }
       send(200, { name, content: skillMarkdown(name), path: `/srv/hermes/profiles/default/skills/${skill.category}/${name}/SKILL.md` }); return;
+    }
+    if (req.method === 'GET' && url.pathname === '/api/memory') { send(200, fixtureMemory(url.searchParams.get('profile') ?? 'default')); return; }
+    if (req.method === 'GET' && url.pathname === '/api/cron/jobs') { send(200, cronJobsFor(presented, url.searchParams.get('profile') ?? 'default')); return; }
+    const cron = /^\/api\/cron\/jobs\/([^/]+)(\/runs|\/pause|\/resume|\/trigger)?$/.exec(url.pathname);
+    if (cron) {
+      const profile = url.searchParams.get('profile') ?? 'default';
+      const job = cronJobsFor(presented, profile).find((row) => row.id === cron[1]);
+      const action = cron[2];
+      if (!job) { req.resume(); send(404, { detail: 'Job not found' }); return; }
+      if (req.method === 'GET' && action === '/runs') { send(200, { runs: fixtureCronRuns(String(job.id)), limit: Number(url.searchParams.get('limit') ?? 20) }); return; }
+      if (req.method === 'GET' && !action) { send(200, job); return; }
+      if (req.method === 'POST' && action) {
+        req.resume(); metrics.cronActions++;
+        const apply = () => {
+          if (action === '/pause') Object.assign(job, { enabled: false, state: 'paused', paused_reason: 'Paused from the dashboard' });
+          if (action === '/resume') Object.assign(job, { enabled: true, state: 'scheduled', paused_reason: null, paused_at: null });
+          if (action === '/trigger') Object.assign(job, { enabled: true, state: 'scheduled', last_run_at: NOW, last_status: 'ok', last_error: null });
+          if (!res.destroyed) send(200, job);
+        };
+        // Trigger is slower on purpose: the UI must hold its buttons disabled while the request is in flight.
+        if (action === '/trigger') setTimeout(apply, 800); else apply();
+        return;
+      }
+      req.resume(); send(405, { detail: 'Method not allowed' }); return;
     }
     const match = /^\/api\/sessions\/([^/]+)\/messages$/.exec(url.pathname);
     if (req.method === 'GET' && match) {

@@ -7,14 +7,18 @@ const REST = {
   sessionsList: '/api/sessions', sessionsSearch: '/api/sessions/search',
   profiles: '/api/profiles', models: '/api/model/options',
   skills: '/api/skills', skillContent: '/api/skills/content',
+  memory: '/api/memory',
+  cronJobs: '/api/cron/jobs', cronJob: '/api/cron/jobs/{job_id}', cronRuns: '/api/cron/jobs/{job_id}/runs',
 } as const;
-export type Feature = keyof typeof REST | 'gateway' | 'heartbeat' | 'changeEvents' | 'workspace' | 'pwa' | 'reasoning';
+/** Operator actions on one cron job. All three must be advertised before the Cron tab offers any action. */
+const CRON_ACTION_PATHS = ['/api/cron/jobs/{job_id}/pause', '/api/cron/jobs/{job_id}/resume', '/api/cron/jobs/{job_id}/trigger'] as const;
+export type Feature = keyof typeof REST | 'cronActions' | 'gateway' | 'heartbeat' | 'changeEvents' | 'workspace' | 'pwa' | 'reasoning';
 export interface Capability { state: Availability; evidence: 'unverified' | 'gateway' | 'schema' | 'webui' | 'rpc'; implemented: boolean }
 export type CapabilityMap = Record<Feature, Capability>;
 function initial(): CapabilityMap {
   return Object.fromEntries(
-    ['gateway', 'heartbeat', 'changeEvents', ...Object.keys(REST), 'workspace', 'pwa', 'reasoning'].map((name) => [name, {
-      state: 'unknown', evidence: 'unverified', implemented: ['gateway', 'heartbeat', 'changeEvents', 'sessionsList', 'sessionsSearch', 'models', 'profiles', 'reasoning', 'pwa', 'workspace', 'skills', 'skillContent'].includes(name),
+    ['gateway', 'heartbeat', 'changeEvents', ...Object.keys(REST), 'cronActions', 'workspace', 'pwa', 'reasoning'].map((name) => [name, {
+      state: 'unknown', evidence: 'unverified', implemented: ['gateway', 'heartbeat', 'changeEvents', 'sessionsList', 'sessionsSearch', 'models', 'profiles', 'reasoning', 'pwa', 'workspace', 'skills', 'skillContent', 'memory', 'cronJobs', 'cronJob', 'cronRuns', 'cronActions'].includes(name),
     }]),
   ) as CapabilityMap;
 }
@@ -36,19 +40,30 @@ export class CapabilitiesStore {
   private set(name: Feature, state: Availability, evidence: Capability['evidence']) {
     this.values[name] = { ...this.values[name], state, evidence };
   }
-  applySchema(epoch: number, input: unknown): void {
+  /**
+   * `actionsPermitted` is false in trusted-local mode, whose allowlist is GET-only. An advertised POST route is
+   * therefore not enough: actions need both the OpenAPI evidence and a mode that can carry writes.
+   */
+  applySchema(epoch: number, input: unknown, actionsPermitted = false): void {
     if (epoch !== this.epoch) return;
     const schema = record(input);
     if (typeof schema.openapi !== 'string' || !schema.openapi.startsWith('3.'))
       throw new ClientError('protocol', 'Unsupported API schema');
     const paths = record(schema.paths);
-    for (const [name, path] of Object.entries(REST)) {
+    const advertised = (path: string, method: 'get' | 'post') => {
       const item = paths[path];
-      const supported = typeof item === 'object' && item !== null && !Array.isArray(item) &&
-        'get' in item && typeof item.get === 'object' && item.get !== null;
+      return typeof item === 'object' && item !== null && !Array.isArray(item) &&
+        method in item && typeof item[method as keyof typeof item] === 'object' && item[method as keyof typeof item] !== null;
+    };
+    for (const [name, path] of Object.entries(REST)) {
       if (this.values[name as Feature].evidence === 'rpc') continue;
-      this.set(name as keyof typeof REST, supported ? 'available' : 'unavailable', 'schema');
+      this.set(name as keyof typeof REST, advertised(path, 'get') ? 'available' : 'unavailable', 'schema');
     }
+    // The Cron tab reads three routes; a list without detail or runs is not a usable Cron surface.
+    const cronReadable = advertised(REST.cronJobs, 'get') && advertised(REST.cronJob, 'get') && advertised(REST.cronRuns, 'get');
+    this.set('cronJobs', cronReadable ? 'available' : 'unavailable', 'schema');
+    const cronWritable = CRON_ACTION_PATHS.every(path => advertised(path, 'post'));
+    this.set('cronActions', cronWritable && actionsPermitted ? 'available' : 'unavailable', 'schema');
     this.discovery = 'available'; this.publish();
   }
   schemaFailed(epoch: number, error: unknown): void {
@@ -58,6 +73,7 @@ export class CapabilitiesStore {
       error instanceof ClientError && error.retryable ? 'unreachable' : 'unknown';
     // Missing introspection is not proof that individual routes are unavailable.
     for (const name of Object.keys(REST)) if (this.values[name as Feature].evidence !== 'rpc') this.set(name as keyof typeof REST, state, 'unverified');
+    this.set('cronActions', state, 'unverified');
     this.discovery = state; this.publish();
   }
   applyWebui(epoch: number, input: unknown): void {

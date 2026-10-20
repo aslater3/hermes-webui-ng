@@ -44,8 +44,24 @@ test('local bridge allows exactly the read-only skill routes and no skill or hub
   assert.equal(localPathAllowed('/api/skills/content', 'PUT'), false);
   assert.equal(localPathAllowed('/api/skills/content?name=x', 'DELETE'), false);
   assert.equal(localPathAllowed('/api/skills/content?name=x&token=override', 'GET'), false);
-  for (const path of ['/api/skills/hub/search?q=x', '/api/skills/hub/preview?identifier=x', '/api/skills/toggle', '/api/skills/content/extra', '/api/cron/jobs', '/api/config', '/api/skills/hub/install'])
+  for (const path of ['/api/skills/hub/search?q=x', '/api/skills/hub/preview?identifier=x', '/api/skills/toggle', '/api/skills/content/extra', '/api/config', '/api/skills/hub/install'])
     assert.equal(localPathAllowed(path, 'GET'), false, path);
+});
+
+test('local bridge allows exactly the read-only memory and cron routes; every write, provider config and fire stays refused', () => {
+  assert.equal(localPathAllowed('/api/memory?profile=default', 'GET'), true);
+  assert.equal(localPathAllowed('/api/cron/jobs?profile=default', 'GET'), true);
+  assert.equal(localPathAllowed('/api/cron/jobs/a1b2c3/runs?profile=default&limit=20', 'GET'), true);
+  assert.equal(localPathAllowed('/api/cron/jobs/a1b2c3?profile=default', 'GET'), true);
+  for (const [method, path] of [
+    ['POST', '/api/cron/jobs/a1b2c3/pause'], ['POST', '/api/cron/jobs/a1b2c3/resume'], ['POST', '/api/cron/jobs/a1b2c3/trigger'],
+    ['DELETE', '/api/cron/jobs/a1b2c3'], ['PUT', '/api/cron/jobs/a1b2c3'], ['POST', '/api/cron/jobs'], ['POST', '/api/cron/fire'],
+    ['GET', '/api/cron/jobs/a1b2c3/pause'], ['GET', '/api/cron/jobs/a1b2c3/trigger'], ['GET', '/api/cron/blueprints'],
+    ['GET', '/api/cron/delivery-targets'], ['GET', '/api/cron/jobs/a1b2c3/runs/extra'], ['GET', '/api/cron/jobs/a/b'],
+    ['POST', '/api/memory/reset'], ['PUT', '/api/memory/provider'], ['GET', '/api/memory/providers/honcho/config'],
+    ['POST', '/api/memory/providers/honcho/setup'], ['PUT', '/api/memory/providers/honcho/config'], ['GET', '/api/memory?token=leak'],
+    ['GET', '/api/cron/jobs?token=leak'],
+  ] as const) assert.equal(localPathAllowed(path, method), false, `${method} ${path}`);
 });
 
 test('local WS supplies only stable offered protocol, without relaxing gated negotiation', () => {

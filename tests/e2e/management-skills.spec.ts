@@ -24,7 +24,8 @@ const manage = (page: Page) => page.getByRole('dialog', { name: 'Manage' });
 test('desktop and mobile: open Manage, search, read a skill, and see stale data kept on a failed refresh', async ({ page }) => {
   await login(page);
   await openManage(page);
-  await expect(manage(page).getByRole('tab')).toHaveCount(1);
+  // Skills, Memory and Cron are all advertised by the fixture; each tab renders only because Hermes offers it.
+  await expect(manage(page).getByRole('tab')).toHaveCount(3);
   await expect(manage(page).getByText('default profile · read-only', { exact: false })).toBeVisible();
   await expect(manage(page).getByRole('button', { name: /axolotl/ })).toBeVisible();
   await manage(page).getByRole('searchbox', { name: 'Search skills' }).fill('axol');
