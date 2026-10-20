@@ -154,6 +154,47 @@ Known boundaries, stated so they are not mistaken for completion:
 - `npm audit` findings noted above under "Upstream recertification" are not covered by the image scan; triage them separately.
 - The `docs/13-acceptance-criteria.md` Packaging checkboxes stay unticked until a green CI run on the merge head is recorded here.
 
+## Phase 10 hardening — legacy diagnostic flakes (2026-10-20)
+
+Root causes, from the CI failures on the legacy diagnostic page (`public/index.html`):
+
+- **Clarify draft erased on transport loss** (`tests/e2e/agent-inputs.spec.ts` "clarify forms preserve DOM identity…"). `AgentActivity.disconnect()` moves a pending request to `unknown`; `AgentView.input()` then cleared the typed text of every unknown card, including an unanswered clarify question. Reattach restores the same request as pending, so the card keeps its DOM node but the draft is gone. Reproduced locally: a typed draft followed by Disconnect transport and Reconnect reads back `""`. Trigger in CI: a transport loss during the test, most likely a gateway heartbeat or resume ping timing out under load. The transport loss itself was not observed in the CI logs. Fix: only terminal outcomes (answered, expired, unsupported), blocked requests, and credentials (sudo, secret while unknown) clear typed text. Regression test added: "an unanswered clarify draft survives a transport reconnect".
+- **Interrupt raced the fixture's own completion timer** (`tests/e2e/chat.spec.ts` "interrupt ends a controlled running turn…", iphone-webkit). The `[slow-test]` turn completes on a 3.1 s timer. The test clicked Interrupt after the first delta, so an interrupt that arrived after the timer fired lost the race: the turn completed normally and its assistant reply was legitimately in history. CI run 39457745470 shows the click accepted and the assistant message persisting. Not reproduced locally; a 3.6 s pre-click delay makes the button disabled instead. Fix: a new `[held-test]` fixture prompt stays running until interrupted, so the assertion is deterministic. The property is unchanged (no assistant message for an interrupted turn).
+
+Validation (synthetic fixture, legacy page served on a local uncommitted port 8797, default config not used):
+
+- `--repeat-each=20` for both specs on desktop-chromium, narrow-320 and android-chromium: 898 of 900 passed. The two failures were not in the targeted tests: one was "tool activity and all four input types" (clarify draft of the second question read back as `""` after the first was confirmed; not reproduced in a second run), and one was "two conversations can be searched…" (Send prompt stayed disabled after the prompt was filled). Its snapshot shows the prompt box emptied after fill, and the cause is not established. A re-run of the two targeted tests with `--repeat-each=20` on three projects passed 118 of 120; the two failures were both the "two conversations" test on narrow-320. The fixes do not touch that path, but no pre-change baseline was measured under the same load. Open follow-up.
+- Gates: typecheck, lint, unit 437/437, contract 47/47 pass.
+- The local harness (`zz-legacy-p10.config.ts`, `scripts/zz-dev-fixture-legacy.mjs`) is uncommitted and excluded locally. The default playwright config (8788) was not used.
+
+### Base image baseline (Trivy, report-only)
+
+Baseline from the first report-only scan of the amd64 image on `node:22-bookworm-slim`: OS packages 64 findings (HIGH 60, CRITICAL 4), for example `perl-base` CVE-2026-13221 (fixed in 5.36.0-7+deb12u4) and `zlib1g` CVE-2023-45853 (will not be fixed by Debian). Eleven HIGH findings were in Node packages inside the image, for example `brace-expansion` 2.0.2, which came from the npm and corepack trees bundled in the node base image rather than from application dependencies.
+
+Dockerfile changes (`Dockerfile`):
+
+- Build and runtime stages move from `node:22-bookworm` and `node:22-bookworm-slim` to `node:22-trixie` and `node:22-trixie-slim`, both pinned by digest (the `22-trixie` and `22-trixie-slim` tag digests on Docker Hub at the time of the change). The native boundary helper is still compiled with `cc` in the build stage, which the full node image provides.
+- The runtime stage removes `npm`, `corepack` and their bundled `node_modules`, plus the `npm`, `npx` and `corepack` launchers. CMD and HEALTHCHECK only run `node`, so nothing in the runtime needs npm. The image still has no apt layer, no compiler, and runs as `10001:10001`.
+- Nothing is added to the runtime. The build stage is otherwise unchanged. No `apt-get upgrade` was added, because the scanned image is the runtime and the build stage is not published.
+
+Expected effect (to be confirmed, not claimed, by the `image-build` run on this branch):
+
+- The eleven HIGH Node findings from the bundled npm tree should disappear with npm removed. Any findings in the production `node_modules` would still appear and must be triaged separately.
+- The OS count should drop where trixie carries fixed Debian packages. Findings with no fix upstream (for example the zlib `will_not_fix` entry) are expected to remain.
+- Actual before and after numbers: TBD, filled by the orchestrator from the `image-vuln-scan-amd64` artifact of the first CI run on this branch. The gate stays report-only (`exit-code: '0'`).
+
+Local evidence: none for the image. Docker is not available in this environment; the Dockerfile change was reviewed by hand and is validated only by the CI image build, smoke and native-helper ELF check.
+
+### Initial chat bundle excludes editor and heavy chunks (performance acceptance)
+
+Automated check: `tests/contract/bundle-split.test.ts`, run by `npm run test:contract`, which the Recovery checkpoint workflow runs after `npm run build`.
+
+- `vite.config.mjs` has a small build plugin that writes the module list of every output chunk to `build/vite-module-graph.json`. It writes under `build/`, not `dist/`, so the file is never served, and the Dockerfile copies only `build/server`, so it is not in the image. No served asset changed.
+- The test reads `dist/index.html`, takes the module entry script it loads, and walks only that entry's static import closure. Dynamic imports are lazy by definition and are excluded from the walk.
+- It asserts that the closure contains no CodeMirror or Lezer module, no Markdown renderer (react-markdown, remark, rehype, micromark, mdast, hast, unified, vfile), no Mermaid, no `client/Management.tsx`, and no workspace editor component (`Workspace`, `CodePreview`, `EditText`, `MutationDialog`).
+- It is not vacuous: each family, other than Mermaid, must be present in a lazy chunk. Mermaid is not a dependency today, so it is only a forbidden pattern.
+- Verified: passes on the current build (the entry statically imports no chunk; Markdown, Management, Workspace and CodeMirror are all dynamic chunks). A mutation check that adds a CodeMirror module to the entry's module list fails with "initial chunk must not contain codemirror".
+
 ## Phase 8 slice 1 — Manage shell and read-only Skills
 
 What landed (ADR-028):

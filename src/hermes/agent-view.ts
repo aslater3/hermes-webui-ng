@@ -237,7 +237,9 @@ export class AgentView {
     card.root.dataset.status = input.status;
     card.status.textContent = input.outcome ?? (input.blocked ? 'Response disabled — incomplete or unsupported request details' :
       input.kind === 'approval' && input.status === 'pending' ? 'Action paused — choose an approval scope, YOLO, or Deny' : labels[input.status]);
-    if (['answered','expired','unknown','unsupported'].includes(input.status) || input.blocked) this.erase(card);
+    // Typed text is cleared on terminal outcomes and for credentials. A transport loss only makes an unanswered
+    // clarify request non-interactive (status unknown); nothing was sent, and the reconnect snapshot restores it, so its draft stays.
+    if (['answered','expired','unsupported'].includes(input.status) || (input.status === 'unknown' && ['sudo','secret'].includes(input.kind)) || input.blocked) this.erase(card);
     for (const control of card.controls.querySelectorAll<HTMLInputElement | HTMLButtonElement | HTMLTextAreaElement>('button,input,textarea')) control.disabled = !interactive;
     for (const [qid, fieldset] of card.questions) {
       const answered = input.answered.includes(qid); fieldset.disabled = !interactive || answered;
