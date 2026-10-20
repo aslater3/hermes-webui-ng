@@ -6,7 +6,7 @@ import {
   upsertSubagent, type SubagentSnapshot,
 } from './subagent-catalog.js';
 
-type Gateway = Pick<GatewayClient, 'call' | 'onEvent' | 'onState' | 'state'>;
+type Gateway = Pick<GatewayClient, 'call' | 'onEvent' | 'onState' | 'state'> & Partial<Pick<GatewayClient, 'onPeerRequest'>>;
 export type AttentionStatus = 'idle' | 'working' | 'waiting' | 'starting' | 'unknown';
 export interface AttentionItem { runtimeId: string; storedId: string; title: string; status: AttentionStatus; review: boolean; owner?: SessionRef }
 const LIMIT = 100;
@@ -40,7 +40,8 @@ export class SessionAttention {
       this.phase = state.phase === 'ready' ? 'empty' : 'unknown';
       this.items = this.items.map(item => ({ ...item, status: 'unknown' })); this.publish();
       if (state.phase === 'ready') this.schedule(0);
-    }), gateway.onEvent(event => this.event(event))];
+    }), gateway.onEvent(event => this.event(event)),
+      ...(gateway.onPeerRequest ? [gateway.onPeerRequest(sessionId => this.peerRequest(sessionId))] : [])];
   }
   subscribe(fn: () => void): () => void { this.listeners.add(fn); return () => { this.listeners.delete(fn); }; }
   private publish() { if (!this.disposed) this.listeners.forEach(fn => fn()); }
@@ -76,12 +77,20 @@ export class SessionAttention {
     // Subagent lifecycle is parent-scoped application state, not a reason to re-run the session poll.
     if (event.type.startsWith('subagent.')) { this.subagentEvent(event); return; }
     if (!['message.start', 'message.complete', 'session.info', 'session.interrupted', 'error'].includes(event.type) &&
-      !/^(approval|clarify|sudo|secret)\.(request|expire)$/.test(event.type)) return;
+      event.type !== 'request.cancel' && !/^(approval|clarify|sudo|secret)\.(request|expire)$/.test(event.type)) return;
     ++this.revision;
     if (event.type.endsWith('.request') || event.type === 'message.start') {
       this.items = this.items.map(item => item.runtimeId === event.session_id ? { ...item, status: event.type.endsWith('.request') ? 'waiting' : 'working', review: false } : item);
       this.publish();
     }
+    this.schedule(100);
+  }
+  /** A server request (approval/clarify/sudo/secret/vault) for a tracked session needs attention even when it is backgrounded. */
+  private peerRequest(sessionId: string): void {
+    if (!this.enabled || this.gateway.state.phase !== 'ready' || !this.items.some(item => item.runtimeId === sessionId)) return;
+    ++this.revision;
+    this.items = this.items.map(item => item.runtimeId === sessionId ? { ...item, status: 'waiting', review: false } : item);
+    this.publish();
     this.schedule(100);
   }
   /**

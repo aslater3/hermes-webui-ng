@@ -29,3 +29,22 @@ test('modern questions coexist with in-flight RPCs, answer by peer id, and never
   assert.ok(!JSON.stringify(diagnostics).includes('PRIVATE-ANSWER'));
   client.close(); assert.equal(client.requests.getSnapshot().length, 0);
 });
+test('peer-request observers see only session id and method, even for background or hidden requests', async t => {
+  const socket = new Socket();
+  const client = new GatewayClient({ credential: async () => ({ url: 'ws://localhost', protocols: [WS_PROTOCOL] }) },
+    { socketFactory: () => socket as unknown as WebSocket, heartbeatMs: 0 });
+  t.after(() => client.close());
+  const seen: unknown[][] = [];
+  const stop = client.onPeerRequest((...args) => { seen.push(args); });
+  const ready = client.connect(); await new Promise(resolve => setTimeout(resolve, 0));
+  socket.frame({ jsonrpc: '2.0', method: 'event', params: { type: 'gateway.ready', payload: {} } }); await ready;
+  socket.frame({ jsonrpc: '2.0', id: 'bg-secret', method: 'secret', params: { session_id: 'live-b', env_var: 'API_KEY', prompt: 'SECRET_PROMPT' } });
+  client.requests.setVisible(false);
+  socket.frame({ jsonrpc: '2.0', id: 'hidden-sudo', method: 'sudo', params: { session_id: 'live-c', prompt: 'x' } });
+  socket.frame({ jsonrpc: '2.0', id: 'unsupported', method: 'unavailable.bridge', params: { session_id: 'live-d' } });
+  socket.frame({ jsonrpc: '2.0', id: 'no-session', method: 'approval', params: { command: 'x' } });
+  assert.deepEqual(seen, [['live-b', 'secret'], ['live-c', 'sudo']]);
+  assert.ok(!JSON.stringify(seen).includes('SECRET_PROMPT'));
+  stop(); socket.frame({ jsonrpc: '2.0', id: 'after', method: 'sudo', params: { session_id: 'live-e' } });
+  assert.equal(seen.length, 2);
+});

@@ -277,7 +277,7 @@ export class NativeSession {
       // Completion precedes upstream cleanup; settled session.info must invalidate the
       // current snapshot too. Do not guess idle from message.complete alone.
       ['message.complete', 'session.info', 'error', 'session.interrupted'].includes(event.type) ||
-      event.type.endsWith('.request') || event.type.endsWith('.expire')
+      event.type.endsWith('.request') || event.type.endsWith('.expire') || event.type === 'request.cancel'
     ) {
       ++this.revision;
       void this.refresh().catch(() => {});

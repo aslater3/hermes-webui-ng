@@ -7,7 +7,7 @@ export interface PeerRequest {
 }
 export interface PeerFrame { id: string | number; method: string; params: unknown }
 export type PeerAnswer = { choice?: string; answer?: string; answers?: Record<string, string>; value?: string };
-const methods = new Set(['approval', 'clarify', 'sudo', 'secret', 'vault.code', 'vault.unlock_prompt', 'vault.unlock', 'vault.save_login']);
+export const peerMethods: ReadonlySet<string> = new Set(['approval', 'clarify', 'sudo', 'secret', 'vault.code', 'vault.unlock_prompt', 'vault.unlock', 'vault.save_login']);
 const string = (value: unknown, limit = 4096, optional = false): string => {
   if (optional && value === undefined) return '';
   if (typeof value !== 'string' || value.length > limit || value.includes('\0'))
@@ -74,7 +74,7 @@ export class PeerRequests {
     this.send({ jsonrpc: '2.0', id, error: { code, message: code === -32601 ? 'This client does not implement the requested surface.' : 'Invalid native interactive request.' } });
   }
   receive(frame: PeerFrame): void {
-    if (!methods.has(frame.method)) { this.error(frame.id, -32601); return; }
+    if (!peerMethods.has(frame.method)) { this.error(frame.id, -32601); return; }
     if (!this.visible) return; // Authoritative open_requests restores unanswered questions on foreground.
     let request: PeerRequest;
     try { request = projection(frame); } catch { this.error(frame.id, -32602); return; }
