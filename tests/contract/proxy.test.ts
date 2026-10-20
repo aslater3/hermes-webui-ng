@@ -168,3 +168,15 @@ test('synthetic native: interrupt cancels a running turn and a second turn compl
   assert.equal(history.messages.filter((message) => message.role === 'assistant').length, 1);
   assert.equal(h.fixture.metrics.submits, 2); assert.equal(h.fixture.metrics.creates, 1);
 });
+
+test('gated wire: skill reads go through the authenticated proxy and fail closed without a session', async (t) => {
+  const h = await harness(t);
+  await h.dashboard.status();
+  await h.dashboard.login('basic', 'fixture', 'fixture-password');
+  assert.deepEqual((await h.dashboard.skills('default')).map(row => row.name), ['arxiv', 'axolotl', 'local-notes']);
+  assert.match((await h.dashboard.skillContent('axolotl', 'default')).content, /# axolotl/);
+  const anonymous = await fetch(h.origin + '/__hermes/api/skills?profile=default');
+  assert.equal(anonymous.status, 401);
+  // Gated mode has no local allowlist: writes are refused by upstream auth, and this client never sends them.
+  assert.equal((await fetch(h.origin + '/__hermes/api/skills', { method: 'POST', headers: { Origin: h.origin } })).status, 401);
+});
