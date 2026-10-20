@@ -5,8 +5,8 @@ import { createApp } from '../../server/app.js';
 import { loadConfig } from '../../server/config.js';
 import { startFixture } from '../fixtures/dashboard.js';
 const TOKEN = 'LOCAL_FIXTURE_SERVER_SIDE_TOKEN';
-async function setup(t: TestContext, wrongToken = false) {
-  const upstream = await startFixture(0, { sessionToken: TOKEN });
+async function setup(t: TestContext, wrongToken = false, uninitializedSessionStore = false) {
+  const upstream = await startFixture(0, { sessionToken: TOKEN, uninitializedSessionStore });
   const config = loadConfig({ HERMES_AUTH_MODE: 'trusted-local', HERMES_DASHBOARD_SESSION_TOKEN: wrongToken ? 'WRONG_LOCAL_FIXTURE_TOKEN' : TOKEN, HERMES_DASHBOARD_URL: upstream.origin, PUBLIC_ORIGIN: 'http://127.0.0.1:1' });
   const logs: unknown[] = [];
   const app = createApp(config, event => logs.push(event));
@@ -43,6 +43,13 @@ test('local wire: a wrong operator token fails readiness and admission', async t
   assert.equal((await fetch(h.origin + '/api/webui/access')).status, 503);
   assert.equal((await fetch(h.origin + '/readyz')).status, 503);
   assert.equal((await fetch(h.origin + '/__hermes/api/sessions?limit=1')).status, 401);
+});
+
+test('local wire: a fresh Hermes with no session store yet is ready and admitted', async t => {
+  const h = await setup(t, false, true);
+  assert.equal((await fetch(h.origin + '/readyz')).status, 200);
+  assert.deepEqual(await (await fetch(h.origin + '/api/webui/access')).json(), { mode: 'trusted-local', authenticated: false, ready: true });
+  assert.equal((await fetch(h.origin + '/__hermes/api/sessions?limit=1')).status, 503);
 });
 
 test('local wire: native conversations, reconnect and invalidated access use no fake account', async t => {
