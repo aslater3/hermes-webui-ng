@@ -1,6 +1,6 @@
 import './management.css';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
-import { ArrowLeft, Brain, Clock, Pause, Play, RefreshCw, Search, Sparkles } from 'lucide-react';
+import { Activity, ArrowLeft, Brain, Clock, ExternalLink, Pause, Play, Plug, RefreshCw, Search, Sparkles } from 'lucide-react';
 import type { AppRuntime } from './runtime.js';
 import { Modal, Notice } from './primitives.js';
 import Markdown from './Markdown.js';
@@ -10,16 +10,24 @@ import { MemoryBrowser } from '../src/hermes/memory-browser.js';
 import { CronBrowser, ACTION_LABELS } from '../src/hermes/cron-browser.js';
 import type { CapabilityMap } from '../src/hermes/capabilities.js';
 import type { CronActionKind, CronJob, CronJobState } from '../src/hermes/cron.js';
+import { McpBrowser } from '../src/hermes/mcp-browser.js';
+import type { McpServer } from '../src/hermes/mcp.js';
+import { DiagnosticsBrowser, type DiagnosticsSection } from '../src/hermes/diagnostics-browser.js';
+import type { HermesHealth, HermesStatus, SystemStats } from '../src/hermes/hermes-status.js';
 
 const PROVENANCE: Record<SkillRow['provenance'], string> = { hub: 'Hub', bundled: 'Bundled', external: 'External', agent: 'Local', unknown: 'Unlabelled' };
 const STATE_LABEL: Record<CronJobState, string> = { scheduled: 'Scheduled', paused: 'Paused', completed: 'Completed', error: 'Error', unknown: 'Unknown state' };
 const PROVIDER_STATUS: Record<string, string> = { ready: 'Ready', needs_config: 'Needs configuration', unavailable: 'Unavailable', missing: 'Missing in Hermes', unknown: 'Unknown' };
 
-type TabId = 'skills' | 'memory' | 'cron';
+type TabId = 'skills' | 'memory' | 'cron' | 'mcp' | 'diagnostics' | 'dashboard';
 const TABS: { id: TabId; label: string; icon: ReactNode; available: (caps: CapabilityMap) => boolean }[] = [
   { id: 'skills', label: 'Skills', icon: <Sparkles size={16}/>, available: caps => caps.skills.state === 'available' },
   { id: 'memory', label: 'Memory', icon: <Brain size={16}/>, available: caps => caps.memory.state === 'available' },
   { id: 'cron', label: 'Cron', icon: <Clock size={16}/>, available: caps => caps.cronJobs.state === 'available' },
+  { id: 'mcp', label: 'MCP', icon: <Plug size={16}/>, available: caps => caps.mcpServers.state === 'available' },
+  { id: 'diagnostics', label: 'Diagnostics', icon: <Activity size={16}/>, available: caps => caps.health.state === 'available' },
+  // Guidance only. It is offered whenever another Hermes-backed tab is, and never links to a Dashboard URL NG cannot prove reachable.
+  { id: 'dashboard', label: 'Hermes Dashboard', icon: <ExternalLink size={16}/>, available: caps => ['skills', 'memory', 'cron', 'mcp', 'diagnostics'].some(id => TABS.find(item => item.id === id)?.available(caps)) },
 ];
 const TRANSIENT = ['unreachable', 'auth-required', 'forbidden'];
 
@@ -27,7 +35,7 @@ const TRANSIENT = ['unreachable', 'auth-required', 'forbidden'];
  * Management is read-first. Only the tabs Hermes can serve are rendered; no disabled placeholders.
  * Cron actions are the one write path, and only in gated mode (see ADR-029).
  */
-export function Management({ runtime: rt, onClose }: { runtime: AppRuntime; onClose: () => void }) {
+export function Management({ runtime: rt, onClose, onSettings }: { runtime: AppRuntime; onClose: () => void; onSettings?: () => void }) {
   const [, setTick] = useState(0);
   useEffect(() => rt.connection.capabilities.subscribe(() => setTick(value => value + 1)), [rt]);
   const caps = rt.connection.capabilities.snapshot();
@@ -40,8 +48,10 @@ export function Management({ runtime: rt, onClose }: { runtime: AppRuntime; onCl
     skills: new SkillBrowser(rt.dashboard),
     memory: new MemoryBrowser(rt.dashboard),
     cron: new CronBrowser(rt.dashboard),
+    mcp: new McpBrowser(rt.dashboard),
+    diagnostics: new DiagnosticsBrowser(rt.dashboard),
   }), [rt]);
-  useEffect(() => () => { browsers.skills.dispose(); browsers.memory.dispose(); browsers.cron.dispose(); }, [browsers]);
+  useEffect(() => () => { browsers.skills.dispose(); browsers.memory.dispose(); browsers.cron.dispose(); browsers.mcp.dispose(); browsers.diagnostics.dispose(); }, [browsers]);
   const actionsOffered = caps.cronActions.state === 'available';
   const actionsBlockedByMode = rt.dashboard.admissionMode === 'trusted-local';
   const states = Object.values(caps);
@@ -59,6 +69,9 @@ export function Management({ runtime: rt, onClose }: { runtime: AppRuntime; onCl
       {tab === 'skills' && <SkillsPanel browser={browsers.skills} profile={profile}/>}
       {tab === 'memory' && <MemoryPanel browser={browsers.memory} profile={profile}/>}
       {tab === 'cron' && <CronPanel browser={browsers.cron} scope={scope} actions={actionsOffered} actionsBlockedByMode={actionsBlockedByMode}/>}
+      {tab === 'mcp' && <McpPanel browser={browsers.mcp} profile={profile}/>}
+      {tab === 'diagnostics' && <DiagnosticsPanel browser={browsers.diagnostics} profile={profile} stats={caps.systemStats.state === 'available'} runtime={rt} onSettings={onSettings}/>}
+      {tab === 'dashboard' && <DashboardGuidance/>}
       {!tab && <Notice>{message}</Notice>}
     </div>
   </Modal>;
@@ -242,5 +255,113 @@ function CronPanel({ browser, scope, actions, actionsBlockedByMode }: { browser:
         </button>
       </div>
     </Modal>}
+  </div>;
+}
+
+const TRANSPORT_LABEL: Record<McpServer['transport'], string> = { http: 'HTTP', stdio: 'Local process', unknown: 'Unknown transport' };
+function mcpToolLabel(server: McpServer): string {
+  if (server.toolCount === undefined) return 'All tools';
+  return server.toolCount === 1 ? '1 tool selected' : `${server.toolCount} tools selected`;
+}
+
+function McpPanel({ browser, profile }: { browser: McpBrowser; profile?: string }) {
+  useBrowser(browser);
+  useEffect(() => { void browser.load(profile); }, [browser, profile]);
+  const { state } = browser;
+  const scope = profile || 'default';
+  return <div className="mcp-panel">
+    <div className="skills-toolbar">
+      <button type="button" className="secondary skills-refresh" onClick={() => void browser.load(profile)} disabled={state.phase === 'loading'}><RefreshCw size={15}/>Refresh</button>
+    </div>
+    <p className="small muted">{scope} profile · read-only. Add, test and sign in to MCP servers in Hermes.</p>
+    <p className="small muted">Connection status and last errors are not reported by this Hermes version.</p>
+    {state.phase === 'error' && state.error && <Notice error>{state.stale ? 'Refresh failed. Showing the last loaded servers. ' : ''}{state.error.message}</Notice>}
+    {state.phase === 'loading' && !state.rows.length && <p role="status" className="muted">Loading MCP servers for {scope}…</p>}
+    {state.phase === 'ready' && !state.rows.length && <p className="muted">No MCP servers are configured for the {scope} profile.</p>}
+    {state.rows.length > 0 && <section aria-label="MCP servers">
+      <ul className="memory-providers">{state.rows.map(server => <li key={server.name} className="memory-provider">
+        <span className="skill-row-name">{server.name}</span>
+        <span className="skill-row-meta">{[TRANSPORT_LABEL[server.transport], server.enabled ? 'Enabled' : 'Disabled in Hermes', server.auth || undefined, mcpToolLabel(server), server.plugin ? `Plugin ${server.plugin}` : undefined].filter(Boolean).join(' · ')}</span>
+      </li>)}</ul>
+    </section>}
+  </div>;
+}
+
+function formatUptime(seconds: number): string {
+  const days = Math.floor(seconds / 86400), hours = Math.floor((seconds % 86400) / 3600), minutes = Math.floor((seconds % 3600) / 60);
+  return days ? `${days} d ${hours} h` : hours ? `${hours} h ${minutes} min` : `${minutes} min`;
+}
+function Section<T>({ label, section, children }: { label: string; section: DiagnosticsSection<T>; children: (value: T) => ReactNode }) {
+  return <section aria-label={label} className="diagnostics-section">
+    <h4>{label}</h4>
+    {section.error && <Notice error>{section.stale ? 'Refresh failed. Showing the last values. ' : ''}{section.error.message}</Notice>}
+    {section.value !== undefined && <dl className="memory-facts">{children(section.value)}</dl>}
+    {section.value === undefined && !section.error && <p role="status" className="muted">Loading…</p>}
+  </section>;
+}
+
+function DiagnosticsPanel({ browser, profile, stats, runtime: rt, onSettings }: { browser: DiagnosticsBrowser; profile?: string; stats: boolean; runtime: AppRuntime; onSettings?: () => void }) {
+  useBrowser(browser);
+  useEffect(() => { void browser.load(profile, stats); }, [browser, profile, stats]);
+  const { state } = browser;
+  const scope = profile || 'default';
+  const report = rt.connection.report();
+  const mode = rt.dashboard.admissionMode === 'trusted-local' ? 'Trusted LAN (no browser login)' : 'Signed in through the Hermes Dashboard';
+  return <div className="diagnostics-panel">
+    <div className="skills-toolbar">
+      <button type="button" className="secondary skills-refresh" onClick={() => void browser.load(profile, stats)} disabled={state.phase === 'loading'}><RefreshCw size={15}/>Refresh</button>
+    </div>
+    <p className="small muted">{scope} profile · read-only. Metadata only: no paths, ports, hostnames or process IDs.</p>
+    <Section<NgFacts> label="HermesUI NG" section={{ value: { version: report.webui.version, protocol: report.webui.protocol, auth: rt.connection.state.auth, rest: rt.connection.state.rest, gateway: rt.gateway.state.phase, mode }, stale: false }}>
+      {facts => <>
+        <div><dt>Version</dt><dd>{facts.version}</dd></div>
+        <div><dt>Protocol</dt><dd>{facts.protocol}</dd></div>
+        <div><dt>Access</dt><dd>{facts.mode}</dd></div>
+        <div><dt>Dashboard REST</dt><dd>{facts.rest}</dd></div>
+        <div><dt>Native Gateway</dt><dd>{facts.gateway}</dd></div>
+      </>}
+    </Section>
+    <Section<HermesStatus> label="Hermes" section={state.status}>
+      {status => <>
+        <div><dt>Version</dt><dd>{status.version || 'Not reported'}{status.releaseDate ? ` · released ${status.releaseDate}` : ''}</dd></div>
+        <div><dt>Gateway</dt><dd>{status.gatewayRunning === undefined ? 'Not reported' : status.gatewayRunning ? 'Running' : 'Not running'}{status.gatewayState ? ` · ${status.gatewayState}` : ''}</dd></div>
+        <div><dt>Active agents</dt><dd>{status.activeAgents}</dd></div>
+        <div><dt>Active sessions</dt><dd>{status.activeSessions}</dd></div>
+        <div><dt>Overall health</dt><dd>{status.overall === 'ok' ? 'OK' : status.overall === 'degraded' ? 'Degraded' : 'Not reported'}</dd></div>
+        {status.heartbeatStaleSeconds !== undefined && <div><dt>Heartbeat</dt><dd>Stale for {Math.round(status.heartbeatStaleSeconds)} s</dd></div>}
+      </>}
+    </Section>
+    <Section<HermesHealth> label="Health" section={state.health}>
+      {health => <div><dt>Liveness</dt><dd>{health.ok ? 'Responding' : 'Not responding'}{health.version ? ` · ${health.version}` : ''}</dd></div>}
+    </Section>
+    {stats && <Section<SystemStats> label="Host" section={state.stats}>
+      {host => <>
+        <div><dt>System</dt><dd>{[host.os, host.osRelease, host.arch].filter(Boolean).join(' ') || 'Not reported'}</dd></div>
+        {host.cpuCount !== undefined && <div><dt>CPUs</dt><dd>{host.cpuCount}{host.cpuPercent !== undefined ? ` · ${Math.round(host.cpuPercent)}% busy` : ''}</dd></div>}
+        {host.loadAverage && <div><dt>Load average</dt><dd>{host.loadAverage.map(value => value.toFixed(2)).join(' · ')}</dd></div>}
+        {host.uptimeSeconds !== undefined && <div><dt>Uptime</dt><dd>{formatUptime(host.uptimeSeconds)}</dd></div>}
+        {host.memory && <div><dt>Memory</dt><dd>{formatBytes(host.memory.used)} of {formatBytes(host.memory.total)} · {Math.round(host.memory.percent)}%</dd></div>}
+        {host.disk && <div><dt>Hermes disk</dt><dd>{Math.round(host.disk.percent)}% used</dd></div>}
+      </>}
+    </Section>}
+    <section aria-label="Support report" className="diagnostics-section">
+      <h4>Support report</h4>
+      <p className="small muted">The sanitised support report (copy or download) is in Settings, under Diagnostics.</p>
+      {onSettings && <button type="button" className="secondary" onClick={onSettings}>Open Settings diagnostics</button>}
+    </section>
+  </div>;
+}
+interface NgFacts { version: string; protocol: string; auth: string; rest: string; gateway: string; mode: string }
+
+function DashboardGuidance() {
+  return <div className="dashboard-guidance">
+    <p className="small muted">These are not in NG yet. Use the Hermes Dashboard for them.</p>
+    <ul className="memory-providers">
+      <li className="memory-provider"><span className="skill-row-name">Config</span><span className="skill-row-description">Settings, model and provider configuration.</span></li>
+      <li className="memory-provider"><span className="skill-row-name">Providers</span><span className="skill-row-description">Sign-in providers and model providers.</span></li>
+      <li className="memory-provider"><span className="skill-row-name">Memory setup</span><span className="skill-row-description">Choosing and configuring memory providers.</span></li>
+      <li className="memory-provider"><span className="skill-row-name">Cron editing</span><span className="skill-row-description">Creating, editing and deleting scheduled jobs.</span></li>
+      <li className="memory-provider"><span className="skill-row-name">MCP management</span><span className="skill-row-description">Adding, testing, signing in and installing MCP servers.</span></li>
+    </ul>
   </div>;
 }

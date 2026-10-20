@@ -8,6 +8,7 @@ const REST = {
   profiles: '/api/profiles', models: '/api/model/options',
   skills: '/api/skills', skillContent: '/api/skills/content',
   memory: '/api/memory',
+  mcpServers: '/api/mcp/servers', health: '/api/health', systemStats: '/api/system/stats',
   cronJobs: '/api/cron/jobs', cronJob: '/api/cron/jobs/{job_id}', cronRuns: '/api/cron/jobs/{job_id}/runs',
 } as const;
 /** Operator actions on one cron job. All three must be advertised before the Cron tab offers any action. */
@@ -18,7 +19,7 @@ export type CapabilityMap = Record<Feature, Capability>;
 function initial(): CapabilityMap {
   return Object.fromEntries(
     ['gateway', 'heartbeat', 'changeEvents', ...Object.keys(REST), 'cronActions', 'workspace', 'pwa', 'reasoning'].map((name) => [name, {
-      state: 'unknown', evidence: 'unverified', implemented: ['gateway', 'heartbeat', 'changeEvents', 'sessionsList', 'sessionsSearch', 'models', 'profiles', 'reasoning', 'pwa', 'workspace', 'skills', 'skillContent', 'memory', 'cronJobs', 'cronJob', 'cronRuns', 'cronActions'].includes(name),
+      state: 'unknown', evidence: 'unverified', implemented: ['gateway', 'heartbeat', 'changeEvents', 'sessionsList', 'sessionsSearch', 'models', 'profiles', 'reasoning', 'pwa', 'workspace', 'skills', 'skillContent', 'memory', 'cronJobs', 'cronJob', 'cronRuns', 'cronActions', 'mcpServers', 'health', 'systemStats'].includes(name),
     }]),
   ) as CapabilityMap;
 }

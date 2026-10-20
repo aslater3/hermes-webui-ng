@@ -50,6 +50,31 @@ function fixtureCronRuns(id: string): Record<string, unknown>[] {
 }
 function fixtureCronJobFor(profile: string) { return profile === 'default' ? fixtureCronJobs() : profile === 'work' ? [{ id: 'work-sync-01', name: 'work-sync', schedule_display: 'every 1h', enabled: true, state: 'scheduled', next_run_at: '2026-10-20T19:00:00+00:00', last_run_at: null, last_status: null, last_error: null, failure_streak: 0, no_agent: true, repeat: { times: null, completed: 0 }, profile_name: 'work', is_default_profile: false }] : []; }
 
+// MCP and diagnostics shapes mirror hermes_cli/web_server_mcp.py (`_mcp_server_summary`), web_routers/status.py and
+// system stats. Secret-bearing fields are seeded on purpose: URL userinfo and token query, command/args, env keys and an
+// Authorization header, host paths, PIDs, ports and hostnames. Projection tests and the browser DOM must never show them.
+function fixtureMcpServers(profile: string) {
+  if (profile !== 'default') return { servers: [{ name: 'work-docs', transport: 'stdio', command: '/srv/hermes/profiles/work/bin/docs-mcp', args: ['--token', 'FIXTURE_MCP_ARG_SECRET'], env: { DOCS_API_KEY: 'FIXTURE_MCP_ENV_SECRET' }, auth: null, enabled: true, tools: null, source: 'config', plugin: null }] };
+  return { servers: [
+    { name: 'github', transport: 'http', url: 'https://user:FIXTURE_MCP_URL_PASSWORD@mcp.example.test/v1?access_token=FIXTURE_MCP_QUERY_TOKEN', command: null, args: [], env: {}, headers: { Authorization: 'Bearer FIXTURE_MCP_HEADER_SECRET' }, auth: 'header', enabled: true, tools: ['search_code', 'get_issue'], source: 'config', plugin: null },
+    { name: 'filesystem', transport: 'stdio', url: null, command: '/usr/bin/npx', args: ['-y', '@example/fs', '/home/fixture/private'], env: { FS_TOKEN: 'FIXTURE_MCP_ENV_SECRET_2' }, auth: null, enabled: false, tools: null, source: 'config', plugin: null },
+    { name: 'oauth-calendar', transport: 'http', url: 'https://calendar.example.test/mcp', command: null, args: [], env: {}, auth: 'oauth', enabled: true, tools: ['list_events'], oauth_tokens: { access_token: 'FIXTURE_MCP_OAUTH_TOKEN' }, source: 'plugin', plugin: 'calendar-plugin' },
+  ] };
+}
+function fixtureHermesStatus(profile: string) {
+  return { auth_required: false, version: '0.13.2', release_date: '2026-10-15', config_version: 1, latest_config_version: 1,
+    gateway_running: true, gateway_state: 'running', gateway_platforms: { telegram: { state: 'connected' } }, gateway_pid: 48211,
+    gateway_updated_at: NOW - 12, gateway_heartbeat_stale_s: null, active_agents: 1, active_sessions: 2, gateway_busy: true,
+    overall: 'ok', components: { gateway: { status: 'ok' } }, profiles: [{ name: profile }],
+    hermes_home: '/srv/hermes/home', config_path: '/srv/hermes/home/config.yaml', env_path: '/srv/hermes/home/.env',
+    gateway_health_url: 'http://127.0.0.1:9119/health', gateways: [{ port: 9119, host: 'fixture-host.internal' }], install_id: 'FIXTURE_INSTALL_ID' };
+}
+const fixtureHealth = { ok: true, version: '0.13.2', displayVersion: '0.13.2 (fixture)', commit: 'deadbeefcafe', auth_required: true };
+const fixtureSystemStats = { os: 'Linux', os_release: '6.8.0-fixture', os_version: '#1 SMP fixture', platform: 'Linux-6.8.0-fixture-x86_64', arch: 'x86_64',
+  hostname: 'fixture-host.internal', python_version: '3.12.4', python_impl: 'CPython', hermes_version: '0.13.2', cpu_count: 8, cpu_percent: 12.5, load_avg: [0.42, 0.37, 0.30],
+  uptime_seconds: 302400, memory: { total: 17179869184, available: 8589934592, used: 8589934592, percent: 50 }, disk: { total: 500000000000, used: 150000000000, free: 350000000000, percent: 30 },
+  process: { pid: 48211, rss: 104857600, create_time: NOW - 300, num_threads: 12 }, psutil: true };
+
 function skillMarkdown(name: string): string {
   return `---\nname: ${name}\ndescription: Fixture skill ${name}\n---\n\n# ${name}\n\nUse this skill for **${name}** tasks.\n\n- Step one\n- Step two\n`;
 }
@@ -81,7 +106,7 @@ export async function startFixture(port = 0, options: { sessionToken?: string; b
   const ws = new WebSocketServer({ noServer: true, handleProtocols: () => options.sessionToken ? false : WS_PROTOCOL });
   const server = createServer((req, res) => {
     const send = (status: number, data: unknown) => { res.writeHead(status, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(data)); };
-    if (req.url === '/api/status') { send(200, { auth_required: !options.sessionToken }); return; }
+    if (req.url?.split('?')[0] === '/api/status') { send(200, { ...fixtureHermesStatus(new URL(req.url, 'http://fixture').searchParams.get('profile') ?? 'default'), auth_required: !options.sessionToken }); return; }
     if (options.sessionToken && (req.url?.startsWith('/auth/') || req.url?.startsWith('/api/auth/'))) { send(404, {}); return; }
     if (req.url === '/api/auth/providers') { send(200, { providers: [{ name: 'basic', display_name: 'Fixture password', supports_password: true }] }); return; }
     if (req.url === '/auth/password-login' && req.method === 'POST') {
@@ -107,7 +132,7 @@ export async function startFixture(port = 0, options: { sessionToken?: string; b
     if (!presented) { send(401, {}); return; }
     if (req.url === '/openapi.json') {
       send(200, { openapi: '3.1.0', paths: { '/api/sessions': { get: {} }, '/api/sessions/search': { get: {} }, '/api/profiles': { get: {} }, '/api/model/options': { get: {} }, '/api/skills': { get: {}, post: {} }, '/api/skills/content': { get: {}, put: {} },
-        '/api/memory': { get: {} }, '/api/memory/reset': { post: {} }, '/api/memory/providers/{name}/config': { get: {}, put: {} },
+        '/api/memory': { get: {} }, '/api/memory/reset': { post: {} }, '/api/mcp/servers': { get: {}, post: {} }, '/api/mcp/servers/{name}/test': { post: {} }, '/api/mcp/servers/{name}/auth': { post: {} }, '/api/mcp/catalog': { get: {} }, '/api/mcp/catalog/install': { post: {} }, '/api/health': { get: {} }, '/api/system/stats': { get: {} }, '/api/memory/providers/{name}/config': { get: {}, put: {} },
         '/api/cron/jobs': { get: {}, post: {} }, '/api/cron/jobs/{job_id}': { get: {}, put: {}, delete: {} }, '/api/cron/jobs/{job_id}/runs': { get: {} },
         '/api/cron/jobs/{job_id}/pause': { post: {} }, '/api/cron/jobs/{job_id}/resume': { post: {} }, '/api/cron/jobs/{job_id}/trigger': { post: {} }, '/api/cron/fire': { post: {} } }, 'x-private': 'must-not-export' }); return;
     }
@@ -159,6 +184,9 @@ export async function startFixture(port = 0, options: { sessionToken?: string; b
       if (!skill || (url.searchParams.get('profile') ?? 'default') === 'missing') { send(404, { detail: `Skill '${name}' not found.` }); return; }
       send(200, { name, content: skillMarkdown(name), path: `/srv/hermes/profiles/default/skills/${skill.category}/${name}/SKILL.md` }); return;
     }
+    if (req.method === 'GET' && url.pathname === '/api/mcp/servers') { send(200, fixtureMcpServers(url.searchParams.get('profile') ?? 'default')); return; }
+    if (req.method === 'GET' && url.pathname === '/api/health') { send(200, fixtureHealth); return; }
+    if (req.method === 'GET' && url.pathname === '/api/system/stats') { send(200, fixtureSystemStats); return; }
     if (req.method === 'GET' && url.pathname === '/api/memory') { send(200, fixtureMemory(url.searchParams.get('profile') ?? 'default')); return; }
     if (req.method === 'GET' && url.pathname === '/api/cron/jobs') { send(200, cronJobsFor(presented, url.searchParams.get('profile') ?? 'default')); return; }
     const cron = /^\/api\/cron\/jobs\/([^/]+)(\/runs|\/pause|\/resume|\/trigger)?$/.exec(url.pathname);
