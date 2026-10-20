@@ -18,7 +18,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: NousResearch/hermes-agent
-          ref: b6b53c69a6ed49cb099cf1bfe76b5e6edd718e5a
+          ref: c5a3c0f8767a72203363d249add14142dbcf3cc7
           path: upstream
           persist-credentials: false
       - uses: actions/setup-node@v4

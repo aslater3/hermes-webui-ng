@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { SessionAttention } from '../../src/hermes/session-attention.js';
+import { SessionAttention, attentionStatus } from '../../src/hermes/session-attention.js';
 import { ClientError, type GatewayEvent } from '../../src/hermes/protocol.js';
 import type { ConnectionState } from '../../src/hermes/gateway-client.js';
 class Wire {
@@ -78,4 +78,18 @@ test('legacy approval.request still marks a tracked session waiting', async t =>
   wire.rows = [wire.row('working')]; await store.refresh();
   wire.emit('approval.request');
   assert.equal(store.items[0]?.status, 'waiting');
+});
+
+test('upstream streaming and resuming live statuses map to working and starting', async t => {
+  const wire = new Wire(), store = new SessionAttention(wire); t.after(() => store.dispose()); store.setEnabled(true);
+  wire.rows = [wire.row('streaming', 'a', 'sa'), wire.row('resuming', 'b', 'sb'), wire.row('bogus', 'c', 'sc')]; await store.refresh();
+  assert.deepEqual(store.items.map(item => item.status), ['working', 'starting', 'unknown']);
+});
+
+test('attentionStatus maps only known upstream live statuses', () => {
+  assert.equal(attentionStatus('streaming'), 'working');
+  assert.equal(attentionStatus('resuming'), 'starting');
+  assert.equal(attentionStatus('idle'), 'idle');
+  assert.equal(attentionStatus('streamingg'), 'unknown');
+  assert.equal(attentionStatus(undefined), 'unknown');
 });
