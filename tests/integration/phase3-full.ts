@@ -1,4 +1,23 @@
-/** Actual Hermes tools/callbacks, never imported or mocked. The WebUI uses only public RPC/REST. */
+/**
+ * Actual Hermes tools/callbacks, never imported or mocked. The WebUI uses only public RPC/REST.
+ *
+ * Protocol changes from the legacy event-driven gate (upstream Hermes main c5a3c0f):
+ * - Approval, sudo and secret prompts are native JSON-RPC server requests in gateway.requests
+ *   (method 'approval' | 'sudo' | 'secret'), answered as NativeQuestions.tsx does:
+ *   approval {choice}, sudo/secret {value} ('' = skip). The *.respond RPCs and
+ *   session.activity.state.inputs are no longer used.
+ * - Request lifecycle: a request withdrawn by upstream (timeout/interrupt) disappears from the
+ *   snapshot via request.cancel. Upstream does not report a distinct 'expired'/'unknown' status.
+ * - Reconnect: upstream re-delivers unanswered requests (open_requests). The former "lost request"
+ *   gates therefore assert RECOVERY (same request id back after reconnect), that the superseded
+ *   PeerRequest object cannot be replayed, and that interrupt withdraws the request. The
+ *   'lost-*-request-cannot-replay-and-can-be-interrupted-in-webui' names are renamed accordingly.
+ * - Secret observation: the event counter over 'secret.request' events was vacuous (upstream emits
+ *   none). It is replaced by gateway.onPeerRequest, a metadata-only observer of request methods.
+ *   The capture step asserts a 'secret' request was seen; the fresh-session step asserts no new one
+ *   is seen; the credential-value check now also covers the observed method list.
+ * - requestKinds in the evidence file now holds observed peer request methods (approval, sudo, secret).
+ */
 import assert from 'node:assert/strict';
 import { access, mkdir, writeFile } from 'node:fs/promises';
 import { DashboardClient } from '../../src/hermes/dashboard-client.js';
@@ -20,7 +39,9 @@ const gates: string[] = [], kinds: string[] = [];
 const password = process.env.HERMES_M3_PASSWORD!, secret = process.env.HERMES_M3_SECRET!;
 const deadline = setTimeout(() => { console.error('M3 native acceptance deadline'); process.exit(1); }, 240000);
 const pause = () => new Promise(resolve => setTimeout(resolve, 60));
-const pending = (kind: string) => session.activity.state.inputs.find(input => input.kind === kind && input.status === 'pending');
+// Native server requests for the current session, as NativeQuestions.tsx sees them. method: approval | sudo | secret.
+const rows = (method: string) => gateway.requests.getSnapshot().filter(row => row.method === method && row.sessionId === session.state.runtimeId);
+const pending = (method: string) => rows(method)[0];
 const exists = (path: string) => access(path).then(() => true, () => false);
 function pass(name: string) { gates.push(name); console.log(`PASS m3/${mode}/${name}`); }
 async function until(check: () => boolean, label: string) {
@@ -40,12 +61,13 @@ async function settled() { await until(() => session.state.phase === 'idle', sta
 async function approveIfPresent() {
   for (let i = 0; i < 400; i++) {
     const request = pending('approval');
-    if (request) { await session.respond(request.key, 'once'); return; }
+    if (request) { gateway.requests.respond(request, { choice: 'once' }); return; }
     if (pending('sudo') || session.state.phase === 'idle') return;
     await pause();
   }
 }
-gateway.onEvent(event => { if (event.type.endsWith('.request')) kinds.push(event.type); });
+// Metadata only: session id and method of each well-formed, supported peer request. Never params.
+gateway.onPeerRequest((_sessionId, method) => { kinds.push(method); });
 try {
   assert.equal(process.env.HERMES_TEST_REF, pin); assert.match(lab, /^\/tmp\/hermes-m3-[A-Za-z0-9]+$/); assert.ok(password && secret);
   await connection.start();
@@ -55,54 +77,56 @@ try {
   await fresh('M3_APPROVAL_ALLOW'); await until(() => !!pending('approval'), stage);
   const approval = pending('approval')!;
   await gateway.reconnect(); await until(() => !!pending('approval') && session.state.phase === 'waiting', 'approval recovery');
+  const recovered = pending('approval')!; assert.equal(recovered.id, approval.id);
   await attention.refresh(); assert.ok(attention.items.some(item => item.runtimeId === session.state.runtimeId && item.status === 'waiting'));
-  await session.respond(approval.key, 'once'); await settled(); assert.equal(await exists(`${lab}/allow-target`), false);
-  await assert.rejects(session.respond(approval.key, 'once')); pass('real-approval-recovery-allow-once-and-command-effect');
+  gateway.requests.respond(recovered, { choice: 'once' }); await settled(); assert.equal(await exists(`${lab}/allow-target`), false);
+  assert.throws(() => gateway.requests.respond(recovered, { choice: 'once' })); pass('real-approval-recovery-allow-once-and-command-effect');
   await fresh('M3_APPROVAL_DENY'); await until(() => !!pending('approval'), stage);
-  await session.respond(pending('approval')!.key, 'deny'); await settled(); assert.equal(await exists(`${lab}/deny-target/canary`), true);
+  gateway.requests.respond(pending('approval')!, { choice: 'deny' }); await settled(); assert.equal(await exists(`${lab}/deny-target/canary`), true);
   pass('real-approval-denial-prevents-command');
   await fresh('M3_APPROVAL_EXPIRE'); await until(() => !!pending('approval'), stage);
-  const expiry = pending('approval')!.key; await settled(); assert.equal(await exists(`${lab}/expire-target/canary`), true);
-  assert.equal(session.activity.state.inputs.find(input => input.key === expiry)?.status, 'expired');
-  await assert.rejects(session.respond(expiry, 'once')); pass('real-approval-expiry-fails-closed');
+  const expiry = pending('approval')!; await settled(); assert.equal(await exists(`${lab}/expire-target/canary`), true);
+  assert.equal(rows('approval').some(row => row.id === expiry.id), false);
+  assert.throws(() => gateway.requests.respond(expiry, { choice: 'once' })); pass('real-approval-expiry-fails-closed');
   await fresh('M3_SUDO'); await approveIfPresent(); await until(() => !!pending('sudo'), stage);
-  await session.respond(pending('sudo')!.key, password); await settled();
+  gateway.requests.respond(pending('sudo')!, { value: password }); await settled();
   assert.ok(session.activity.state.tools.some(tool => tool.name === 'terminal' && /(?:\\n|\n|\s|\")0(?:\\n|\n|\s|\")/.test(tool.output)), 'Real sudo command must return root UID');
   pass('native-sudo-password-runs-restricted-id-command');
   await fresh('M3_SUDO_SKIP'); await approveIfPresent(); await until(() => !!pending('sudo'), stage);
-  const lostSudo = pending('sudo')!.key;
-  await gateway.reconnect(); await until(() => session.state.phase === 'waiting', 'sudo reconnect');
-  assert.equal(session.activity.state.inputs.find(input => input.key === lostSudo)?.status, 'unknown');
-  await assert.rejects(session.respond(lostSudo, password));
-  await session.interrupt(); await settled();
-  pass('lost-sudo-request-cannot-replay-and-can-be-interrupted-in-webui');
+  const lostSudo = pending('sudo')!;
+  await gateway.reconnect(); await until(() => session.state.phase === 'waiting' && !!pending('sudo'), 'sudo reconnect');
+  assert.equal(pending('sudo')!.id, lostSudo.id);
+  assert.throws(() => gateway.requests.respond(lostSudo, { value: password })); // superseded object cannot replay
+  await session.interrupt(); await settled(); assert.equal(pending('sudo'), undefined);
+  pass('sudo-request-recovered-after-reconnect-and-withdrawn-by-interrupt');
   await fresh('M3_SUDO_SKIP'); await approveIfPresent(); await until(() => !!pending('sudo'), stage);
-  await session.respond(pending('sudo')!.key, ''); await settled(); pass('native-sudo-skip-settles-without-password');
+  gateway.requests.respond(pending('sudo')!, { value: '' }); await settled(); pass('native-sudo-skip-settles-without-password');
   await fresh('M3_SECRET'); await until(() => !!pending('secret'), stage);
-  const capture = pending('secret')!; assert.equal(capture.envVar, 'HERMES_M3_CAPTURE_KEY');
-  await session.respond(capture.key, secret); await settled();
+  const capture = pending('secret')!; assert.ok(capture.detail.split('\n').includes('HERMES_M3_CAPTURE_KEY'));
+  assert.ok(kinds.includes('secret'), 'Secret request must be observed as a native peer request');
+  gateway.requests.respond(capture, { value: secret }); await settled();
   assert.ok(session.activity.state.tools.some(tool => tool.name === 'skill_view' && /available/.test(tool.output)));
   pass('native-secret-capture-completes-skill-setup');
-  const before = kinds.filter(kind => kind === 'secret.request').length;
+  const before = kinds.filter(kind => kind === 'secret').length;
   await fresh('M3_SECRET_CHECK'); await settled();
-  assert.equal(kinds.filter(kind => kind === 'secret.request').length, before);
+  assert.equal(kinds.filter(kind => kind === 'secret').length, before);
   assert.ok(session.activity.state.tools.some(tool => tool.name === 'skill_view' && /available/.test(tool.output)));
   pass('fresh-native-session-observes-stored-secret-without-webui-filesystem-access');
   await fresh('M3_SECRET_SKIP'); await until(() => !!pending('secret'), stage);
-  const lostSecret = pending('secret')!.key;
-  await gateway.reconnect(); await until(() => session.state.phase === 'waiting', 'secret reconnect');
-  assert.equal(session.activity.state.inputs.find(input => input.key === lostSecret)?.status, 'unknown');
-  await assert.rejects(session.respond(lostSecret, secret));
-  await session.interrupt(); await settled();
-  pass('lost-secret-request-cannot-replay-and-can-be-interrupted-in-webui');
+  const lostSecret = pending('secret')!;
+  await gateway.reconnect(); await until(() => session.state.phase === 'waiting' && !!pending('secret'), 'secret reconnect');
+  assert.equal(pending('secret')!.id, lostSecret.id);
+  assert.throws(() => gateway.requests.respond(lostSecret, { value: secret })); // superseded object cannot replay
+  await session.interrupt(); await settled(); assert.equal(pending('secret'), undefined);
+  pass('secret-request-recovered-after-reconnect-and-withdrawn-by-interrupt');
   await fresh('M3_SECRET_SKIP'); await until(() => !!pending('secret'), stage);
-  await session.respond(pending('secret')!.key, ''); await settled();
+  gateway.requests.respond(pending('secret')!, { value: '' }); await settled();
   assert.ok(session.activity.state.tools.some(tool => tool.name === 'skill_view' && /setup_skipped/.test(tool.output)));
   pass('native-secret-skip-is-explicit-and-settles');
   const beforeTurns = session.state.messages.filter(message => message.role === 'user').length;
   await session.submit('A normal turn after native interactive workflows.'); await settled();
   assert.equal(session.state.messages.filter(message => message.role === 'user').length, beforeTurns + 1);
-  const observable = JSON.stringify([session.state, session.activity.state, session.activity.archive, connection.report(), attention.items]);
+  const observable = JSON.stringify([session.state, session.activity.state, session.activity.archive, connection.report(), attention.items, kinds]);
   assert.ok(!observable.includes(password)); assert.ok(!observable.includes(secret));
   pass('subsequent-turn-and-no-credential-values-in-client-state-or-report'); success = true;
 } catch (error) {
