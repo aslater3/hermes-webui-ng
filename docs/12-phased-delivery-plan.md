@@ -4,6 +4,8 @@ Build vertically. Each phase has an exit gate; do not skip ahead to attractive s
 
 ## Phase 0 — Repository and upstream contract spike
 
+*Status: software complete — see implementation-status.md.*
+
 ### Deliver
 
 - monorepo/package structure;
@@ -29,6 +31,8 @@ A test page/container can authenticate and display `gateway.ready` from vanilla 
 ---
 
 ## Phase 1 — Connection/auth/capability foundation
+
+*Status: software complete — see implementation-status.md.*
 
 ### Deliver
 
@@ -57,6 +61,8 @@ A user can sign in and the UI accurately distinguishes REST healthy, WS connecti
 ---
 
 ## Phase 2 — Minimal native chat vertical slice
+
+*Status: software complete — see implementation-status.md.*
 
 ### Deliver
 
@@ -87,6 +93,8 @@ Desktop and mobile can complete repeated native Hermes conversations, refresh, r
 
 ## Phase 3 — Tools, reasoning and interactive prompts
 
+*Status: software complete — see implementation-status.md.*
+
 ### Deliver
 
 - reasoning/activity block;
@@ -106,6 +114,8 @@ Representative tool-heavy Hermes workflows are usable without terminal/TUI, incl
 ---
 
 ## Phase 4 — Modern shell and mobile/PWA parity
+
+*Status: software complete — exit gate needs physical devices (see implementation-status.md).*
 
 ### Deliver
 
@@ -127,6 +137,8 @@ All mobile acceptance scenarios 1–5 pass on physical iPhone and Android device
 
 ## Phase 5 — Workspace and Git read-only
 
+*Status: software complete — see implementation-status.md.*
+
 ### Deliver
 
 - constrained root API;
@@ -144,6 +156,8 @@ Read-only mount is useful and cannot escape configured roots through traversal/s
 ---
 
 ## Phase 6 — Workspace writes
+
+*Status: software complete — see implementation-status.md. Optional Git mutations deferred.*
 
 ### Deliver
 
@@ -163,6 +177,8 @@ Security review passes; writes disabled by default in image and safely enabled b
 
 ## Phase 7 — Profiles/models/commands polish
 
+*Status: software complete — see implementation-status.md.*
+
 ### Deliver
 
 - profile switching with generation invalidation;
@@ -179,6 +195,8 @@ Profile/model changes never cross-contaminate sessions and are capability-gated.
 ---
 
 ## Phase 8 — Management surfaces
+
+*Status: software complete for the read-first slices and gated cron actions; write surfaces deferred — see implementation-status.md.*
 
 Priority order:
 
@@ -199,6 +217,8 @@ Management surfaces do not introduce direct Hermes filesystem/state access.
 
 ## Phase 9 — Attachments and voice
 
+*Status: software complete — exit gate needs physical devices (see implementation-status.md).*
+
 ### Deliver as capabilities permit
 
 - image/file attachment into native session protocol;
@@ -215,6 +235,8 @@ Permissions, mobile interruptions and unavailable providers degrade cleanly.
 ---
 
 ## Phase 10 — Hardening and release
+
+*Status: in progress — exit gate needs physical devices, vulnerability baseline triage and human release steps (see implementation-status.md). Only linux/amd64 is in scope.*
 
 ### Deliver
 
