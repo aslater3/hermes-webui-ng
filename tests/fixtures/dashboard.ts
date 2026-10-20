@@ -16,6 +16,8 @@ export async function startFixture(port = 0, options: { sessionToken?: string; b
   const metrics = { tickets: 0, creates: 0, submits: 0, upgrades: 0 };
   // Live child agents per parent runtime, mirroring Hermes' `subagent.list` roster shape.
   const children = new Map<string, Record<string, unknown>[]>();
+  // Delegated child transcripts: stored like Hermes subagent sessions, readable by id but never listed.
+  const childSessions = new Map<string, { key: string; profile: string; messages: {role:string; text:string}[] }>();
   const timers = new Set<ReturnType<typeof setTimeout>>();
   let closed = false;
   const ws = new WebSocketServer({ noServer: true, handleProtocols: () => options.sessionToken ? false : WS_PROTOCOL });
@@ -87,13 +89,14 @@ export async function startFixture(port = 0, options: { sessionToken?: string; b
     }
     const match = /^\/api\/sessions\/([^/]+)\/messages$/.exec(url.pathname);
     if (req.method === 'GET' && match) {
-      const session = [...sessions.values()].find((item) => item.key === match[1]);
+      const session = [...sessions.values()].find((item) => item.key === match[1]) ?? childSessions.get(match[1]!);
       if (!session || !session.messages.length || (url.searchParams.get('profile') && url.searchParams.get('profile') !== session.profile)) { send(404, {}); return; }
-      const end = Math.max(0, session.messages.length - offset);
-      const start = Math.max(0, end - limit);
+      const oldest = url.searchParams.get('order') === 'oldest';
+      const end = oldest ? Math.min(session.messages.length, offset + limit) : Math.max(0, session.messages.length - offset);
+      const start = oldest ? Math.min(offset, end) : Math.max(0, end - limit);
       const messages = session.messages.slice(start, end).map((message, i) => ({ id: start + i + 1, role: message.role, content: message.text }));
       send(200, { session_id: session.key, profile: session.profile, messages,
-        pagination: { order:'latest', limit, offset, returned: messages.length } }); return;
+        pagination: { order: oldest ? 'oldest' : 'latest', limit, offset, returned: messages.length } }); return;
     }
     send(404, {});
   });
@@ -170,10 +173,28 @@ export async function startFixture(port = 0, options: { sessionToken?: string; b
         if (slow) delta('Controlled turn is running…');
         // Nested child agents: the roster arrives by hydration AND the streamed frames exercise the live path.
         if (childAgent) {
-          const child = { subagent_id: 'sa-0-1054fd14', goal: 'Nested fixture child', model: 'deepseek-v4.1-flash', status: 'running', started_at: Date.now()/1000, tool_name: 'terminal', tool_count: 3 };
+          const childKey = `child-${session.key}`;
+          const child = { subagent_id: 'sa-0-1054fd14', goal: 'Nested fixture child', model: 'deepseek-v4.1-flash', status: 'running', started_at: Date.now()/1000, tool_name: 'terminal', tool_count: 3, child_session_id: childKey };
+          // Longer than one history page, so the initial prompt is only reachable through the pinned copy.
+          childSessions.set(childKey, { key: childKey, profile: session.profile, messages: [
+            { role: 'user', text: 'FIXTURE_CHILD_PROMPT: audit the build scripts and report.' },
+            ...Array.from({ length: 119 }, (_, i) => ({ role: i % 2 ? 'user' : 'assistant', text: `child step ${i}` })) ] });
           // The roster stays consistent with the stream, as Hermes builds it from the live child records.
           later(() => { children.set(String(params.session_id), [child]); event('subagent.start', params.session_id, child); }, 200);
-          later(() => { child.tool_name = 'read_file'; child.tool_count = 4; event('subagent.tool', params.session_id, { subagent_id: child.subagent_id, tool_name: 'read_file', tool_count: 4 }); }, 500);
+          later(() => { child.tool_name = 'read_file'; child.tool_count = 4; event('subagent.tool', params.session_id, { subagent_id: child.subagent_id, tool_name: 'read_file', tool_count: 4, child_session_id: childKey }); }, 500);
+          // The child keeps working after the operator opens it: the view must pick this up without a reload.
+          later(() => { childSessions.get(childKey)?.messages.push({ role: 'assistant', text: 'FIXTURE_CHILD_LATE_STEP' }); }, 5000);
+        }
+        // Text, a tool, then more text: the order a real turn produces between tool calls.
+        if (String(params.text).startsWith('[interleave-test]')) {
+          later(() => delta('Checking the build first. '), 50);
+          later(() => event('tool.start', params.session_id, { tool_id: 'il-1', name: 'terminal', args: { command: 'make' } }), 150);
+          later(() => event('tool.complete', params.session_id, { tool_id: 'il-1', name: 'terminal', result: '{"exit_code":0}' }), 250);
+          later(() => delta('The build passes.'), 350);
+          later(() => { session.messages.push({ role: 'assistant', text: session.inflight }); session.updated = Date.now()/1000;
+            event('message.complete', params.session_id, { text: session.inflight });
+            later(() => { session.running = false; session.inflight = ''; event('session.info', params.session_id, { running: false }); }, 20); }, 3000);
+          return;
         }
         if (streaming) for (let i=0; i<30; i++) later(() => delta(`Streaming line ${i} ${'text '.repeat(20)}\n`), i*100);
         const complete = () => {

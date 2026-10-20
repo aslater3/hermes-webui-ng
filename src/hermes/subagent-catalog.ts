@@ -20,6 +20,8 @@ export interface SubagentSnapshot {
   toolCount?: number;
   lastTool?: string;
   acceptingSteer: boolean;
+  /** Durable Hermes session id of the child run, once the child exists; opens its saved transcript. */
+  sessionId?: string;
 }
 /** Partial view of a child: an event patch keeps whatever the event did not restate. */
 export interface SubagentPatch {
@@ -34,6 +36,7 @@ export interface SubagentPatch {
   toolCount?: number;
   lastTool?: string;
   acceptingSteer?: boolean;
+  sessionId?: string;
 }
 /** Process-wide `delegation.status` row with an explicit durable parent session identity. */
 export interface OwnedSubagentPatch extends SubagentPatch { ownerSessionId: string }
@@ -88,6 +91,7 @@ export function subagentPatch(input: unknown): SubagentPatch | undefined {
     // The roster names `last_tool`; streamed progress names `tool_name`. Last started tool, not in-flight state.
     lastTool: text(data.last_tool ?? data.tool_name, NAME_LIMIT) || undefined,
     acceptingSteer: typeof data.accepting_steer === 'boolean' ? data.accepting_steer : undefined,
+    sessionId: identifier(data.child_session_id),
   };
 }
 
@@ -107,6 +111,7 @@ export function mergeSubagent(current: SubagentSnapshot | undefined, patch: Suba
     toolCount: patch.toolCount ?? current?.toolCount,
     lastTool: patch.lastTool ?? current?.lastTool,
     acceptingSteer: patch.acceptingSteer ?? current?.acceptingSteer ?? false,
+    sessionId: patch.sessionId ?? current?.sessionId,
   };
 }
 

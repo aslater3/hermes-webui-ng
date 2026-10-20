@@ -105,6 +105,54 @@ test('a running parent shows its child agents nested beneath it and clears them 
   }
 });
 
+test('a running subagent opens read-only with its initial prompt pinned and refreshes while it works', async ({ page }, info) => {
+  const prompt = `[subagent-test] inspect child ${info.project.name}`;
+  let release!: () => void;
+  const permit = new Promise<void>(resolve => { release = resolve; });
+  const network = await pwaNetwork(false, { beforePromptComplete: text => text === prompt ? permit : Promise.resolve() });
+  try {
+    await loginPwa(page, network.origin); await send(page, prompt);
+    await conversations(page);
+    const active = page.getByRole('region', { name: 'Active agent sessions' });
+    const open = active.getByRole('button', { name: 'View subagent history: Nested fixture child', exact: true });
+    await expect(open).toBeVisible();
+    await open.click();
+    const header = page.getByRole('region', { name: 'Subagent session' });
+    await expect(header).toContainText('Nested fixture child');
+    await expect(header).toContainText('read-only');
+    // 120 stored messages: the prompt is off the latest page, so the pinned copy is the only place it shows.
+    const pinned = header.locator('details.subagent-prompt');
+    await expect(pinned).toHaveAttribute('open', '');
+    await expect(pinned).toContainText('FIXTURE_CHILD_PROMPT: audit the build scripts and report.');
+    // The delegated task was written by the parent agent, not by the operator.
+    await expect(pinned.locator('.message-label')).toHaveText('Parent agent');
+    await expect(header.getByRole('button', { name: 'Back to parent conversation' })).toBeVisible();
+    const transcript = page.locator('#conversation-scroll');
+    await expect(transcript).toContainText('child step 118');
+    expect(new URL(page.url()).hash).toContain('view=subagent');
+    // Read-only: no composer writes into a child that belongs to the parent's agent process.
+    await expect(page.locator('#shell-prompt')).toBeDisabled();
+    await expect(page.locator('#shell-prompt')).toHaveAttribute('placeholder', /read-only/);
+    // The child is still working: its later step appears without reopening the view.
+    await expect(transcript).toContainText('FIXTURE_CHILD_LATE_STEP', { timeout: 15_000 });
+    // A reload keeps the read-only subagent view rather than resuming the child natively.
+    await page.reload();
+    const reloaded = page.getByRole('region', { name: 'Subagent session' });
+    await expect(reloaded).toContainText('FIXTURE_CHILD_PROMPT');
+    // A reload knows only the child id; the parent link and goal come back from the live roster.
+    await expect(reloaded.getByRole('button', { name: 'Back to parent conversation' })).toBeVisible();
+    await expect(reloaded).toContainText('Nested fixture child');
+    expect((await new AxeBuilder({ page }).include('.subagent-header').analyze()).violations).toEqual([]);
+    await page.screenshot({ path: info.outputPath('subagent-view.png') });
+    await page.locator('.subagent-header').screenshot({ path: info.outputPath('subagent-header.png') });
+    await reloaded.getByRole('button', { name: 'Back to parent conversation' }).click();
+    await expect(page.getByRole('region', { name: 'Subagent session' })).toHaveCount(0);
+    await expect(page.locator('#conversation-scroll')).toContainText(prompt);
+  } finally {
+    release(); await page.goto('about:blank'); await network.close();
+  }
+});
+
 test('an idle background parent renders children from global delegation status when its owned roster is empty', async ({ page }, info) => {
   const title = `Background parent ${info.project.name}`;
   const network = await pwaNetwork(false, { requireSubagentActivation: true, emptyOwnedSubagentRoster: true });

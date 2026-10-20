@@ -1,4 +1,7 @@
-.agent-activity .agent-input-controls button, .agent-activity .agent-input-controls label, .agent-activity summary { min-height: 44px; }
+/* A blocking request is mounted at the end of the transcript, outside the activity panel, so its
+   44px hit targets are declared for both containers. */
+.agent-activity .agent-input-controls button, .agent-activity .agent-input-controls label, .agent-activity summary,
+.conversation-requests .agent-input-controls button, .conversation-requests .agent-input-controls label { min-height: 44px; }
 .agent-earlier { margin-top: 18px !important; }
 .agent-archive { padding-bottom: 6px; }
 .agent-archive .hint { line-height: 1.6; color: var(--muted); }
@@ -87,3 +90,18 @@
   .agent-card.agent-approval[data-status="pending"] .agent-input-controls button { flex: 1 1 120px; }
   .agent-reasoning-card > summary { font-size: 11px; }
 }
+/* Streamed reply text interleaved between tool cards, styled like the assistant message it becomes. */
+.agent-timeline > .agent-reply-text { padding: 2px 2px 4px; color: inherit; }
+.agent-card[data-record="true"] { opacity: .78; }
+.agent-card[data-record="true"] .agent-input-status { font-weight: 600; }
+
+/* Read-only subagent view: identity bar, delegated goal and the pinned initial prompt. */
+.subagent-header { margin: 0 0 16px; padding: 12px 14px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface-2, transparent); }
+.subagent-header-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.subagent-badge { font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; padding: 2px 8px; border-radius: 999px; border: 1px solid var(--border); }
+.subagent-status { color: var(--muted); font-size: 12px; flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.subagent-parent { font: inherit; font-size: 12px; padding: 4px 10px; border-radius: 8px; border: 1px solid var(--border); background: none; color: inherit; cursor: pointer; }
+.subagent-goal { margin: 10px 0 0; font-weight: 500; overflow-wrap: anywhere; }
+.subagent-prompt { margin-top: 10px; }
+.subagent-prompt > summary { cursor: pointer; font-size: 12px; color: var(--muted); }
+.subagent-prompt > .message { margin-top: 8px; max-height: 50vh; overflow: auto; }

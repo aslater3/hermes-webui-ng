@@ -63,12 +63,14 @@ export class SessionBrowser {
     this.publish();
   }
   refresh(): Promise<void> { return this.list(this.index.query, this.index.offset, this.index.profile); }
-  async open(ref: SessionRef, offset = 0): Promise<HistoryPage | undefined> {
+  /** `quiet` re-reads the same page in place (live subagent view) instead of blanking it first. */
+  async open(ref: SessionRef, offset = 0, quiet = false): Promise<HistoryPage | undefined> {
     if (this.disposed) return;
     const epoch = ++this.historyEpoch;
     this.historyAbort?.abort(); this.historyAbort = new AbortController();
-    // Clear the old selection immediately: stale content is never labelled with the new ID.
-    this.history = { phase: 'loading', requested: { ...ref } }; this.publish();
+    const same = quiet && this.history.phase === 'ready' && this.history.page?.id === ref.id && this.history.page.offset === offset;
+    // Otherwise clear the old selection immediately: stale content is never labelled with the new ID.
+    if (!same) { this.history = { phase: 'loading', requested: { ...ref } }; this.publish(); }
     try {
       const page = await this.dashboard.sessionMessages(ref, offset, this.historyAbort.signal);
       if (this.disposed || epoch !== this.historyEpoch) return;
@@ -76,6 +78,7 @@ export class SessionBrowser {
     } catch (error) {
       if (this.disposed || epoch !== this.historyEpoch) return;
       const safe = failure(error);
+      if (same && safe.kind !== 'auth-required') return this.history.page; // a missed poll keeps the transcript
       this.history = { phase: 'error', requested: { ...ref }, error: safe };
       if (safe.kind === 'auth-required') this.onAuthFailure?.(safe);
       this.publish(); return undefined;

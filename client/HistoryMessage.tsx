@@ -7,7 +7,7 @@ import './history-message.css';
 const Markdown = lazy(() => import('./Markdown.js'));
 
 /** Native history is a typed projection, not a list of assistant text envelopes. */
-export const HistoryMessage = memo(function HistoryMessage({ role, text, toolName, reasoning, truncated = false }: DisplayMessage) {
+export const HistoryMessage = memo(function HistoryMessage({ role, text, toolName, reasoning, truncated = false, author }: DisplayMessage & { author?: string }) {
   const [copied, setCopied] = useState(false), [note, setNote] = useState('');
   const user = role === 'user';
   const limit = truncated && <p className="muted small">This message reached the display limit.</p>;
@@ -17,7 +17,7 @@ export const HistoryMessage = memo(function HistoryMessage({ role, text, toolNam
     </details>
   </article>;
   return <article className={`message message-${user ? 'user' : 'assistant'}`} data-role={role}>
-    <div className="message-label">{role === 'assistant' && <span className="assistant-mark" aria-hidden="true"><HermesMark size={15}/></span>}<span>{user ? 'You' : role === 'assistant' ? 'Hermes' : role}</span></div>
+    <div className="message-label">{role === 'assistant' && <span className="assistant-mark" aria-hidden="true"><HermesMark size={15}/></span>}<span>{author ?? (user ? 'You' : role === 'assistant' ? 'Hermes' : role)}</span></div>
     {reasoning && <details className="history-reasoning"><summary><Brain size={15} aria-hidden="true" focusable="false"/>Reasoning from Hermes</summary><pre className="plain-message">{reasoning}</pre></details>}
     {text && <div className="message-content">{user ? <div className="user-text">{text}</div> : <Suspense fallback={<pre className="plain-message">{text}</pre>}><Markdown text={text}/></Suspense>}</div>}
     {limit}
