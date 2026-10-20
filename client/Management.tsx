@@ -293,7 +293,7 @@ function formatUptime(seconds: number): string {
 }
 function Section<T>({ label, section, children }: { label: string; section: DiagnosticsSection<T>; children: (value: T) => ReactNode }) {
   return <section aria-label={label} className="diagnostics-section">
-    <h4>{label}</h4>
+    <h3>{label}</h3>
     {section.error && <Notice error>{section.stale ? 'Refresh failed. Showing the last values. ' : ''}{section.error.message}</Notice>}
     {section.value !== undefined && <dl className="memory-facts">{children(section.value)}</dl>}
     {section.value === undefined && !section.error && <p role="status" className="muted">Loading…</p>}
@@ -345,7 +345,7 @@ function DiagnosticsPanel({ browser, profile, stats, runtime: rt, onSettings }: 
       </>}
     </Section>}
     <section aria-label="Support report" className="diagnostics-section">
-      <h4>Support report</h4>
+      <h3>Support report</h3>
       <p className="small muted">The sanitised support report (copy or download) is in Settings, under Diagnostics.</p>
       {onSettings && <button type="button" className="secondary" onClick={onSettings}>Open Settings diagnostics</button>}
     </section>

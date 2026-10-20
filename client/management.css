@@ -61,3 +61,7 @@
   .cron-layout[data-detail="closed"] .cron-detail { display: none; }
   .cron-actions button, .cron-confirm-buttons button { flex: 1 1 140px; justify-content: center; }
 }
+.mcp-panel, .diagnostics-panel, .dashboard-guidance { display: flex; flex-direction: column; gap: 10px; }
+.diagnostics-section { display: grid; gap: 6px; }
+.diagnostics-section h4 { margin: 8px 0 0; font-size: 13px; color: var(--muted); }
+.diagnostics-panel button, .mcp-panel button { min-height: 44px; }
