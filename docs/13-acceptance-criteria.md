@@ -123,7 +123,7 @@ v1 is complete only when all applicable MUST items pass.
 ## Packaging
 
 - [ ] `linux/amd64` image.
-- [ ] `linux/arm64` image.
+- [ ] ~~`linux/arm64` image.~~ Out of scope (operator decision, 2026-10-20).
 - [ ] healthcheck.
 - [ ] vulnerability scan reviewed.
 - [ ] SBOM generated for release.
