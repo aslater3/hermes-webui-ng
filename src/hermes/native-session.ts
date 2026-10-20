@@ -71,6 +71,13 @@ export class NativeSession {
     });
     this.unsubscribe = [
       ...(gateway.requests ? [gateway.requests.subscribe(() => this.publish({}))] : []),
+      ...(gateway.requests?.onOutcome ? [gateway.requests.onOutcome(({ request, status, label }) => {
+        if (!this.foreground || request.sessionId !== this.state.runtimeId) return;
+        this.activity.record({ key: `peer:${request.id}`, id: request.id, kind: request.kind === 'approval' || request.kind === 'clarify' ? request.kind : 'secret',
+          status, outcome: label, prompt: request.title, command: request.kind === 'approval' ? request.detail : undefined,
+          choices: [], questions: [], answered: [], blocked: false });
+        this.publish({});
+      })] : []),
       gateway.onEvent((event) => this.event(event)),
       gateway.onState((connection) => this.connection(connection)),
     ];

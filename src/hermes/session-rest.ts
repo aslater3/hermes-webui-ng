@@ -75,6 +75,12 @@ export function searchPage(input: unknown, profile?: string): SessionRow[] {
   const rows = data.results.map((item: unknown) => row(item, profile, true));
   return [...new Map(rows.map((item) => [JSON.stringify([item.profile, item.id]), item])).values()];
 }
+/** The oldest stored message of a session (a subagent's initial prompt), from an `order=oldest&limit=1` read. */
+export function firstMessage(input: unknown): HistoryMessage | undefined {
+  const data = record(input);
+  if (!Array.isArray(data.messages) || data.messages.length > 1) throw new ClientError('protocol', 'Invalid Hermes history page');
+  return data.messages.length ? displayMessage(data.messages[0], 'rest') ?? undefined : undefined;
+}
 export function historyPage(input: unknown, ref: SessionRef, offset: number): HistoryPage {
   const data = record(input);
   if (!Array.isArray(data.messages) || data.messages.length > HISTORY_LIMIT)

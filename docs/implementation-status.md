@@ -76,3 +76,23 @@ Known boundaries, stated so they are not mistaken for completion:
   wiring a control is a separate slice with its own authority and confirmation design.
 - Verification is synthetic-fixture browser coverage plus unit projection tests. It is not vanilla-Hermes
   evidence, physical-device certification or a claim that a real subagent run was observed by an operator.
+
+## Blocking request placement
+
+A request that still blocks the turn (approval, clarify, sudo, secret, vault) is now the newest block of
+the transcript instead of sitting above the streamed reply. `AgentView` keeps two request containers: the
+chronological one inside the activity panel for settled cards, and the `awaiting` group the shell mounts at
+the end of `.conversation-content` (`client/Conversation.tsx`, `.conversation-requests`). Cards move between
+them with `insertBefore`, so a focused form keeps its node identity; answering a request returns its card to
+the stream so the running reply keeps the tail of the scroll position.
+
+The diagnostic page (`client`'s legacy `diagnostic.html` through `src/hermes/chat-view.ts`) supplies no
+attention region and therefore keeps the previous single-container behaviour unchanged.
+
+Known boundaries, stated so they are not mistaken for completion:
+
+- Evidence is the synthetic fixture plus an injected event prefix (streamed text and tool cards before the
+  request). It is not a claim that a real paused approval was observed mid-turn on a live session.
+- On a phone the approval card is taller than the transcript pane, so the invariant tested there is
+  "pinned to the bottom, request tail on screen, nothing after it" rather than full visibility.
+- The `attention-strip` button remains the recovery path when the operator has deliberately scrolled away.

@@ -1,11 +1,12 @@
 import { useState } from 'react';
 import { CircleAlert, CircleDot, LoaderCircle, Check, RefreshCw } from 'lucide-react';
 import type { AppRuntime } from './runtime.js';
+import type { SessionRef } from '../src/hermes/session-rest.js';
 import { subagentSummary } from '../src/hermes/subagent-catalog.js';
 import './active-sessions.css';
 
 /** Nested child agents. Only parents whose events this client received have children; nothing is inferred. */
-function Subagents({ runtime: rt, parentId }: { runtime: AppRuntime; parentId: string }) {
+function Subagents({ runtime: rt, parentId, parent, onChoose }: { runtime: AppRuntime; parentId: string; parent?: SessionRef; onChoose: () => void }) {
   const children = rt.attention.subagents(parentId);
   if (!children.length) return null;
   const shown = children.slice(0, 4);
@@ -14,12 +15,20 @@ function Subagents({ runtime: rt, parentId }: { runtime: AppRuntime; parentId: s
     {shown.map(child => {
       const busy = child.status === 'working' || child.status === 'starting';
       const attention = child.status === 'waiting' || child.status === 'failed';
+      const icon = busy ? <LoaderCircle className="active-session-spinner" size={14} aria-hidden="true"/>
+        : attention ? <CircleAlert size={14} aria-hidden="true"/>
+        : child.status === 'completed' ? <Check size={14} aria-hidden="true"/>
+        : <CircleDot size={14} aria-hidden="true"/>;
+      const body = <span><strong>{child.goal || 'Subagent'}</strong><small><code>{child.subagentId}</code> · {subagentSummary(child)}</small></span>;
+      const selected = !!rt.chat.subagent && rt.chat.selected?.id === child.sessionId;
+      // Only a child whose durable session Hermes has named can be opened; nothing is guessed from the goal text.
       return <li key={child.subagentId} className="active-subagent" data-status={child.status}>
-        {busy ? <LoaderCircle className="active-session-spinner" size={14} aria-hidden="true"/>
-          : attention ? <CircleAlert size={14} aria-hidden="true"/>
-          : child.status === 'completed' ? <Check size={14} aria-hidden="true"/>
-          : <CircleDot size={14} aria-hidden="true"/>}
-        <span><strong>{child.goal || 'Subagent'}</strong><small><code>{child.subagentId}</code> · {subagentSummary(child)}</small></span>
+        {child.sessionId
+          ? <button type="button" className="active-subagent-open" aria-current={selected ? 'page' : undefined}
+              aria-label={`View subagent history: ${child.goal || child.subagentId}`} title="View this subagent's history and initial prompt"
+              disabled={!rt.readable || rt.chat.busy}
+              onClick={() => { rt.openSubagent({ id: child.sessionId!, profile: parent?.profile }, { parent, goal: child.goal }); onChoose(); }}>{icon}{body}</button>
+          : <>{icon}{body}</>}
       </li>;
     })}
     {children.length > shown.length && <li className="active-subagent-more">+{children.length - shown.length} more subagents</li>}
@@ -41,7 +50,7 @@ export function ActiveSessions({ runtime: rt, onChoose }: { runtime: AppRuntime;
       return <li key={item.runtimeId}><button type="button" className="active-session-row" data-attention={needsInput ? 'required' : newActivity ? 'new' : undefined} aria-label={`Open active session: ${item.title || 'Native conversation'}`} disabled={!rt.ready || rt.chat.busy} onClick={() => { rt.openLive(item.runtimeId, item.storedId, item.owner?.profile); onChoose(); }}>
         {needsInput ? <CircleAlert size={16} aria-hidden="true"/> : working ? <LoaderCircle className="active-session-spinner" size={16} aria-hidden="true"/> : <Check size={16} aria-hidden="true"/>}
         <span><strong>{item.title || 'Native conversation'}</strong><small>{needsInput ? 'Needs your input' : item.status === 'working' ? 'Working…' : item.status === 'starting' ? 'Starting…' : item.status === 'unknown' ? 'Reconnect to check status' : 'New activity'}</small></span>
-      </button><Subagents runtime={rt} parentId={item.runtimeId}/></li>;
+      </button><Subagents runtime={rt} parentId={item.runtimeId} parent={item.owner ?? (item.storedId ? { id: item.storedId } : undefined)} onChoose={onChoose}/></li>;
     })}</ul>
     {items.length > 6 && <button type="button" className="active-more" onClick={() => setExpanded(!expanded)}>{expanded ? 'Show fewer active sessions' : `Show all ${items.length} active sessions`}</button>}
   </section>;

@@ -1,4 +1,4 @@
-import type { AgentInput, Question, ToolActivity, ActivityTurn, ReasoningActivity } from './agent-activity.js';
+import { interleavedText, type AgentInput, type Question, type ToolActivity, type ActivityTurn, type ReasoningActivity } from './agent-activity.js';
 import { ApprovalAttentionTone } from './attention-tone.js';
 import type { NativeSession } from './native-session.js';
 
@@ -25,15 +25,20 @@ interface ReasoningCard { root: HTMLDetailsElement; summary: HTMLElement; text: 
 const names = { approval:'Operation approval', clarify:'Question from Hermes', sudo:'Sudo password request', secret:'Secret requested by Hermes' };
 const labels = { pending:'Needs your input', sending:'Sending — awaiting Hermes', answered:'Response confirmed', expired:'No longer pending',
   unknown:'Delivery or pending status unknown — not resent', unsupported:'Not supported by this Hermes version' };
+/** A request still blocking the turn is the newest block of the transcript, so the caller mounts it
+ *  at the end of the conversation; settled cards stay in the chronological activity stream. */
+const blocking = (input: AgentInput): boolean => ['pending', 'sending'].includes(input.status);
 
 /** Stable keyed DOM: streaming never replaces focused input forms. No response values in view state. */
 export class AgentView {
   private owner?: NativeSession;
   private readonly summary = node('p', '', 'hint');
   private readonly warning = node('p', '', 'agent-warning');
-  private readonly requests = node('div', '', 'agent-requests');
+  private readonly inline = node('div', '', 'agent-requests');
+  private readonly awaiting: HTMLElement;
   private readonly thinking = node('p', '', 'hint');
   private readonly timeline = node('div', '', 'agent-timeline');
+  private readonly textBlocks = new Map<string, HTMLElement>();
   private readonly earlier = node('details', '', 'agent-earlier');
   private readonly earlierLabel = node('summary', 'Earlier activity in this tab');
   private readonly earlierBody = node('div', '', 'agent-archive');
@@ -47,26 +52,37 @@ export class AgentView {
   private visibility = () => { if (document.visibilityState !== 'visible') this.clearCredentials(); };
   private pagehide = () => this.clearCredentials();
   dispose(): void { this.clear(); this.approvalTone.dispose(); document.removeEventListener('visibilitychange', this.visibility); window.removeEventListener('pagehide', this.pagehide); }
-  constructor(private readonly root: HTMLElement) {
+  constructor(private readonly root: HTMLElement, attention?: HTMLElement) {
     const heading = node('h2', 'Agent activity and input'); heading.id = 'agent-title';
     this.root.setAttribute('aria-labelledby', heading.id);
     this.summary.setAttribute('role', 'status'); this.warning.setAttribute('role', 'status');
-    this.requests.setAttribute('role', 'group');
-    this.requests.setAttribute('aria-label', 'Agent requests');
+    this.inline.setAttribute('role', 'group');
+    this.inline.setAttribute('aria-label', 'Agent requests');
     this.timeline.setAttribute('role', 'group');
     this.timeline.setAttribute('aria-label', 'Chronological Hermes activity');
     this.earlier.append(this.earlierLabel, this.earlierBody);
     this.earlier.addEventListener('toggle', () => this.renderArchive());
-    this.root.append(heading, this.summary, this.warning, this.requests, this.thinking, this.timeline, this.earlier);
+    this.root.append(heading, this.summary, this.warning, this.inline, this.thinking, this.timeline, this.earlier);
+    // Without an attention region every card stays in the activity stream, which is what the
+    // diagnostic page assumes; the product shell supplies one at the end of the transcript.
+    this.awaiting = attention ? node('div', '', 'agent-requests awaiting') : this.inline;
+    if (attention) attention.append(this.awaiting);
     document.addEventListener('visibilitychange', this.visibility);
     window.addEventListener('pagehide', this.pagehide);
   }
-  private clearCredentials(): void { for (const input of this.root.querySelectorAll<HTMLInputElement>('input[type="password"]')) input.value = ''; }
+  private groups(): HTMLElement[] { return this.awaiting === this.inline ? [this.inline] : [this.inline, this.awaiting]; }
+  private clearCredentials(): void {
+    for (const group of this.groups())
+      for (const input of group.querySelectorAll<HTMLInputElement>('input[type="password"]')) input.value = '';
+  }
   clear(): void {
     this.clearCredentials(); this.unlisten?.(); this.unlisten = undefined; this.owner = undefined;
     this.earlier.open = false; this.earlierBody.replaceChildren(); this.archiveSource = undefined;
-    this.inputs.clear(); this.toolCards.clear(); this.reasoningCards.clear(); this.requests.replaceChildren(); this.timeline.replaceChildren();
-    this.thinking.textContent = ''; this.root.hidden = true;
+    this.inputs.clear(); this.toolCards.clear(); this.reasoningCards.clear(); this.textBlocks.clear();
+    this.timeline.replaceChildren(); this.thinking.textContent = '';
+    for (const group of this.groups()) group.replaceChildren();
+    if (this.awaiting !== this.inline) this.awaiting.hidden = true;
+    this.root.hidden = true;
   }
   update(owner: NativeSession, enabled: boolean, historical: boolean): void {
     if (this.owner !== owner) {
@@ -96,6 +112,8 @@ export class AgentView {
     const liveKeys = new Set(activity.inputs.map(p => p.key));
     for (const [key, card] of this.inputs) if (!liveKeys.has(key)) { this.erase(card); card.root.remove(); this.inputs.delete(key); }
     for (const input of activity.inputs) this.input(owner, input, enabled && !historical && !owner.state.interrupting);
+    this.place(activity.inputs, historical);
+    const inputs = new Map(activity.inputs.map(input => [input.key, input]));
     this.thinking.hidden = !activity.thinking; this.thinking.textContent = activity.thinking;
 
     const toolIds = new Set(activity.tools.map(t => t.id));
@@ -107,12 +125,23 @@ export class AgentView {
     const reasoningIds = new Set(activity.timeline.flatMap(entry => entry.kind === 'reasoning' ? [entry.id] : []));
     if (fallback) reasoningIds.add(fallback.id);
     for (const [id, card] of this.reasoningCards) if (!reasoningIds.has(id)) { card.root.remove(); this.reasoningCards.delete(id); }
+    // Reply text interleaves with tools only while the timeline holds the whole streamed reply; otherwise
+    // (reconnect gap, cap, settled turn) the conversation's single streamed box or saved message shows it.
+    const interleaved = !historical && interleavedText(activity, owner.state.streaming);
+    this.root.dataset.interleaved = String(interleaved);
+    const textIds = new Set(interleaved ? activity.timeline.flatMap(entry => entry.kind === 'text' ? [entry.id] : []) : []);
+    for (const [id, block] of this.textBlocks) if (!textIds.has(id)) { block.remove(); this.textBlocks.delete(id); }
 
     const tools = new Map(activity.tools.map(tool => [tool.id, tool]));
     const renderedTools = new Set<string>();
     for (const entry of activity.timeline) {
       if (entry.kind === 'reasoning') this.timeline.append(this.reasoning(entry).root);
-      else {
+      else if (entry.kind === 'text') { if (interleaved) this.timeline.append(this.text(entry.id, entry.text)); }
+      else if (entry.kind === 'input') {
+        // Settled requests stay where they happened; a blocking one lives in the attention host.
+        const input = inputs.get(entry.id), card = this.inputs.get(entry.id)?.root;
+        if (input && card && (this.awaiting === this.inline || !blocking(input))) this.timeline.append(card);
+      } else {
         const tool = tools.get(entry.id);
         if (tool) { this.timeline.append(this.tool(tool).root); renderedTools.add(tool.id); }
       }
@@ -147,6 +176,12 @@ export class AgentView {
       this.earlierBody.append(root);
     }
   }
+  private text(id: string, value: string): HTMLElement {
+    let block = this.textBlocks.get(id);
+    if (!block) { block = node('pre', '', 'plain-message agent-reply-text'); block.dataset.textId = id; this.textBlocks.set(id, block); }
+    if (block.textContent !== value) block.textContent = value;
+    return block;
+  }
   private archivedReasoning(entry: ReasoningActivity): HTMLDetailsElement {
     const root = node('details', '', 'agent-card agent-reasoning-card');
     root.dataset.reasoningId = entry.id;
@@ -172,6 +207,22 @@ export class AgentView {
     card.text.textContent = entry.text || 'No reasoning text supplied';
     return card;
   }
+  /** Keep the focused form's node identity and move only the nodes that changed group: a card the
+   *  user is answering stays at the end of the transcript, and a settled card returns to the stream. */
+  private place(inputs: readonly AgentInput[], historical: boolean): void {
+    // One container (the diagnostic page) keeps every card where it is, visible or not.
+    if (this.awaiting === this.inline) return;
+    this.awaiting.hidden = historical || !inputs.some(blocking);
+    this.order(this.awaiting, inputs.filter(blocking));
+    // Settled cards are re-homed into the timeline at their recorded position by update().
+    for (const input of inputs) { const card = this.inputs.get(input.key)?.root; if (!blocking(input) && card?.parentElement === this.awaiting) this.inline.append(card); }
+  }
+  private order(group: HTMLElement, inputs: readonly AgentInput[]): void {
+    inputs.forEach((input, index) => {
+      const card = this.inputs.get(input.key)?.root;
+      if (card && group.children[index] !== card) group.insertBefore(card, group.children[index] ?? null);
+    });
+  }
   private erase(card: InputCard): void {
     for (const input of card.controls.querySelectorAll<HTMLInputElement | HTMLTextAreaElement>('input,textarea')) { if(input instanceof HTMLInputElement && ['radio','checkbox'].includes(input.type)) input.checked=false; else input.value=''; }
   }
@@ -180,12 +231,12 @@ export class AgentView {
     let card = this.inputs.get(input.key);
     if (!card || card.signature !== signature) {
       if (card) {this.erase(card);card.root.remove();}
-      card = this.createInput(owner, input, signature); this.inputs.set(input.key, card); this.requests.append(card.root);
+      card = this.createInput(owner, input, signature); this.inputs.set(input.key, card); this.inline.append(card.root);
     }
     const interactive = input.status === 'pending' && enabled && !input.blocked;
     card.root.dataset.status = input.status;
-    card.status.textContent = input.blocked ? 'Response disabled — incomplete or unsupported request details' :
-      input.kind === 'approval' && input.status === 'pending' ? 'Action paused — choose an approval scope, YOLO, or Deny' : labels[input.status];
+    card.status.textContent = input.outcome ?? (input.blocked ? 'Response disabled — incomplete or unsupported request details' :
+      input.kind === 'approval' && input.status === 'pending' ? 'Action paused — choose an approval scope, YOLO, or Deny' : labels[input.status]);
     if (['answered','expired','unknown','unsupported'].includes(input.status) || input.blocked) this.erase(card);
     for (const control of card.controls.querySelectorAll<HTMLInputElement | HTMLButtonElement | HTMLTextAreaElement>('button,input,textarea')) control.disabled = !interactive;
     for (const [qid, fieldset] of card.questions) {
@@ -198,9 +249,16 @@ export class AgentView {
     const root=node('article','',`agent-card agent-${input.kind}`); root.dataset.requestKey=input.key;
     root.setAttribute('aria-label',names[input.kind]);
     const status=node('p','','agent-input-status'), error=node('p','','agent-input-error'); status.setAttribute('role','status'); error.setAttribute('role','alert'); error.hidden=true;
-    if (input.kind === 'approval') status.setAttribute('aria-live', 'assertive');
+    if (input.kind === 'approval' && input.outcome === undefined) status.setAttribute('aria-live', 'assertive');
     const controls=node('div','','agent-input-controls'); const questions=new Map<string,HTMLFieldSetElement>();
     root.append(node('h3',input.kind === 'approval' ? 'Permission required' : names[input.kind]),status);
+    if (input.outcome !== undefined) {
+      // Read-only record of a request answered on its native card: what was asked and the outcome, no controls.
+      root.dataset.record = 'true'; root.setAttribute('aria-label', `Settled request: ${input.prompt || names[input.kind]}`);
+      if (input.command) root.append(node('pre',input.command)); else if (input.prompt) root.append(node('p',input.prompt));
+      root.append(controls,error);
+      return {root,status,error,controls,questions,signature};
+    }
     if(input.prompt) root.append(node('p',input.prompt));
     const respond = (value: string, questionId?: string) => {
       error.hidden=true;

@@ -58,6 +58,16 @@ export class SessionAttention {
   forSession(ref: SessionRef): AttentionItem | undefined { return this.items.find(item => item.owner && same(item.owner, ref)); }
   /** Nested child agents for one parent runtime. Only parents this client received events for have children. */
   subagents(parentRuntimeId: string): SubagentSnapshot[] { return this.children.get(parentRuntimeId) ?? []; }
+  /** The tracked child whose durable session is `storedId`, if this client still holds it. */
+  subagentBySession(storedId: string): (SubagentSnapshot & { parent?: SessionRef }) | undefined {
+    for (const [runtimeId, list] of this.children) {
+      const hit = list.find(child => child.sessionId === storedId);
+      if (!hit) continue;
+      const item = this.items.find(row => row.runtimeId === runtimeId);
+      return { ...hit, parent: item?.owner ?? (item?.storedId ? { id: item.storedId } : undefined) };
+    }
+    return undefined;
+  }
   setEnabled(value: boolean) {
     if (value === this.enabled) return;
     this.enabled = value;

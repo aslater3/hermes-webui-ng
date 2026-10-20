@@ -9,7 +9,8 @@ import { GatewayClient } from '../src/hermes/gateway-client.js';
 import { WsAuthClient } from '../src/hermes/ws-auth.js';
 import { ConnectionStore } from '../src/hermes/connection-store.js';
 import { DiagnosticsRing } from '../src/hermes/diagnostics.js';
-import { ChatController, draftKey, navigation, navigationRef } from '../src/hermes/chat-controller.js';
+import { ChatController, draftKey, navigation, navigationRef, navigationView } from '../src/hermes/chat-controller.js';
+import { subagentTerminal } from '../src/hermes/subagent-catalog.js';
 import { slashInput } from '../src/hermes/command-catalog.js';
 import { steerSession } from '../src/hermes/session-steer.js';
 import { ClientError } from '../src/hermes/protocol.js';
@@ -59,7 +60,7 @@ export class AppRuntime {
       if (!this.frame) return;
       clearTimeout(this.frameTimer); this.frame = 0; this.frameTimer = 0;
       if (this.chat.selected && !this.chat.busy && this.readable) {
-        const hash = navigation(this.chat.selected);
+        const hash = navigation(this.chat.selected, this.chat.subagent ? 'subagent' : undefined);
         if (location.hash !== hash) history.replaceState(null, '', hash);
       }
       ++this.revision; this.listeners.forEach(listener => listener());
@@ -81,8 +82,9 @@ export class AppRuntime {
     if (!this.readable) return;
     if (this.workspaceMutations.state.phase !== 'closed') { history.replaceState(null, '', this.chat.selected ? navigation(this.chat.selected) : location.pathname); return; }
     try {
-      const ref = navigationRef(location.hash);
-      if (ref && draftKey(ref) !== draftKey(this.chat.selected)) this.run(() => this.chat.open(ref));
+      const ref = navigationRef(location.hash), subagent = navigationView(location.hash) === 'subagent';
+      if (ref && (draftKey(ref) !== draftKey(this.chat.selected) || subagent !== !!this.chat.subagent))
+        this.run(() => subagent ? this.chat.openSubagent(ref) : this.chat.open(ref));
       else if (!ref && this.chat.selected) { this.chat.clear(); this.chat.setEnabled(this.readable); }
     } catch { this.error = 'This conversation link is invalid.'; this.notify(); }
   };
@@ -99,6 +101,9 @@ export class AppRuntime {
       }
       if (state.runtimeId && state.storedId) this.attention.bind(state.runtimeId, { id: state.storedId, profile: state.profile });
       this.attention.select(state.runtimeId); this.notify();
+    }), this.attention.subscribe(() => {
+      const ref = this.chat.selected, live = this.chat.subagent && ref ? this.attention.subagentBySession(ref.id) : undefined;
+      if (live) this.chat.describeSubagent({ parent: live.parent, goal: live.goal });
     }), this.gateway.onState(() => { this.attention.setEnabled(this.ready); this.notify(); }));
     this.cleanup.push(this.connection.onIdentityBoundary(() => {
       this.workspaceMutations.clear();
@@ -124,6 +129,15 @@ export class AppRuntime {
       target.addEventListener(event, callback); this.cleanup.push(() => target.removeEventListener(event, callback));
     };
     listen(window, 'popstate', this.navigate); listen(window, 'hashchange', this.navigate);
+    // A running child's transcript is REST-only, so its latest page is re-read while it is still working.
+    const poll = setInterval(() => {
+      const view = this.chat.subagent, ref = this.chat.selected;
+      if (!view || !ref || document.visibilityState !== 'visible' || !this.readable || this.chat.busy) return;
+      const live = this.attention.subagentBySession(ref.id);
+      if (live) this.chat.describeSubagent({ parent: live.parent, goal: live.goal });
+      if (live && !subagentTerminal(live.status)) void this.chat.refreshSubagent().catch(() => undefined);
+    }, 4000);
+    this.cleanup.push(() => clearInterval(poll));
     listen(document, 'visibilitychange', resume);
     listen(window, 'pageshow', () => {
       resume();
@@ -143,6 +157,12 @@ export class AppRuntime {
     if (!this.readable || this.chat.busy || this.workspaceMutations.state.phase !== 'closed') return;
     try { history.pushState(null, '', navigation(ref)); this.run(() => this.chat.open(ref)); }
     catch { this.error = 'This conversation link is invalid.'; this.notify(); }
+  };
+  /** Inspect a delegated child's own session: its saved transcript, read-only, starting with its initial prompt. */
+  openSubagent = (ref: SessionRef, info: { parent?: SessionRef; goal?: string } = {}) => {
+    if (!this.readable || this.chat.busy || this.workspaceMutations.state.phase !== 'closed') return;
+    try { history.pushState(null, '', navigation(ref, 'subagent')); this.run(() => this.chat.openSubagent(ref, info)); }
+    catch { this.error = 'This subagent link is invalid.'; this.notify(); }
   };
   openLive = (runtimeId: string, storedId?: string, profile?: string) => {
     if (!this.ready || this.chat.busy || this.workspaceMutations.state.phase !== 'closed') return;

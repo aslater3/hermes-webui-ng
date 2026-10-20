@@ -7,6 +7,13 @@ export interface PeerRequest {
 }
 export interface PeerFrame { id: string | number; method: string; params: unknown }
 export type PeerAnswer = { choice?: string; answer?: string; answers?: Record<string, string>; value?: string };
+/** How a displayed request left the screen. Carries labels only, never answer values. */
+export interface PeerOutcome { request: PeerRequest; status: 'answered' | 'expired'; label: string }
+const approvalLabels: Record<string, string> = { once: 'Approved once', session: 'Approved for this session', always: 'Always approved', deny: 'Denied' };
+const cancelLabels: Record<string, [PeerOutcome['status'], string]> = {
+  resolved: ['answered', 'Resolved in another client'], timeout: ['expired', 'Timed out in Hermes'],
+  interrupted: ['expired', 'Withdrawn — the turn was interrupted'], shutdown: ['expired', 'Withdrawn — Hermes shut down'],
+};
 const methods = new Set(['approval', 'clarify', 'sudo', 'secret', 'vault.code', 'vault.unlock_prompt', 'vault.unlock', 'vault.save_login']);
 const string = (value: unknown, limit = 4096, optional = false): string => {
   if (optional && value === undefined) return '';
@@ -59,10 +66,13 @@ export class PeerRequests {
   private rows: readonly PeerRequest[] = [];
   private settled = new Set<string>();
   private listeners = new Set<() => void>();
+  private outcomes = new Set<(outcome: PeerOutcome) => void>();
   private visible = true;
   constructor(private readonly send: (frame: Record<string, unknown>) => void) {}
   getSnapshot = () => this.rows;
   subscribe = (listener: () => void): (() => void) => { this.listeners.add(listener); return () => { this.listeners.delete(listener); }; };
+  onOutcome = (listener: (outcome: PeerOutcome) => void): (() => void) => { this.outcomes.add(listener); return () => { this.outcomes.delete(listener); }; };
+  private emitOutcome(outcome: PeerOutcome): void { for (const listener of this.outcomes) listener(outcome); }
   private publish(rows: readonly PeerRequest[]): void { this.rows = rows; for (const listener of this.listeners) listener(); }
   private settle(id: string): void {
     this.settled.add(id); if (this.settled.size > 2048) this.settled.delete(this.settled.values().next().value!);
@@ -102,7 +112,13 @@ export class PeerRequests {
     if (event.type !== 'request.cancel' || !event.payload || typeof event.payload !== 'object') return;
     const p = event.payload as Record<string, unknown>, row = this.rows.find(row => row.id === p.id);
     if (typeof p.id !== 'string' || p.id.length > 128 || typeof p.method !== 'string' || !event.session_id) return;
-    if (!row || (row.sessionId === event.session_id && row.method === p.method)) this.settle(p.id);
+    if (!row || (row.sessionId === event.session_id && row.method === p.method)) {
+      this.settle(p.id);
+      if (row) {
+        const [status, label] = cancelLabels[typeof p.reason === 'string' ? p.reason : ''] ?? ['expired', 'No longer pending in Hermes'];
+        this.emitOutcome({ request: row, status, label });
+      }
+    }
   }
   respond(request: PeerRequest, answer: PeerAnswer, cancel = false): void {
     if (!this.visible || !this.rows.includes(request) || this.settled.has(request.id))
@@ -122,6 +138,8 @@ export class PeerRequests {
     // Retire BEFORE send. Socket failure leaves the outcome unknown; never permit a duplicate click.
     this.settle(request.id);
     this.send({ jsonrpc: '2.0', id: request.id, result });
+    this.emitOutcome({ request, status: 'answered', label: request.kind === 'approval' ? approvalLabels[String(result.choice)] ?? 'Answered' :
+      cancel ? 'Declined' : request.kind === 'clarify' ? 'Answered' : 'Sent to Hermes' });
     for (const key of Object.keys(result)) delete result[key];
   }
 }
