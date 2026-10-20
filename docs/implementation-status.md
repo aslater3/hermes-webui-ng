@@ -18,8 +18,13 @@ Open follow-ups:
 
 - Legacy event-driven prompt path (`<kind>.request|expire` intake in `AgentActivity.receive`, `NativeSession.respond` → `<kind>.respond` RPCs, the matching regexes in `session-attention.ts`/`native-session.ts`) is deferred. Analysis: upstream never emits these events or serves `clarify|sudo|secret.respond` at c5a3c0f; `approval.respond` is still used for the upstream `pending_approval` snapshot fallback. The only live driver is the synthetic `tests/fixtures/agent-scenarios.ts`, which backs about ten `[agent-test]` e2e specs (`agent-inputs`, `approval-attention`, `m3-activity`, `shell`, `shell-yolo`, `native-command-parity`, `command-routes`, `reasoning-placement`, `session-attention`) and the `tests/contract/agent` and `m3-session-attention` contracts. Removing it needs that fixture converted to JSON-RPC server requests and those specs re-verified in the browser, so this slice only marks the legacy entry points in code. PR #40 outcome cards (`activity.record`) are unaffected.
 - `contract-reference.yml` now checks out `c5a3c0f8767a72203363d249add14142dbcf3cc7`. It runs no Python: it only records `rev-parse HEAD` and tars the listed paths (all verified present at c5a3c0f), so the 3.14 / `uv sync --frozen` requirement does not apply. Its artifact still feeds `import-lockfile.yml`. Not yet run in Actions.
-- `npm audit` reports two high-severity advisories (not CI-gated); triage under Phase 10.
 - Upstream additions worth adopting: `session.create` `idempotency_key`, `subagent.list` `delegations[]`, `session.events.since`, `subagent.steer/interrupt/tail`.
+
+Recertification follow-up slice: `npm audit` triage.
+
+- Before: two high advisories, both transitive and dev-only. `brace-expansion` (GHSA-6j4f-fj2g-mc7p, GHSA-qhr7-859c-m2p7; `<1.1.19`, `4.0.0-5.0.10`) via `minimatch` under `eslint`/`@typescript-eslint`. `source-map-js` (GHSA-68fv-2mgg-jv7q; `<1.2.2`) via `postcss` under the Vite build. Neither package is in the production runtime.
+- Fix applied with `npm audit fix --package-lock-only`, a patch-only lockfile change: `brace-expansion` 1.1.18 to 1.1.21 and 5.0.9 to 5.0.12, and `source-map-js` 1.2.1 to 1.2.2. `npm audit --json` now reports zero vulnerabilities.
+- `node_modules` was not refreshed in this slice. The orchestrator must run `npm ci` or equivalent before the next build, typecheck or test run that relies on those versions.
 
 Recertification follow-up slice (c5a3c0f): steer and active-session statuses.
 
