@@ -225,7 +225,7 @@ export class ConnectionStore {
     await Promise.all([
       this.dashboard.capabilities(signal).then((data) => { if (valid()) this.capabilities.applyWebui(token, data); }).catch(() => {}),
       this.hasAccess ? this.dashboard.schema(signal).then((data) => {
-        if (valid()) this.capabilities.applySchema(token, data);
+        if (valid()) this.capabilities.applySchema(token, data, this.dashboard.admissionMode !== 'trusted-local');
       }).catch((error: unknown) => { if (valid()) this.capabilities.schemaFailed(token, error); }) : Promise.resolve(),
     ]);
     if (valid()) this.diagnostics.add({ event: 'capabilities.updated', generation });

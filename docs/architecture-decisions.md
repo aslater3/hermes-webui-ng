@@ -47,3 +47,7 @@ Accepted 14 September 2026 for the requested Phase 7 branch. Phase 7 depends on 
 ## ADR-025–027 — Opt-in workspace file mutations
 
 Phase 6 retains the native Hermes boundary and adds only dedicated project-file mutations. ADR-025 defines versioned atomic saves and the external-writer race boundary; ADR-026 resolves plain-metadata policy and kernel locking/no-clobber primitives; ADR-027 records the required file-write scope, security review and explicit deferral of optional Git mutations. Writes remain off by default and require a separately selected writable project mount, actual TLS and live Hermes admission. The iOS Web Push proposal is a separate, unimplemented feature. Final code/CI acceptance is recorded in `implementation-status.md`, not inferred from this ADR index.
+
+## ADR-029 — Memory and Cron management, cron actions gated to the Dashboard
+
+Phase 8 slices B1 and B2. Memory is read-only (`GET /api/memory`; provider config is never fetched). Cron has reads plus pause, resume and run-now behind explicit confirmation, single-flight, no automatic retry, and a re-read after each action. Actions are available only in gated mode. Trusted-local gains four GET routes and keeps every write refused. Full decision: `adr-029-memory-cron-management.md`.
