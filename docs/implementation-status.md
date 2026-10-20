@@ -17,10 +17,15 @@ Host gates: production build, both typechecks, lint, **384 unit tests and 39 HTT
 Open follow-ups:
 
 - Remove the legacy event-driven input path (`AgentActivity` inputs and `NativeSession.respond` → `*.respond` RPCs) once older runtimes are dropped.
-- Steer status `redirected` and active-session statuses `streaming`/`resuming` are not yet handled.
 - `contract-reference.yml` still captures reference fixtures at `b6b53c69`.
 - `npm audit` reports two high-severity advisories (not CI-gated); triage under Phase 10.
 - Upstream additions worth adopting: `session.create` `idempotency_key`, `subagent.list` `delegations[]`, `session.events.since`, `subagent.steer/interrupt/tail`.
+
+Recertification follow-up slice (c5a3c0f): steer and active-session statuses.
+
+- `session.steer` acknowledgements are `queued` or `rejected` upstream; `redirected` is emitted by `session.redirect` at c5a3c0f. `steerSession` accepts `redirected` defensively and returns `{text, outcome}`; `steerOutcomeCopy` gives honest copy ("Redirected the running turn" / "Steer queued for the running turn"). No composer surface calls `steerSession` yet, so no UI copy is rendered.
+- `session.active_list` `streaming` maps to `working` and `resuming` maps to `starting` (`attentionStatus` in `session-attention.ts`). Unknown statuses stay `unknown`.
+- Evidence: unit tests in `tests/unit/session-steer.test.ts` and `tests/unit/session-attention.test.ts`; build, typecheck, lint, 399 unit and 39 contract tests passed. No browser behaviour changed.
 
 Changes after this document's 14 September update and before this branch (steering, nested subagents, #36–#38 protocol fixes) are on `main`; see Git history.
 

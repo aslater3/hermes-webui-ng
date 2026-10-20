@@ -8,6 +8,16 @@ import {
 
 type Gateway = Pick<GatewayClient, 'call' | 'onEvent' | 'onState' | 'state'> & Partial<Pick<GatewayClient, 'onPeerRequest'>>;
 export type AttentionStatus = 'idle' | 'working' | 'waiting' | 'starting' | 'unknown';
+/** Upstream LiveSessionStatus: `streaming` is a lazy watch window with an active child run (working);
+ * `resuming` is deferred hydration in flight (starting). Anything else stays unknown rather than active. */
+export function attentionStatus(raw: unknown): AttentionStatus {
+  switch (raw) {
+    case 'idle': case 'working': case 'waiting': case 'starting': return raw;
+    case 'streaming': return 'working';
+    case 'resuming': return 'starting';
+    default: return 'unknown';
+  }
+}
 export interface AttentionItem { runtimeId: string; storedId: string; title: string; status: AttentionStatus; review: boolean; owner?: SessionRef }
 const LIMIT = 100;
 const same = (a: SessionRef, b: SessionRef) => a.id === b.id && (a.profile || 'default') === (b.profile || 'default');
@@ -234,14 +244,14 @@ export class SessionAttention {
         const seen = new Set<string>();
         const ranked = result.sessions.map(raw => record(raw)).sort((a, b) => {
           const known = Number(this.owners.has(String(b.id))) - Number(this.owners.has(String(a.id)));
-          const active = (row: Record<string, unknown>) => ['working', 'waiting', 'starting'].includes(String(row.status)) ? 1 : 0;
+          const active = (row: Record<string, unknown>) => ['working', 'waiting', 'starting'].includes(attentionStatus(row.status)) ? 1 : 0;
           const time = (row: Record<string, unknown>) => typeof row.last_active === 'number' && Number.isFinite(row.last_active) ? row.last_active : 0;
           return known || active(b) - active(a) || time(b) - time(a);
         });
         this.items = ranked.slice(0, LIMIT).map(raw => {
           const row = record(raw), runtimeId = sessionId(String(row.id ?? '')), storedId = sessionId(String(row.session_key ?? ''));
           if (seen.has(runtimeId)) throw new ClientError('protocol', 'Duplicate live session identifier'); seen.add(runtimeId);
-          const status: AttentionStatus = ['idle', 'working', 'waiting', 'starting'].includes(String(row.status)) ? row.status as AttentionStatus : 'unknown';
+          const status = attentionStatus(row.status);
           const old = previous.get(runtimeId), owner = this.owners.get(runtimeId);
           return { runtimeId, storedId, title: typeof row.title === 'string' ? row.title.slice(0, 160) : '', status,
             owner: owner?.id === storedId ? owner : undefined,
