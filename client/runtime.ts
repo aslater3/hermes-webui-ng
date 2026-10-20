@@ -15,6 +15,7 @@ import { slashInput } from '../src/hermes/command-catalog.js';
 import { steerOutcomeCopy, steerSession } from '../src/hermes/session-steer.js';
 import { ClientError } from '../src/hermes/protocol.js';
 import type { SessionRef } from '../src/hermes/session-rest.js';
+import { AttachmentTray, type Owner } from '../src/hermes/attachments.js';
 
 /** One disposable client lifetime; React never builds RPC envelopes or owns durable sessions. */
 export class AppRuntime {
@@ -27,6 +28,12 @@ export class AppRuntime {
   readonly connection: ConnectionStore;
   readonly chat: ChatController;
   readonly attention: SessionAttention;
+  /** Queued composer attachments for the selected native session (local only, never persisted). */
+  readonly attachments: AttachmentTray = new AttachmentTray({
+    revoke: url => URL.revokeObjectURL(url),
+    discard: (owner, paths) => { void this.discardAttachmentPaths(owner, paths); },
+    notify: () => this.notify(),
+  });
   readonly workspaceMutations: WorkspaceMutations;
   accountGeneration = 0;
   error = '';
@@ -95,6 +102,7 @@ export class AppRuntime {
     this.cleanup.push(this.pwa.subscribe(this.notify)); void this.pwa.start();
     this.cleanup.push(this.attention.subscribe(this.notify), this.chat.subscribe(() => {
       this.chat.native.commands.setVisible(document.visibilityState === 'visible');
+      this.attachments.setOwner(this.attachmentOwner());
       const state = this.chat.native.state;
       if (this.steerRuntimeId && (state.runtimeId !== this.steerRuntimeId || state.phase !== 'running')) {
         this.steering = false; this.steerStatus = ''; this.steerRuntimeId = undefined;
@@ -104,11 +112,16 @@ export class AppRuntime {
     }), this.attention.subscribe(() => {
       const ref = this.chat.selected, live = this.chat.subagent && ref ? this.attention.subagentBySession(ref.id) : undefined;
       if (live) this.chat.describeSubagent({ parent: live.parent, goal: live.goal });
-    }), this.gateway.onState(() => { this.attention.setEnabled(this.ready); this.notify(); }));
+    }), this.gateway.onState(() => {
+      this.attention.setEnabled(this.ready);
+      // A dropped connection cannot be detached upstream now; never keep showing chips that may be stale.
+      if (!this.ready) this.attachments.clear(false);
+      this.notify();
+    }));
     this.cleanup.push(this.connection.onIdentityBoundary(() => {
       this.workspaceMutations.clear();
       ++this.accountGeneration; this.openedLocation = false; this.gateway.requests.clear();
-      this.attention.clear(); this.chat.clear(); this.error = ''; this.steering = false; this.steerStatus = ''; this.steerRuntimeId = undefined; history.replaceState(null, '', location.pathname);
+      this.attention.clear(); this.chat.clear(); this.attachments.clear(false); this.error = ''; this.steering = false; this.steerStatus = ''; this.steerRuntimeId = undefined; history.replaceState(null, '', location.pathname);
       document.querySelectorAll<HTMLInputElement>('input[type="password"]').forEach(input => { input.value = ''; });
       this.notify();
     }));
@@ -210,8 +223,24 @@ export class AppRuntime {
       }
       return;
     }
-    await this.chat.send();
+    const owner = this.attachmentOwner();
+    const sent = await this.chat.send();
+    // Hermes consumes queued attachments on an accepted real turn (a prompt.submit); slash commands do not.
+    // consume() only acts when the tray still belongs to that owner, so a switch mid-send cannot clear another session.
+    if (sent && !slashInput(text)) this.attachments.consume(owner);
   });
+  /** The native session that queued attachments belong to; undefined until Hermes has attached one. */
+  attachmentOwner(): Owner | undefined {
+    const state = this.chat.native.state;
+    return state.runtimeId ? { key: `${this.accountGeneration}|${state.profile ?? ''}|${state.runtimeId}`, runtimeId: state.runtimeId, profile: state.profile } : undefined;
+  }
+  /** Best-effort upstream removal of queued attachment paths. Skipped when disconnected. */
+  async discardAttachmentPaths(owner: Owner, paths: string[]): Promise<void> {
+    if (!this.ready) return;
+    for (const path of paths) {
+      await this.gateway.call('image.detach', { session_id: owner.runtimeId, ...(owner.profile ? { profile: owner.profile } : {}), path }).catch(() => undefined);
+    }
+  }
   private async settingsSession() {
     if (!this.ready || this.chat.busy || this.chat.historical || this.workspaceMutations.state.phase !== 'closed')
       throw new ClientError('disconnected', 'Connect to an idle conversation to change settings');

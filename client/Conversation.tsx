@@ -5,7 +5,7 @@ import './m3-activity.css';
 import { HermesMark } from './HermesMark.js';
 import { UsageButton } from './SessionUsage.js';
 import { AgentControls } from './AgentControls.js';
-import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type DragEvent as ReactDragEvent } from 'react';
 import { ArrowDown, ArrowUp, ArrowUpRight, Code2, Compass, ListChecks, LoaderCircle, Square, Wrench } from 'lucide-react';
 import type { AppRuntime } from './runtime.js';
 import type { NativeSession } from '../src/hermes/native-session.js';
@@ -16,6 +16,8 @@ import { enterSends } from '../src/hermes/chat-behaviour.js';
 import { Notice } from './primitives.js';
 import { HistoryMessage as Message } from './HistoryMessage.js';
 import { subagentSummary } from '../src/hermes/subagent-catalog.js';
+import { AttachButton, AttachmentTray, attachableFiles, attachReason } from './attachments.js';
+import { attachFiles } from './attachment-actions.js';
 
 /** Chronological activity stream. Requests that still block the turn render into the attention host
  *  at the end of the transcript, which is a later sibling, so the shell hands over a mounted node
@@ -77,6 +79,21 @@ export function Conversation({ runtime: rt, revision }: { runtime: AppRuntime; r
   // stays owned by its native request UI instead of turning free-form composer input into a hidden steer.
   const writable = !peerRows.length && rt.ready && !chat.native.commands.blocked && !chat.native.settings.state.busy && chat.native.settings.state.outcome !== 'unknown' && !chat.native.settings.state.confirmation && !loading && !historical && (!chat.selected || state.phase === 'idle' || running);
   const commands = useCommands(rt, draft, value => { setDraft(value); rt.setDraft(value); }, composer, writable && !rt.steering);
+  const attachOwner = rt.attachmentOwner();
+  const attachReasonText = attachReason(rt, running || state.phase === 'waiting' || !!rt.steering, !!state.runtimeId);
+  const attachEnabled = writable && !historical && !!state.runtimeId && state.phase === 'idle' && !rt.steering && rt.attachments.support !== 'unavailable';
+  const [dropping, setDropping] = useState(false);
+  const dropHandlers = {
+    onDragEnter: (event: ReactDragEvent) => { if (event.dataTransfer.types.includes('Files')) { event.preventDefault(); setDropping(true); } },
+    onDragOver: (event: ReactDragEvent) => { if (event.dataTransfer.types.includes('Files')) { event.preventDefault(); event.dataTransfer.dropEffect = attachEnabled ? 'copy' : 'none'; } },
+    onDragLeave: (event: ReactDragEvent) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setDropping(false); },
+    onDrop: (event: ReactDragEvent) => {
+      if (!event.dataTransfer.types.includes('Files')) return;
+      event.preventDefault(); setDropping(false);
+      const files = attachableFiles(event.dataTransfer.files);
+      if (files.length) rt.run(() => attachFiles(rt, files));
+    },
+  };
   const selectedOwner = chat.native;
   const peerCurrent = () => rt.ready && rt.chat.native === selectedOwner && document.visibilityState === 'visible';
   const pending = peerRows.length + chat.native.activity.state.inputs.filter(input => ['pending', 'sending'].includes(input.status)).length;
@@ -103,7 +120,7 @@ export function Conversation({ runtime: rt, revision }: { runtime: AppRuntime; r
   const olderAvailable = !!chat.selected && !busy && !loading && (historical ? saved.page?.returned === 100 : (state.totalMessages ?? saved.page?.returned ?? 0) >= 100);
   const placeholder = chat.subagent ? 'Subagent transcripts are read-only. Steer it from the parent conversation.' : chat.readOnly ? 'This conversation has ended and is read-only' : historical ? 'Return to latest to continue this conversation' : !rt.ready ? 'Connect to Hermes to send a message' : running ? 'Steer Hermes while it works…' : state.phase === 'waiting' ? 'Answer Hermes above or stop the response' : 'Message Hermes…';
   return <>
-    <div className="conversation-scroll" id="conversation-scroll" data-following="true" ref={scroller} aria-label="Conversation" tabIndex={0} onScroll={() => {
+    <div className="conversation-scroll" id="conversation-scroll" data-following="true" ref={scroller} aria-label="Conversation" tabIndex={0} {...dropHandlers} onScroll={() => {
       const node = scroller.current!; following.current = node.scrollHeight - node.scrollTop - node.clientHeight < 70;
       node.dataset.following = String(following.current); if (following.current) setUnread(false);
     }}><div ref={content} className={`conversation-content${empty ? ' is-empty' : ''}`}>
@@ -129,21 +146,25 @@ export function Conversation({ runtime: rt, revision }: { runtime: AppRuntime; r
       </section>
       <span className="sr-only" role="status" aria-live="polite">{state.phase === 'idle' && messages.length ? 'Response complete.' : pending ? 'Hermes needs your input.' : ''}</span>
     </div></div>
-    <div className="composer-dock">
+    <div className={`composer-dock${dropping ? ' is-dropping' : ''}`} {...dropHandlers}>
+      {dropping && <div className="drop-target" aria-hidden="true">{attachEnabled ? 'Drop to attach to your next message' : 'Open an idle conversation to attach files'}</div>}
       {unread && <button className="jump-latest" onClick={jump}><ArrowDown size={15}/>Jump to latest</button>}
       {pending > 0 && <button className="attention-strip" onClick={() => { following.current = false; content.current?.querySelector('[data-native-requests], .agent-requests')?.scrollIntoView({ block: 'center', behavior: 'instant' }); }}><span className="attention-dot"/>{pending} request{pending === 1 ? '' : 's'} need your input<ArrowUpRight size={15}/></button>}
       <form className="composer" id="shell-composer" onSubmit={event => { event.preventDefault(); send(); }}>
         {commands.popup}
         <label className="sr-only" htmlFor="shell-prompt">Message Hermes</label>
+        <AttachmentTray runtime={rt} owner={attachOwner}/>
         <textarea id="shell-prompt" ref={composer} {...commands.aria} rows={2} placeholder={placeholder} value={draft} maxLength={32768} disabled={!writable} onChange={event => { setDraft(event.target.value); rt.chat.setDraft(event.target.value); }}
+          onPaste={event => { const files = attachableFiles(event.clipboardData?.files); if (!files.length) return; event.preventDefault(); rt.run(() => attachFiles(rt, files)); }}
           onKeyDown={event => { if (commands.keyDown(event)) return; if (enterSends(event.nativeEvent, navigator.maxTouchPoints > 0 || matchMedia('(pointer:coarse)').matches)) { event.preventDefault(); send(); } }}/>
         <div className="composer-toolbar"><AgentControls runtime={rt}/>
           <div className="composer-right">{draft.length > 30000 && <span className="small muted">{draft.length.toLocaleString()} / 32,768</span>}
+            {!historical && <AttachButton runtime={rt} enabled={attachEnabled} reason={attachReasonText} reasonId="attach-reason"/>}
             {running && <button type="submit" className="send-button steer-button" aria-label="Steer current response" title="Steer current response" disabled={!writable || rt.steering || !draft.trim()}>{rt.steering ? <LoaderCircle size={18} className="spin"/> : <ArrowUp size={20}/>}</button>}
             {busy ? <button type="button" className="send-button stop-button" aria-label="Stop response" title="Stop response" disabled={!rt.ready || !!state.submitting || !!state.interrupting} onClick={() => rt.run(() => chat.interrupt())}>{state.interrupting ? <LoaderCircle size={18} className="spin"/> : <Square size={15} fill="currentColor"/>}</button> : <button type="submit" className="send-button" aria-label="Send message" title="Send message" disabled={!writable || !draft.trim()}><ArrowUp size={20}/></button>}
           </div>
         </div>
-      </form><div className="composer-caption"><span className="composer-privacy">Your conversations stay in Hermes.</span>{running && rt.steerRuntimeId === state.runtimeId && rt.steerStatus && <span className="small muted" role="status">{rt.steerStatus}</span>}{commands.button}{!historical && rt.ready && state.runtimeId && <UsageButton key={`${rt.accountGeneration}:${scope}:${state.runtimeId}`} usage={state.usage}/>}<span className="desktop-hint">{running ? 'Enter to steer this turn · Shift + Enter for a new line' : 'Enter to send · Shift + Enter for a new line'}</span></div>
+      </form><div className="composer-caption"><span className="composer-privacy">Your conversations stay in Hermes.</span>{attachReasonText && !historical && <span id="attach-reason" className="small muted">{attachReasonText}</span>}{running && rt.steerRuntimeId === state.runtimeId && rt.steerStatus && <span className="small muted" role="status">{rt.steerStatus}</span>}{commands.button}{!historical && rt.ready && state.runtimeId && <UsageButton key={`${rt.accountGeneration}:${scope}:${state.runtimeId}`} usage={state.usage}/>}<span className="desktop-hint">{running ? 'Enter to steer this turn · Shift + Enter for a new line' : 'Enter to send · Shift + Enter for a new line'}</span></div>
     </div>
     {commands.overlay}
   </>;

@@ -153,3 +153,15 @@ Known boundaries, stated so they are not mistaken for completion:
 - No image is published. Registry push, OCI labels, provenance/signing and the semver/`latest` tag policy from `docs/09-docker-deployment.md` section 12 remain release work (Phase 10 release tasks, human-approved).
 - `npm audit` findings noted above under "Upstream recertification" are not covered by the image scan; triage them separately.
 - The `docs/13-acceptance-criteria.md` Packaging checkboxes stay unticked until a green CI run on the merge head is recorded here.
+
+## Phase 9 — attachments (slice 9a)
+
+What landed: composer attach button (native picker, no forced camera), drag-and-drop on desktop, paste of image/PDF files from the paste event, a queued chip tray above the composer (thumbnail, name, size, page count for PDFs, 44 px remove control with a screen-reader label), and the shared attach pipeline used by the composer and the existing `/image` and `/paste` browser commands. Images use `image.attach_bytes`; PDFs use `pdf.attach` (bytes from the browser, rendered by the host). Non-image files are deferred because `file.attach` stages into the workspace and needs a draft-reference decision (ADR-030).
+
+Evidence (local, synthetic WebSocket fixture on the probe harness, not vanilla Hermes):
+
+- Unit: `tests/unit/attachments.test.ts` covers validation bounds, copy mapping, owner isolation, switch/clear without resurrection, generation invalidation, remove/consume/clear detach behaviour.
+- E2E: `tests/e2e/attachments.spec.ts` (picker, PDF pages, drop on fine pointers, paste, oversized and unsupported-type refusal, unsupported Hermes, host PDF unavailable, send clears after acceptance, session switch clears and does not resurrect, keyboard remove, 44 px and axe) passes on desktop-chromium, android-chromium and narrow-320 (37 passed, 2 skipped: drag-and-drop is desktop-only by design).
+- Regression: `browser-commands`, `steering` and `shell` specs pass. `chat.spec.ts` asserts `#auth-state` on the legacy app at port 8788 and cannot run under the probe harness; it was not run.
+
+Known boundaries: detection is by use (`-32601`), because Hermes does not advertise RPC methods. Copies already queued upstream cannot be detached while the gateway is disconnected. The tray does not mirror Hermes' queue if another client submits. Physical iPhone/Android pickers, camera and installed-PWA behaviour are not verified. WebKit is not run locally; CI covers iPhone.
