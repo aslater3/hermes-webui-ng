@@ -145,10 +145,17 @@ test('a PDF that the host cannot render says why and attaches nothing', async ({
   await expect(tray(page).getByRole('button')).toHaveCount(0);
 });
 
-test('the attach control is disabled with a reason when no conversation is open', async ({ page }) => {
+test('in a new chat, tapping Attach opens the native file chooser and the first file starts the conversation', async ({ page }) => {
+  // Exercises the real button -> picker path (iOS ignores programmatic clicks on a display:none file input),
+  // not setInputFiles on the hidden input.
   await fixture(page); await login(page);
-  await expect(attachButton(page)).toBeDisabled();
-  await expect(page.getByText('Open or start a conversation to attach files.')).toBeVisible();
+  await expect(attachButton(page)).toBeEnabled();
+  const [chooser] = await Promise.all([page.waitForEvent('filechooser'), attachButton(page).click()]);
+  expect(chooser.isMultiple()).toBe(true);
+  await chooser.setFiles({ name: 'first.png', mimeType: 'image/png', buffer: Buffer.from([0x89, 0x50, 0x4e, 0x47]) });
+  await expect(tray(page).getByText('first.png', { exact: true })).toBeVisible();
+  await send(page, 'Describe the attached image'); await idle(page);
+  await expect(tray(page)).toHaveCount(0);
 });
 
 test('a chip is removable from the keyboard and carries a screen-reader label', async ({ page }) => {

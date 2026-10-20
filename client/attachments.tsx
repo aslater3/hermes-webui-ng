@@ -12,9 +12,8 @@ export function attachableFiles(list: FileList | readonly File[] | null | undefi
 }
 
 /** Copy explaining why attach is unavailable right now; empty when it is available. */
-export function attachReason(rt: AppRuntime, running: boolean, selected: boolean): string {
+export function attachReason(rt: AppRuntime, running: boolean): string {
   if (rt.attachments.support === 'unavailable') return 'Attachments are not supported by this Hermes version.';
-  if (!selected) return 'Open or start a conversation to attach files.';
   if (running) return 'Attach files when Hermes is idle. Queued files are sent with your next message.';
   return '';
 }
@@ -27,7 +26,8 @@ export function AttachButton({ runtime: rt, enabled, reason, reasonId }: { runti
       disabled={!enabled} aria-describedby={reason ? reasonId : undefined} onClick={() => input.current?.click()}>
       <Paperclip size={18} aria-hidden="true" focusable="false"/>
     </button>
-    <input ref={input} type="file" accept="image/*,application/pdf" multiple hidden tabIndex={-1} aria-hidden="true" data-testid="attachment-input"
+    {/* Visually hidden, not display:none: iOS Safari (and Home Screen PWAs) ignore a programmatic click on a display:none file input. */}
+    <input ref={input} type="file" accept="image/*,application/pdf" multiple className="sr-only" tabIndex={-1} aria-hidden="true" data-testid="attachment-input"
       onChange={event => {
         // Every picked file goes through validation so a refused type gets plain copy, not silence.
         const files = [...(event.currentTarget.files ?? [])];

@@ -66,6 +66,15 @@ export async function attachFile(rt: AppRuntime, file: Blob & { name?: string },
 /** Composer entry point (attach button, drop, paste). Sequential, one failure at a time, never auto-sends. */
 export async function attachFiles(rt: AppRuntime, files: readonly File[]): Promise<void> {
   rt.attachments.error = '';
+  // A new chat has no native session yet. Start it first, as Send does, so the files queue for its first turn.
+  if (!rt.chat.selected) {
+    if (rt.chat.busy) return;
+    const draft = rt.chat.draft, account = rt.accountGeneration;
+    const creation = rt.chat.create(), native = rt.chat.native;
+    await creation;
+    if (account !== rt.accountGeneration || native !== rt.chat.native || rt.chat.error) return;
+    rt.chat.setDraft(draft);
+  }
   for (const file of files.slice(0, 8)) {
     try { await attachFile(rt, file, file.name); }
     catch (error) {
