@@ -75,7 +75,9 @@ test('dictation records, transcribes and inserts text into the draft for review 
 test('a second take appends to the draft with one space and never replaces typed text', async ({ page }) => {
   await stubDevices(page); await login(page);
   await field(page).fill('Typed first');
-  await dictate(page).click(); await page.getByRole('button', { name: 'Stop and transcribe', exact: true }).click();
+  await expect(dictate(page)).toBeEnabled();
+  await dictate(page).click(); await expect(status(page)).toContainText('Recording');
+  await page.getByRole('button', { name: 'Stop and transcribe', exact: true }).click();
   await expect(field(page)).toHaveValue('Typed first fixture dictation');
 });
 

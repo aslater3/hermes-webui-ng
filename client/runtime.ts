@@ -248,7 +248,10 @@ export class AppRuntime {
   private syncViewScope(): void {
     const key = this.viewKeyNow();
     if (key === this.lastViewKey) return;
+    const initial = this.lastViewKey === undefined;
     this.lastViewKey = key;
+    // The first sync only records the scope: it is not a conversation switch and must not drop a take.
+    if (initial) return;
     this.speech.stop();
     this.dictation.cancel();
     this.dictation.dismiss();
