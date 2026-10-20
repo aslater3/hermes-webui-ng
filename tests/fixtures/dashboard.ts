@@ -6,6 +6,15 @@ import { ModelScenarios } from './model-scenarios.js';
 import { AgentScenarios } from './agent-scenarios.js';
 import { WS_PROTOCOL } from '../../src/hermes/dashboard-client.js';
 
+const fixtureSkills = [
+  { name: 'arxiv', description: 'Search and summarise arXiv preprints.', category: 'research', enabled: true, usage: 3, provenance: 'hub' },
+  { name: 'axolotl', description: 'Fine-tune language models with Axolotl.', category: 'mlops', enabled: true, usage: 0, provenance: 'bundled' },
+  { name: 'local-notes', description: 'Hand-written notes helper.', category: 'productivity', enabled: false, usage: 1, provenance: 'agent' },
+];
+function skillMarkdown(name: string): string {
+  return `---\nname: ${name}\ndescription: Fixture skill ${name}\n---\n\n# ${name}\n\nUse this skill for **${name}** tasks.\n\n- Step one\n- Step two\n`;
+}
+
 export async function startFixture(port = 0, options: { sessionToken?: string; beforeWsTicket?: () => Promise<void>; beforePromptComplete?: (text: string) => Promise<void>; requireSubagentActivation?: boolean; emptyOwnedSubagentRoster?: boolean; uninitializedSessionStore?: boolean; voiceUnavailable?: boolean } = {}) {
   const cookie = `fixture_auth=${randomBytes(24).toString('hex')}`;
   const tickets = new Set<string>();
@@ -70,7 +79,7 @@ export async function startFixture(port = 0, options: { sessionToken?: string; b
       send(404, { detail: 'Not Found' }); return;
     }
     if (req.url === '/openapi.json') {
-      send(200, { openapi: '3.1.0', paths: { '/api/sessions': { get: {} }, '/api/sessions/search': { get: {} }, '/api/profiles': { get: {} }, '/api/model/options': { get: {} } }, 'x-private': 'must-not-export' }); return;
+      send(200, { openapi: '3.1.0', paths: { '/api/sessions': { get: {} }, '/api/sessions/search': { get: {} }, '/api/profiles': { get: {} }, '/api/model/options': { get: {} }, '/api/skills': { get: {}, post: {} }, '/api/skills/content': { get: {}, put: {} } }, 'x-private': 'must-not-export' }); return;
     }
     if (req.url === '/api/auth/me') { send(200, { user_id: 'fixture', provider: 'basic' }); return; }
     if (req.url === '/api/auth/ws-ticket' && req.method === 'POST') {
@@ -108,6 +117,17 @@ export async function startFixture(port = 0, options: { sessionToken?: string; b
       const query = (url.searchParams.get('q') ?? '').toLowerCase();
       send(200, { results: rows.filter((row) => row.title.toLowerCase().includes(query) || row.id.includes(query))
         .slice(0, limit).map((row) => ({ ...row, session_id: row.id, snippet: row.preview })) }); return;
+    }
+    // Read-only skill catalogue shaped like hermes_cli/web_routers/skills.py (bare array; content has an absolute server path).
+    if (req.method === 'GET' && url.pathname === '/api/skills') {
+      const profile = url.searchParams.get('profile') ?? 'default';
+      send(200, profile === 'default' ? fixtureSkills : profile === 'work' ? fixtureSkills.slice(0, 1) : []); return;
+    }
+    if (req.method === 'GET' && url.pathname === '/api/skills/content') {
+      const name = url.searchParams.get('name') ?? '';
+      const skill = fixtureSkills.find((item) => item.name === name);
+      if (!skill || (url.searchParams.get('profile') ?? 'default') === 'missing') { send(404, { detail: `Skill '${name}' not found.` }); return; }
+      send(200, { name, content: skillMarkdown(name), path: `/srv/hermes/profiles/default/skills/${skill.category}/${name}/SKILL.md` }); return;
     }
     const match = /^\/api\/sessions\/([^/]+)\/messages$/.exec(url.pathname);
     if (req.method === 'GET' && match) {

@@ -37,6 +37,17 @@ test('local bridge excludes upstream HTML, token overrides and unimplemented API
   assert.equal(localPathAllowed('/api/sessions/id/messages', 'DELETE'), false);
 });
 
+test('local bridge allows exactly the read-only skill routes and no skill or hub writes', () => {
+  assert.equal(localPathAllowed('/api/skills?profile=work', 'GET'), true);
+  assert.equal(localPathAllowed('/api/skills/content?name=arxiv&profile=work', 'GET'), true);
+  assert.equal(localPathAllowed('/api/skills', 'POST'), false);
+  assert.equal(localPathAllowed('/api/skills/content', 'PUT'), false);
+  assert.equal(localPathAllowed('/api/skills/content?name=x', 'DELETE'), false);
+  assert.equal(localPathAllowed('/api/skills/content?name=x&token=override', 'GET'), false);
+  for (const path of ['/api/skills/hub/search?q=x', '/api/skills/hub/preview?identifier=x', '/api/skills/toggle', '/api/skills/content/extra', '/api/cron/jobs', '/api/config', '/api/skills/hub/install'])
+    assert.equal(localPathAllowed(path, 'GET'), false, path);
+});
+
 test('local WS supplies only stable offered protocol, without relaxing gated negotiation', () => {
   const config = loadConfig(env);
   const req = { headers: { 'sec-websocket-protocol': 'hermes-gateway-v1' } } as IncomingMessage;
