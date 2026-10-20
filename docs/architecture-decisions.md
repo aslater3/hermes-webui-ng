@@ -32,6 +32,10 @@ Use 100-entry history windows and stable completed DOM nodes rather than introdu
 
 Reduced-height tests exposed sticky composer overlap; the alpha uses normal flow so messages and jump controls remain reachable. Physical keyboard/PWA behaviour is not certified by those tests. Phase 2 sign-off requires both browser fixture coverage and separate unmodified-Hermes acceptance; neither substitutes for the remaining physical-device/release gates.
 
+## ADR-028 — Management surfaces, read-first Skills slice
+
+Accepted for Phase 8 slice 1. A Manage dialog renders only available tabs; Skills is read-only over official `GET /api/skills` and `GET /api/skills/content`. Trusted-local adds exactly those two GET routes to its allowlist, with contract tests proving that writes and hub/cron routes stay 403. Install, edit, toggle and hub browsing are deferred. Full decision: `adr-028-management-surfaces.md`.
+
 ## Recovery discipline
 
 Every completed recovery or implementation slice must be committed AND pushed to the remote branch before starting the next slice. A local commit or unreferenced Git object is not a checkpoint. Verify the remote ref after publishing. Never accumulate a monolithic end-of-session push. Record current test evidence separately from historical results; milestone sign-off requires the relevant real-upstream and browser gates, not synthetic tests alone.
