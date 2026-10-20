@@ -93,6 +93,8 @@ test('trusted-local folder, upload, rename and non-recursive delete use explicit
     await dialog.getByLabel('Destination path').fill('created'); await dialog.getByRole('button', { name: 'Create folder', exact: true }).click();
     await expect(dialog).toContainText('confirmed the workspace operation'); await dialog.getByRole('button', { name: 'Close', exact: true }).click();
     await page.getByRole('button', { name: 'created Folder', exact: true }).click();
+    // The hidden input bypasses the Upload button's busy guard; wait until the folder is actually open.
+    await expect(page.getByRole('navigation', { name: 'File breadcrumb' })).toContainText('/created');
     await page.getByLabel('Choose upload file').setInputFiles({ name: 'uploaded.txt', mimeType: 'text/plain', buffer: Buffer.from('uploaded test text') });
     dialog = page.getByRole('dialog', { name: 'Upload file', exact: true });
     await dialog.getByRole('button', { name: 'Upload file', exact: true }).click(); await expect(dialog).toContainText('confirmed the workspace operation'); await dialog.getByRole('button', { name: 'Close', exact: true }).click();

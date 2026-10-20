@@ -1,6 +1,6 @@
 import { ClientError, record, textField } from './protocol.js';
 import { WsAuthClient } from './ws-auth.js';
-import { sessionQuery, sessionPage, searchPage, historyPage, sessionId, profileName, HISTORY_LIMIT, type SessionQuery, type SessionRef } from './session-rest.js';
+import { sessionQuery, sessionPage, searchPage, historyPage, firstMessage, sessionId, profileName, HISTORY_LIMIT, type SessionQuery, type SessionRef } from './session-rest.js';
 import type { DiagnosticsRing } from './diagnostics.js';
 export { WS_PROTOCOL, type WsCredential } from './ws-auth.js';
 export interface Identity { user_id: string; provider: string }
@@ -178,5 +178,11 @@ export class DashboardClient {
     if (profileName(ref.profile)) query.set('profile', profileName(ref.profile)!);
     const suffix = `/${encodeURIComponent(sessionId(ref.id))}/messages?${query}`;
     return historyPage(await this.request('sessionHistory', 'GET', undefined, signal, suffix), ref, offset);
+  }
+  async sessionFirstMessage(ref: SessionRef, signal?: AbortSignal) {
+    const query = new URLSearchParams({ limit: '1', offset: '0', order: 'oldest' });
+    if (profileName(ref.profile)) query.set('profile', profileName(ref.profile)!);
+    const suffix = `/${encodeURIComponent(sessionId(ref.id))}/messages?${query}`;
+    return firstMessage(await this.request('sessionHistory', 'GET', undefined, signal, suffix));
   }
 }

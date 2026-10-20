@@ -12,6 +12,10 @@ services:
       WEBUI_TLS_CERT: /run/webui-tls/server.crt
       WEBUI_TLS_KEY: /run/webui-tls/server.key
       WEBUI_TLS_CA: /run/webui-tls/ca.crt
+      # Node's fetch/undici does not read WEBUI_TLS_CA; server-side requests to the
+      # HTTPS public origin need this or they fail with UNABLE_TO_VERIFY_LEAF_SIGNATURE.
+      # The repo's own integration tests assert it is set.
+      NODE_EXTRA_CA_CERTS: /run/webui-tls/ca.crt
       HERMES_DASHBOARD_URL: ${HERMES_DASHBOARD_URL:-http://127.0.0.1:9119}
       PUBLIC_ORIGIN: ${PUBLIC_ORIGIN:?Set the exact browser-facing origin}
       HOST: ${WEBUI_HOST:-127.0.0.1}

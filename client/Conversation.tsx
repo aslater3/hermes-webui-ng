@@ -10,14 +10,47 @@ import { ArrowDown, ArrowUp, ArrowUpRight, Code2, Compass, ListChecks, LoaderCir
 import type { AppRuntime } from './runtime.js';
 import type { NativeSession } from '../src/hermes/native-session.js';
 import { AgentView } from '../src/hermes/agent-view.js';
+import { interleavedText } from '../src/hermes/agent-activity.js';
 import { draftKey } from '../src/hermes/chat-controller.js';
 import { enterSends } from '../src/hermes/chat-behaviour.js';
 import { Notice } from './primitives.js';
 import { HistoryMessage as Message } from './HistoryMessage.js';
+import { subagentSummary } from '../src/hermes/subagent-catalog.js';
 
-function Activity({ owner, enabled, historical, revision }: { owner: NativeSession; enabled: boolean; historical: boolean; revision: number }) {
+/** Chronological activity stream. Requests that still block the turn render into the attention host
+ *  at the end of the transcript, which is a later sibling, so the shell hands over a mounted node
+ *  instead of a ref this component could read (a later sibling's ref is not attached yet here). */
+/** Read-only frame for a delegated child: who spawned it, and the task it was handed, before its transcript. */
+function SubagentHeader({ runtime: rt }: { runtime: AppRuntime }) {
+  const view = rt.chat.subagent, ref = rt.chat.selected;
+  if (!view || !ref) return null;
+  const live = rt.attention.subagentBySession(ref.id);
+  const page = rt.chat.browser.history.page;
+  // A short transcript already starts with the prompt; only expand the pinned copy when it is off-page.
+  const promptOnPage = !!page && page.returned < page.limit;
+  return <section className="subagent-header" aria-label="Subagent session">
+    <div className="subagent-header-bar">
+      <span className="subagent-badge">Subagent</span>
+      <span className="subagent-status">{live ? `${subagentSummary(live)}` : 'Saved transcript'} · read-only</span>
+      {view.parent && <button type="button" className="subagent-parent" onClick={() => rt.open(view.parent!)}>Back to parent conversation</button>}
+    </div>
+    {view.goal && <p className="subagent-goal">{view.goal}</p>}
+    <details className="subagent-prompt" open={!promptOnPage}>
+      <summary>Initial prompt{promptOnPage ? ' (also the first message below)' : ''}</summary>
+      {view.promptState === 'loading' ? <p className="small muted">Loading the initial prompt…</p>
+        : view.prompt ? <Message {...view.prompt} author={view.prompt.role === 'user' ? 'Parent agent' : undefined}/>
+        : <p className="small muted">Hermes has not stored this subagent's initial prompt yet.</p>}
+    </details>
+  </section>;
+}
+function Activity({ owner, enabled, historical, revision, attention }: { owner: NativeSession; enabled: boolean; historical: boolean; revision: number; attention: HTMLDivElement | null }) {
   const root = useRef<HTMLElement>(null), view = useRef<AgentView | null>(null);
-  useLayoutEffect(() => { const renderer = new AgentView(root.current!); view.current = renderer; return () => { renderer.dispose(); root.current?.replaceChildren(); view.current = null; }; }, []);
+  useLayoutEffect(() => {
+    if (!attention) return;
+    const renderer = new AgentView(root.current!, attention); view.current = renderer;
+    renderer.update(owner, enabled, historical);
+    return () => { renderer.dispose(); root.current?.replaceChildren(); attention.replaceChildren(); view.current = null; };
+  }, [attention]);
   useLayoutEffect(() => { view.current?.update(owner, enabled, historical); }, [owner, enabled, historical, revision]);
   return <section className="agent-activity" ref={root}/>;
 }
@@ -32,7 +65,10 @@ export function Conversation({ runtime: rt, revision }: { runtime: AppRuntime; r
   const historical = chat.historical, snapshot = historical || (!state.runtimeId && !!saved.page);
   const messages = snapshot ? saved.page?.messages ?? [] : state.messages;
   const streaming = snapshot ? '' : state.streaming;
+  // While the activity timeline holds the whole streamed reply it renders the text between tool cards.
+  const interleaved = !!streaming && interleavedText(chat.native.activity.state, streaming);
   const scroller = useRef<HTMLDivElement>(null), content = useRef<HTMLDivElement>(null), composer = useRef<HTMLTextAreaElement>(null);
+  const [attention, setAttention] = useState<HTMLDivElement | null>(null);
   const following = useRef(true), [unread, setUnread] = useState(false), [draft, setDraft] = useState(chat.draft);
   const scope = `${draftKey(chat.selected)}:${historical ? saved.page?.offset ?? 0 : 'live'}`;
   const running = state.phase === 'running', busy = running || state.phase === 'waiting', loading = chat.busy || state.phase === 'attaching';
@@ -65,26 +101,32 @@ export function Conversation({ runtime: rt, revision }: { runtime: AppRuntime; r
   const useStarter = (value: string) => { setDraft(value); rt.setDraft(value); if (matchMedia('(pointer:fine)').matches) composer.current?.focus(); };
   const activityAt = messages.reduce((last, message, index) => message.role === 'user' ? index + 1 : last, messages.length);
   const olderAvailable = !!chat.selected && !busy && !loading && (historical ? saved.page?.returned === 100 : (state.totalMessages ?? saved.page?.returned ?? 0) >= 100);
-  const placeholder = chat.readOnly ? 'This conversation has ended and is read-only' : historical ? 'Return to latest to continue this conversation' : !rt.ready ? 'Connect to Hermes to send a message' : running ? 'Steer Hermes while it works…' : state.phase === 'waiting' ? 'Answer Hermes above or stop the response' : 'Message Hermes…';
+  const placeholder = chat.subagent ? 'Subagent transcripts are read-only. Steer it from the parent conversation.' : chat.readOnly ? 'This conversation has ended and is read-only' : historical ? 'Return to latest to continue this conversation' : !rt.ready ? 'Connect to Hermes to send a message' : running ? 'Steer Hermes while it works…' : state.phase === 'waiting' ? 'Answer Hermes above or stop the response' : 'Message Hermes…';
   return <>
     <div className="conversation-scroll" id="conversation-scroll" data-following="true" ref={scroller} aria-label="Conversation" tabIndex={0} onScroll={() => {
       const node = scroller.current!; following.current = node.scrollHeight - node.scrollTop - node.clientHeight < 70;
       node.dataset.following = String(following.current); if (following.current) setUnread(false);
     }}><div ref={content} className={`conversation-content${empty ? ' is-empty' : ''}`}>
+      <SubagentHeader runtime={rt}/>
       {olderAvailable && <button className="history-button" onClick={() => rt.run(() => chat.historyPage((historical ? saved.page?.offset ?? 0 : 0) + 100))}>Load earlier messages</button>}
-      {historical && (chat.readOnly ? <Notice>This conversation has ended. Its saved history is read-only.</Notice> : <Notice>Earlier messages · read-only <button onClick={() => rt.run(() => chat.latest())}>Return to latest</button></Notice>)}
+      {historical && !chat.subagent && (chat.readOnly ? <Notice>This conversation has ended. Its saved history is read-only.</Notice> : <Notice>Earlier messages · read-only <button onClick={() => rt.run(() => chat.latest())}>Return to latest</button></Notice>)}
       {error && <Notice error>{error}<button onClick={() => rt.run(() => chat.latest())}>Refresh conversation</button></Notice>}
       {state.deliveryUnknown && <Notice>Delivery was not confirmed. Check the recovered conversation before resending. Nothing has been replayed.</Notice>}
       {empty && <div className="welcome"><div className="welcome-mark"><HermesMark size={30}/></div><p className="eyebrow">A SPACE FOR YOUR NEXT IDEA</p><h1>What are we working on?</h1><p>Think it through. Build it out. Make it happen with Hermes.</p><div className="welcome-suggestions">{starters.map(({ icon: Icon, title, subtitle, draft }) => <button key={title} onClick={() => useStarter(draft)} disabled={!writable} title={`Use “${title}” as a draft`}><Icon size={19}/><span><strong>{title}</strong><small>{subtitle}</small></span><ArrowUpRight size={15}/></button>)}</div></div>}
       {loading && <div className="loading-conversation" role="status"><LoaderCircle size={19} className="spin"/>Opening your conversation…</div>}
       {messages.slice(0, activityAt).map((message, index) => <Message key={`${scope}:${index}`} {...message}/>)}
       <CommandTaskResults commands={chat.native.commands}/>
-      <NativeQuestions rows={peerRows} requests={rt.gateway.requests} current={peerCurrent} onError={error => { rt.error = error; rt.notify(); }}/>
-      <Activity owner={chat.native} enabled={rt.ready && !loading} historical={snapshot} revision={revision}/>
+      <Activity owner={chat.native} enabled={rt.ready && !loading} historical={snapshot} revision={revision} attention={attention}/>
       {messages.slice(activityAt).map((message, index) => <Message key={`${scope}:${activityAt + index}`} {...message}/>)}
-      {streaming && <div className="message message-assistant streaming"><div className="message-label"><span className="assistant-mark"><HermesMark size={15}/></span>Hermes <span className="working-label">Working</span></div><pre className="plain-message">{streaming}<span className="stream-cursor"/></pre></div>}
+      {streaming && !interleaved && <div className="message message-assistant streaming"><div className="message-label"><span className="assistant-mark"><HermesMark size={15}/></span>Hermes <span className="working-label">Working</span></div><pre className="plain-message">{streaming}<span className="stream-cursor"/></pre></div>}
       {busy && !streaming && !pending && <div className="thinking-indicator" role="status"><span/><span/><span/>Hermes is working</div>}
       {state.phase === 'waiting' && !pending && <Notice>Hermes is waiting for input, but no recoverable request is available. Use Stop response to cancel this turn, then ask again for a fresh request.</Notice>}
+      {/* A request that blocks the turn is the newest thing in the transcript, so it renders after
+          the streamed reply instead of above it where it could only be found by scrolling. */}
+      <section className="conversation-requests">
+        <NativeQuestions rows={peerRows} requests={rt.gateway.requests} current={peerCurrent} onError={error => { rt.error = error; rt.notify(); }}/>
+        <div ref={setAttention}/>
+      </section>
       <span className="sr-only" role="status" aria-live="polite">{state.phase === 'idle' && messages.length ? 'Response complete.' : pending ? 'Hermes needs your input.' : ''}</span>
     </div></div>
     <div className="composer-dock">

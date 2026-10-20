@@ -63,3 +63,13 @@ test('uncertain socket send retires the question and never enables automatic rep
   assert.throws(() => store.respond(question, { choice: 'once' }));
   assert.throws(() => store.respond(question, { choice: 'once' })); assert.equal(attempts, 1);
 });
+
+test('outcomes report the chosen label or the withdrawal reason, never the answer value', () => {
+  const { store } = harness(); const seen: unknown[] = []; store.onOutcome(o => seen.push({ id: o.request.id, status: o.status, label: o.label }));
+  store.receive(frame('approval', 'srq-1')); store.respond(store.getSnapshot()[0]!, { choice: 'session' });
+  store.receive(frame('approval', 'srq-2')); store.cancel({ type: 'request.cancel', session_id: 'live-a', payload: { id: 'srq-2', method: 'approval', reason: 'timeout' } });
+  store.receive(frame('secret', 'srq-3')); store.respond(store.getSnapshot()[0]!, { value: 'TOPSECRET' });
+  assert.deepEqual(seen, [{ id: 'srq-1', status: 'answered', label: 'Approved for this session' },
+    { id: 'srq-2', status: 'expired', label: 'Timed out in Hermes' }, { id: 'srq-3', status: 'answered', label: 'Sent to Hermes' }]);
+  assert.ok(!JSON.stringify(seen).includes('TOPSECRET'));
+});

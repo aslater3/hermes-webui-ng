@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { AgentActivity, ACTIVITY_LIMITS, displayValue, inputRpc, parseInput } from '../../src/hermes/agent-activity.js';
+import { AgentActivity, ACTIVITY_LIMITS, displayValue, inputRpc, interleavedText, parseInput } from '../../src/hermes/agent-activity.js';
 const event = (type: string, payload: unknown) => ({ type, session_id: 'live', payload });
 test('approval exposes once/session/deny but never permanent approval', () => {
   const prompt = parseInput('approval', { request_id:'a',command:'fixture operation',choices:['once','session','always','deny'] });
@@ -76,7 +76,7 @@ test('reasoning segments preserve chronological tool boundaries without splittin
   a.receive(event('reasoning.delta',{text:'after first tool'}));
   a.receive(event('reasoning.delta',{text:' continuing'}));
   a.receive(event('tool.start',{tool_id:'two',name:'second'}));
-  assert.deepEqual(a.state.timeline.map(entry => entry.kind === 'tool' ? `tool:${entry.id}` : `reasoning:${entry.text}`),[
+  assert.deepEqual(a.state.timeline.map(entry => entry.kind === 'reasoning' ? `reasoning:${entry.text}` : `${entry.kind}:${entry.id}`),[
     'reasoning:before tool and still before','tool:one','reasoning:after first tool continuing','tool:two',
   ]);
   assert.equal(a.state.timeline.filter(entry=>entry.kind==='reasoning').length,2);
@@ -103,4 +103,45 @@ test('unknown events are ignored; malformed known events are visibly flagged',()
   const a=new AgentActivity();assert.equal(a.receive(event('new.unknown',{huge:'x'})),false);
   a.receive(event('secret.request',{}));assert.equal(a.state.malformed,true);assert.equal(a.state.inputs.length,0);
   const deep:{child?:unknown}={};deep.child=deep;assert.ok(displayValue(deep).length<1000);
+});
+
+test('reply text interleaves with tools in arrival order and stays complete against the streamed reply',()=>{
+  const a=new AgentActivity();
+  a.receive(event('message.start',{}));
+  for(const text of ['Look','ing first. ']) a.receive(event('message.delta',{text}));
+  a.receive(event('tool.start',{tool_id:'t1',name:'terminal'}));
+  a.receive(event('tool.complete',{tool_id:'t1',name:'terminal',result:'ok'}));
+  a.receive(event('message.delta',{text:'Found it.'}));
+  assert.deepEqual(a.state.timeline.map(e=>e.kind==='text'?`text:${e.text}`:`${e.kind}:${e.id}`),['text:Looking first. ','tool:t1','text:Found it.']);
+  assert.equal(interleavedText(a.state,'Looking first. Found it.'),true);
+  // A reconnect that missed deltas must fall back to the single streamed box, not show a partial copy.
+  assert.equal(interleavedText(a.state,'earlier text Looking first. Found it.'),false);
+  assert.equal(a.receive(event('message.delta',{text:'x'})),false,'text deltas do not trigger a second publish');
+});
+test('a reply without tool activity stays one ordinary streaming message',()=>{
+  const a=new AgentActivity();
+  a.receive(event('message.start',{}));
+  for(const text of ['Streaming ','line 1']) a.receive(event('message.delta',{text}));
+  assert.equal(interleavedText(a.state,'Streaming line 1'),false);
+});
+test('a live peer approval suppresses the duplicate queue projection instead of expiring it',()=>{
+  const a=new AgentActivity();
+  const approval={request_id:'q1',command:'rm -rf build',choices:['once','deny']};
+  a.snapshot({running:true,pending_approval:approval});
+  assert.equal(a.state.inputs.length,1);
+  a.snapshot({running:true,pending_approval:approval,open_requests:[{id:'srq-1',method:'approval',params:{session_id:'live'}}]});
+  assert.equal(a.state.inputs.length,0,'the peer card is the single card for this approval');
+  a.snapshot({running:true,pending_approval:approval,open_requests:[{id:'srq-1',method:'approval',params:{session_id:'live'}}]});
+  a.snapshot({running:true});
+  assert.equal(a.state.inputs.length,0,'answering the peer card cannot revive a \'No longer pending\' duplicate');
+});
+test('a settled peer request is recorded at its point in the turn with its outcome',()=>{
+  const a=new AgentActivity();
+  a.receive(event('tool.start',{tool_id:'t1',name:'read_file'}));
+  a.record({key:'peer:srq-1',id:'srq-1',kind:'approval',status:'answered',outcome:'Approved once',prompt:'Hermes requests approval',command:'make',choices:[],questions:[],answered:[],blocked:false});
+  a.receive(event('tool.start',{tool_id:'t2',name:'terminal'}));
+  assert.deepEqual(a.state.timeline.map(e=>`${e.kind}:${e.id}`),['tool:t1','input:peer:srq-1','tool:t2']);
+  assert.equal(a.state.inputs[0]?.outcome,'Approved once');
+  a.record({...a.state.inputs[0]!,outcome:'Denied'});
+  assert.equal(a.state.inputs.length,1);assert.equal(a.state.inputs[0]?.outcome,'Approved once');
 });

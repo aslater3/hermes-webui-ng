@@ -4,10 +4,22 @@ import type { GatewayClient } from './gateway-client.js';
 import { NativeSession } from './native-session.js';
 import { SessionBrowser } from './session-browser.js';
 import { ClientError } from './protocol.js';
-import { profileName, sessionId, type SessionRef, type SessionRow } from './session-rest.js';
+import { profileName, sessionId, type HistoryMessage, type SessionRef, type SessionRow } from './session-rest.js';
 
 type Gateway = Pick<GatewayClient, 'call' | 'onEvent' | 'onState' | 'state'>;
-type Reader = Pick<DashboardClient, 'sessions' | 'searchSessions' | 'sessionMessages'>;
+type Reader = Pick<DashboardClient, 'sessions' | 'searchSessions' | 'sessionMessages'> & Partial<Pick<DashboardClient, 'sessionFirstMessage'>>;
+
+/**
+ * A delegated child run opened for inspection. Its transcript is Dashboard REST history only: the child
+ * belongs to the parent's agent process, so this view never resumes, attaches to or writes into it.
+ */
+export interface SubagentView {
+  parent?: SessionRef;
+  goal?: string;
+  /** The child's first stored message — the delegated task as Hermes handed it over. */
+  prompt?: HistoryMessage;
+  promptState: 'loading' | 'ready' | 'missing';
+}
 
 /**
  * Ends Hermes stamps when a runtime went away rather than the conversation ending deliberately
@@ -19,11 +31,16 @@ const RESUMABLE_END_REASONS: ReadonlySet<string> = new Set([
   'agent_close', 'ws_orphan_reap', 'superseded_by_resume', 'startup_orphan_reap',
   'tui_shutdown', 'ws_disconnect', 'idle_timeout', 'lru_evict',
 ]);
-export function navigation(ref?: SessionRef): string {
+export function navigation(ref?: SessionRef, view?: 'subagent'): string {
   if (!ref) return '';
   const query = new URLSearchParams({ session: sessionId(ref.id) });
   if (profileName(ref.profile)) query.set('profile', ref.profile!);
+  if (view) query.set('view', view);
   return `#${query}`;
+}
+/** `#session=…&view=subagent` keeps a reload on the read-only subagent view instead of a native resume. */
+export function navigationView(hash: string): 'subagent' | undefined {
+  return new URLSearchParams(hash.replace(/^#/, '')).get('view') === 'subagent' ? 'subagent' : undefined;
 }
 export function navigationRef(hash: string): SessionRef | undefined {
   const query = new URLSearchParams(hash.replace(/^#/, ''));
@@ -42,6 +59,7 @@ export class ChatController {
   historical = false;
   /** Saved REST history is available, but this selection has no safe native write attachment. */
   readOnly = false;
+  subagent?: SubagentView;
   error?: ClientError;
   private scope = 0;
   private enabled = false;
@@ -171,7 +189,7 @@ export class ChatController {
     this.native = reuse ?? this.newNative(); this.native.setForeground(true);
     this.browser.clearHistory(); this.selected = ref;
     this.draft = this.drafts.get(draftKey(ref)) ?? '';
-    this.historical = false; this.readOnly = false; this.busy = false; this.error = undefined;
+    this.historical = false; this.readOnly = false; this.subagent = undefined; this.busy = false; this.error = undefined;
     this.publish(); return this.scope;
   }
   async create(profile?: string): Promise<void> {
@@ -211,6 +229,36 @@ export class ChatController {
       }
     } catch (error) { this.fail(error, scope); }
     finally { if (scope === this.scope) { this.busy = false; this.publish(); } }
+  }
+  /** Open a delegated child's saved transcript read-only, with its initial prompt pinned above the page. */
+  async openSubagent(ref: SessionRef, info: { parent?: SessionRef; goal?: string } = {}): Promise<void> {
+    if (!this.enabled) return;
+    ref = { id: sessionId(ref.id), profile: profileName(ref.profile) };
+    const scope = this.reset(ref);
+    this.subagent = { ...info, promptState: 'loading' }; this.busy = true; this.publish();
+    try {
+      const prompt = this.dashboard.sessionFirstMessage?.(ref).catch(() => undefined);
+      const page = await this.browser.open(ref);
+      const first = await prompt;
+      if (scope !== this.scope) return;
+      if (page) this.selected = { id: page.id, profile: page.profile };
+      this.subagent = { ...info, prompt: first, promptState: first ? 'ready' : 'missing' };
+      this.enterReadOnlyHistory();
+    } catch (error) { this.fail(error, scope); }
+    finally { if (scope === this.scope) { this.busy = false; this.publish(); } }
+  }
+  /** Fill in parent/goal learnt after the view opened (a reload knows only the child's id). */
+  describeSubagent(info: { parent?: SessionRef; goal?: string }): void {
+    if (!this.subagent) return;
+    const parent = this.subagent.parent ?? info.parent, goal = this.subagent.goal || info.goal;
+    if (parent === this.subagent.parent && goal === this.subagent.goal) return;
+    this.subagent = { ...this.subagent, parent, goal }; this.publish();
+  }
+  /** Re-read the latest page of a running child in place; skipped while the operator pages back. */
+  async refreshSubagent(): Promise<void> {
+    const page = this.browser.history.page;
+    if (!this.subagent || !this.selected || this.busy || !page || page.offset !== 0) return;
+    await this.browser.open(this.selected, 0, true);
   }
   /**
    * Active rows carry a process-local runtime id plus Hermes' durable session_key. Prefer the

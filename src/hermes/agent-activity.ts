@@ -8,6 +8,8 @@ export interface AgentInput {
   prompt: string; command?: string; envVar?: string;
   choices: string[]; questions: Question[]; answered: string[];
   blocked: boolean;
+  /** Settled outcome recorded by this client (a native peer request answered/withdrawn); display only. */
+  outcome?: string;
 }
 export interface ToolActivity {
   id: string; name: string; state: 'running' | 'complete' | 'error' | 'unknown';
@@ -15,7 +17,11 @@ export interface ToolActivity {
 }
 export interface ReasoningActivity { kind: 'reasoning'; id: string; text: string; truncated: boolean; }
 export interface ToolTimelineActivity { kind: 'tool'; id: string; }
-export type ActivityTimelineEntry = ReasoningActivity | ToolTimelineActivity;
+/** Where a request appeared in the turn, so a settled card stays at that point instead of floating to the top. */
+export interface InputTimelineActivity { kind: 'input'; id: string; }
+/** Streamed reply text between tool calls; segments let text and tools interleave in the order they happened. */
+export interface TextActivity { kind: 'text'; id: string; text: string; truncated: boolean; }
+export type ActivityTimelineEntry = ReasoningActivity | ToolTimelineActivity | InputTimelineActivity | TextActivity;
 export interface ActivityTurn {
   id: number; reasoning: string; thinking: string; tools: ToolActivity[]; timeline: ActivityTimelineEntry[]; truncated: boolean;
 }
@@ -25,8 +31,19 @@ export interface ActivityState {
 }
 export const ACTIVITY_LIMITS = {
   tools: 40, timeline: 96, inputs: 16, text: 32768, reasoningSegment: 8192, archiveReasoning: 4096, archiveTimeline: 24,
-  input: 16384, questions: 12,
+  input: 16384, questions: 12, stream: 131072,
 } as const;
+/** The live timeline text is complete only when it matches the session's streamed reply; after a
+ *  reconnect gap (or a cap) the caller falls back to the single streamed box instead of a partial copy. */
+export function interleavedText(state: ActivityState, streaming: string): boolean {
+  // A reply with no tool activity stays one ordinary streaming message: there is nothing to interleave.
+  let length = 0, tools = false;
+  for (const entry of state.timeline) {
+    if (entry.kind === 'text') length += entry.text.length;
+    else if (entry.kind === 'tool') tools = true;
+  }
+  return tools && length > 0 && length === streaming.length;
+}
 const KINDS: InputKind[] = ['approval', 'clarify', 'sudo', 'secret'];
 const clean = (value: string) => value.replace(/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/g, '');
 const text = (value: unknown, max: number = ACTIVITY_LIMITS.text): string => typeof value === 'string' ? clean(value).slice(0, max) : '';
@@ -125,7 +142,7 @@ export class AgentActivity {
         state: tool.state === 'running' ? 'unknown' as const : tool.state,
         truncated: tool.truncated || tool.input.length > 8192 || tool.output.length > 8192 }));
       const toolIds = new Set(tools.map(tool => tool.id));
-      const observed = s.timeline.filter(entry => entry.kind === 'reasoning' || toolIds.has(entry.id));
+      const observed = s.timeline.filter(entry => entry.kind === 'reasoning' || (entry.kind === 'tool' && toolIds.has(entry.id)));
       const timeline = observed.slice(-ACTIVITY_LIMITS.archiveTimeline).map(entry => entry.kind === 'reasoning' ? {
         ...entry, text: entry.text.slice(-ACTIVITY_LIMITS.archiveReasoning),
         truncated: entry.truncated || entry.text.length > ACTIVITY_LIMITS.archiveReasoning,
@@ -167,7 +184,24 @@ export class AgentActivity {
       if (terminal < 0) { this.state = {...this.state, malformed:true}; return; }
       this.state.inputs = this.state.inputs.filter((_, i) => i !== terminal);
     }
-    this.state = {...this.state, inputs: [...this.state.inputs.filter((p) => p.key !== input.key), input]};
+    this.state = {...this.state, inputs: [...this.state.inputs.filter((p) => p.key !== input.key), input],
+      ...(old ? {} : this.placed(input.key))};
+  }
+  private placed(key: string): Pick<ActivityState, 'timeline' | 'truncated'> {
+    let timeline = [...this.state.timeline, { kind: 'input', id: key } as InputTimelineActivity], truncated = this.state.truncated;
+    if (timeline.length > ACTIVITY_LIMITS.timeline) { timeline = timeline.slice(-ACTIVITY_LIMITS.timeline); truncated = true; }
+    return { timeline, truncated };
+  }
+  /** A request settled outside this projection (native peer card): keep a read-only record at its place in the turn. */
+  record(input: AgentInput): void {
+    if (this.state.inputs.some(p => p.key === input.key)) return;
+    this.remember(input.key);
+    const inputs = [...this.state.inputs, input];
+    if (inputs.length > ACTIVITY_LIMITS.inputs) {
+      const terminal = inputs.findIndex(p => ['answered','expired'].includes(p.status));
+      if (terminal >= 0) inputs.splice(terminal, 1);
+    }
+    this.state = { ...this.state, inputs, ...this.placed(input.key) };
   }
   receive(event: GatewayEvent): boolean {
     try {
@@ -182,6 +216,19 @@ export class AgentActivity {
         this.archiveTurn();
         this.state.inputs.forEach(input => this.remember(input.key));
         this.state = this.empty(); return true;
+      }
+      if (event.type === 'message.delta') {
+        const fragment = text(record(event.payload).text, ACTIVITY_LIMITS.stream);
+        if (!fragment) return false;
+        let timeline = [...this.state.timeline], truncated = this.state.truncated;
+        const last = timeline.at(-1);
+        if (last?.kind === 'text') {
+          const segment = last.text + fragment;
+          timeline[timeline.length - 1] = { ...last, text: segment.slice(-ACTIVITY_LIMITS.stream), truncated: last.truncated || segment.length > ACTIVITY_LIMITS.stream };
+        } else timeline.push({ kind: 'text', id: `text-${++this.timelineSequence}`, text: fragment, truncated: false });
+        if (timeline.length > ACTIVITY_LIMITS.timeline) { timeline = timeline.slice(-ACTIVITY_LIMITS.timeline); truncated = true; }
+        // The session publishes the streamed text itself; no second notification per token.
+        this.state = { ...this.state, timeline, truncated }; return false;
       }
       if (event.type === 'thinking.delta') {
         const p = record(event.payload), next = this.state.thinking + text(p.text);
@@ -230,7 +277,7 @@ export class AgentActivity {
         const liveToolIds = new Set(tools.map(item => item.id));
         let timeline = this.state.timeline.some(entry => entry.kind === 'tool' && entry.id === toolId)
           ? [...this.state.timeline] : [...this.state.timeline, { kind:'tool', id:toolId } as ToolTimelineActivity];
-        timeline = timeline.filter(entry => entry.kind === 'reasoning' || liveToolIds.has(entry.id));
+        timeline = timeline.filter(entry => entry.kind !== 'tool' || liveToolIds.has(entry.id));
         const timelineDropped = Math.max(0, timeline.length - ACTIVITY_LIMITS.timeline);
         timeline = timeline.slice(-ACTIVITY_LIMITS.timeline);
         this.state = {...this.state, tools, timeline, droppedTools:this.state.droppedTools + dropped,
@@ -240,7 +287,15 @@ export class AgentActivity {
     } catch { this.state = {...this.state, malformed:true}; return true; }
   }
   snapshot(live: Record<string, unknown>): void {
+    const open = Array.isArray(live.open_requests) ? live.open_requests : [];
     for (const kind of ['approval','clarify'] as const) {
+      // A native peer request already renders this question with its own id. Projecting the queue
+      // entry too gives a second card that turns "No longer pending" once the peer card is answered.
+      if (open.some(row => row !== null && typeof row === 'object' && (row as Record<string, unknown>).method === kind)) {
+        this.state.inputs.filter(p => p.kind === kind && ['pending','unknown'].includes(p.status)).forEach(p => this.remember(p.key));
+        this.state = {...this.state, inputs:this.state.inputs.filter(p => !(p.kind === kind && ['pending','unknown'].includes(p.status)))};
+        continue;
+      }
       const value = live[`pending_${kind}`];
       if (value) { try {this.put(parseInput(kind,value));} catch {this.state = {...this.state,malformed:true};} }
       else this.state = {...this.state, inputs:this.state.inputs.map((p) => p.kind === kind && ['pending','unknown'].includes(p.status) ? {...p,status:'expired'} : p)};
