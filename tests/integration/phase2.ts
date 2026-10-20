@@ -11,7 +11,7 @@ import { ClientError, record } from '../../src/hermes/protocol.js';
 import type { SessionRef } from '../../src/hermes/session-rest.js';
 import { browserAuth } from '../helpers/browser-auth.js';
 import { EXPECTED_RESPONSE } from './provider.js';
-const pin = 'b6b53c69a6ed49cb099cf1bfe76b5e6edd718e5a';
+const pin = 'c5a3c0f8767a72203363d249add14142dbcf3cc7';
 const origin = process.env.PHASE0_ORIGIN ?? 'http://127.0.0.1:8787';
 const auth = browserAuth(origin);
 const dashboard = new DashboardClient(origin, auth.fetcher);

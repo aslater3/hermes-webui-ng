@@ -15,7 +15,7 @@ permissions:
   contents: read
 
 env:
-  HERMES_TEST_REF: b6b53c69a6ed49cb099cf1bfe76b5e6edd718e5a
+  HERMES_TEST_REF: c5a3c0f8767a72203363d249add14142dbcf3cc7
 
 jobs:
   real-hermes:
