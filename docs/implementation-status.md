@@ -167,6 +167,24 @@ Validation (synthetic fixture, legacy page served on a local uncommitted port 87
 - Gates: typecheck, lint, unit 437/437, contract 47/47 pass.
 - The local harness (`zz-legacy-p10.config.ts`, `scripts/zz-dev-fixture-legacy.mjs`) is uncommitted and excluded locally. The default playwright config (8788) was not used.
 
+### Base image baseline (Trivy, report-only)
+
+Baseline from the first report-only scan of the amd64 image on `node:22-bookworm-slim`: OS packages 64 findings (HIGH 60, CRITICAL 4), for example `perl-base` CVE-2026-13221 (fixed in 5.36.0-7+deb12u4) and `zlib1g` CVE-2023-45853 (will not be fixed by Debian). Eleven HIGH findings were in Node packages inside the image, for example `brace-expansion` 2.0.2, which came from the npm and corepack trees bundled in the node base image rather than from application dependencies.
+
+Dockerfile changes (`Dockerfile`):
+
+- Build and runtime stages move from `node:22-bookworm` and `node:22-bookworm-slim` to `node:22-trixie` and `node:22-trixie-slim`, both pinned by digest (the `22-trixie` and `22-trixie-slim` tag digests on Docker Hub at the time of the change). The native boundary helper is still compiled with `cc` in the build stage, which the full node image provides.
+- The runtime stage removes `npm`, `corepack` and their bundled `node_modules`, plus the `npm`, `npx` and `corepack` launchers. CMD and HEALTHCHECK only run `node`, so nothing in the runtime needs npm. The image still has no apt layer, no compiler, and runs as `10001:10001`.
+- Nothing is added to the runtime. The build stage is otherwise unchanged. No `apt-get upgrade` was added, because the scanned image is the runtime and the build stage is not published.
+
+Expected effect (to be confirmed, not claimed, by the `image-build` run on this branch):
+
+- The eleven HIGH Node findings from the bundled npm tree should disappear with npm removed. Any findings in the production `node_modules` would still appear and must be triaged separately.
+- The OS count should drop where trixie carries fixed Debian packages. Findings with no fix upstream (for example the zlib `will_not_fix` entry) are expected to remain.
+- Actual before and after numbers: TBD, filled by the orchestrator from the `image-vuln-scan-amd64` artifact of the first CI run on this branch. The gate stays report-only (`exit-code: '0'`).
+
+Local evidence: none for the image. Docker is not available in this environment; the Dockerfile change was reviewed by hand and is validated only by the CI image build, smoke and native-helper ELF check.
+
 ## Phase 8 slice 1 — Manage shell and read-only Skills
 
 What landed (ADR-028):
