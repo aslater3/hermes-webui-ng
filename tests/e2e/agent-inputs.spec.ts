@@ -69,6 +69,12 @@ test('clarify forms preserve DOM identity and remain usable at reduced viewport 
   await page.getByRole('article',{name:'Question from Hermes',exact:true}).screenshot({path:info.outputPath('agent-reduced-height.png')});
   await page.getByRole('button',{name:'Cancel question request',exact:true}).click();await expect(page.locator('#session-state')).toHaveText('idle');
 });
+test('an unanswered clarify draft survives a transport reconnect and the request stays answerable',async({page})=>{
+  await start(page,'clarify');const note=page.getByLabel('Your answer',{exact:true});await note.fill('Draft kept across reconnect');
+  await page.getByRole('button',{name:'Disconnect transport',exact:true}).click();await page.getByRole('button',{name:'Reconnect',exact:true}).click();
+  await expect(page.locator('#gateway-state')).toHaveText('ready');await expect(note).toHaveValue('Draft kept across reconnect');
+  await page.getByRole('button',{name:'Cancel question request',exact:true}).click();await expect(page.locator('#session-state')).toHaveText('idle');
+});
 test('changing selection and signing out remove pending secrets and tool content',async({page})=>{
   await start(page,'secret');await page.getByLabel('Secret value',{exact:true}).fill('OLD_SELECTION_SECRET');
   await page.locator('#create').click();await expect(page.locator('#agent-activity')).not.toBeVisible();await expect(page.locator('#agent-activity input[type="password"]')).toHaveCount(0);

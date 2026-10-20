@@ -36,7 +36,7 @@ test('saved history remains readable without a Gateway and resumes after reconne
 });
 test('interrupt ends a controlled running turn and the next prompt can complete',async({page})=>{
   await signIn(page);await page.locator('#create').click();await expect(page.locator('#session-state')).toHaveText('idle');
-  await page.locator('#prompt').fill('[slow-test] stop this controlled turn');await page.locator('#send').click();
+  await page.locator('#prompt').fill('[held-test] stop this controlled turn');await page.locator('#send').click();
   await expect(page.locator('#transcript')).toContainText('Controlled turn is running');await page.locator('#interrupt').click();
   await expect(page.locator('#session-state')).toHaveText('idle');await expect(page.locator('#transcript [data-role="assistant"]')).toHaveCount(0);
   await page.locator('#prompt').fill('After interruption');await page.locator('#send').click();await expect(page.locator('#transcript')).toContainText('SYNTHETIC_RESPONSE');

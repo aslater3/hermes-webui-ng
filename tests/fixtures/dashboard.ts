@@ -286,7 +286,9 @@ export async function startFixture(port = 0, options: { sessionToken?: string; b
         const turn = ++session.turn;
         reply({ status: 'streaming' }); event('message.start', params.session_id);
         if(interactions.start(params.session_id,String(params.text),emitAgent,(text)=>{session.messages.push({role:'assistant',text});session.running=false;session.inflight='';session.updated=Date.now()/1000;}))return;
-        const slow = String(params.text).startsWith('[slow-test]');
+        // [held-test] is a controlled turn that stays running until interrupted: it never completes on its own timer.
+        const held = String(params.text).startsWith('[held-test]');
+        const slow = held || String(params.text).startsWith('[slow-test]');
         const streaming = String(params.text).startsWith('[stream-test]');
         const childAgent = String(params.text).startsWith('[subagent-test]');
         const later = (callback: () => void, delay: number) => {
@@ -339,7 +341,7 @@ export async function startFixture(port = 0, options: { sessionToken?: string; b
             if (client.readyState === 1) event('session.info', params.session_id, { running: false });
           }, 20);
         };
-        later(() => {
+        if (!held) later(() => {
           // Test-only completion barrier: real snapshots stay working until released.
           if (options.beforePromptComplete) void options.beforePromptComplete(String(params.text)).then(complete, () => {
             if (closed || session.turn !== turn) return;
