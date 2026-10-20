@@ -111,6 +111,7 @@ export function parseInput(kind: InputKind, raw: unknown): AgentInput {
   };
 }
 export interface InputReply { value: string; questionId?: string; }
+/** LEGACY (fixture-only): builds `<kind>.respond` RPCs. Live prompts answer the server request id instead (peer-requests.ts). */
 export function inputRpc(input: AgentInput, reply: InputReply, runtimeId: string): { method: string; params: Record<string, unknown> } {
   if (input.status !== 'pending' || input.blocked || typeof reply.value !== 'string' || reply.value.length > 16384)
     throw new ClientError('protocol', 'This request cannot be answered safely');
@@ -206,6 +207,8 @@ export class AgentActivity {
   receive(event: GatewayEvent): boolean {
     try {
       const parts = event.type.split('.');
+      // LEGACY (fixture-only): Hermes never emits `<kind>.request|expire` events at the pinned c5a3c0f runtime. Prompts arrive
+      // as JSON-RPC server requests (peer-requests.ts). Only tests/fixtures/agent-scenarios.ts emits these.
       if (KINDS.includes(parts[0] as InputKind) && ['request','expire'].includes(parts[1] ?? '')) {
         const kind = parts[0] as InputKind, payload = record(event.payload);
         if (parts[1] === 'request') this.put(parseInput(kind, payload));

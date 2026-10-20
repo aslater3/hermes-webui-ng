@@ -16,11 +16,21 @@ Host gates: production build, both typechecks, lint, **384 unit tests and 39 HTT
 
 Open follow-ups:
 
-- Remove the legacy event-driven input path (`AgentActivity` inputs and `NativeSession.respond` → `*.respond` RPCs) once older runtimes are dropped.
-- Steer status `redirected` and active-session statuses `streaming`/`resuming` are not yet handled.
-- `contract-reference.yml` still captures reference fixtures at `b6b53c69`.
-- `npm audit` reports two high-severity advisories (not CI-gated); triage under Phase 10.
+- Legacy event-driven prompt path (`<kind>.request|expire` intake in `AgentActivity.receive`, `NativeSession.respond` → `<kind>.respond` RPCs, the matching regexes in `session-attention.ts`/`native-session.ts`) is deferred. Analysis: upstream never emits these events or serves `clarify|sudo|secret.respond` at c5a3c0f; `approval.respond` is still used for the upstream `pending_approval` snapshot fallback. The only live driver is the synthetic `tests/fixtures/agent-scenarios.ts`, which backs about ten `[agent-test]` e2e specs (`agent-inputs`, `approval-attention`, `m3-activity`, `shell`, `shell-yolo`, `native-command-parity`, `command-routes`, `reasoning-placement`, `session-attention`) and the `tests/contract/agent` and `m3-session-attention` contracts. Removing it needs that fixture converted to JSON-RPC server requests and those specs re-verified in the browser, so this slice only marks the legacy entry points in code. PR #40 outcome cards (`activity.record`) are unaffected.
+- `contract-reference.yml` now checks out `c5a3c0f8767a72203363d249add14142dbcf3cc7`. It runs no Python: it only records `rev-parse HEAD` and tars the listed paths (all verified present at c5a3c0f), so the 3.14 / `uv sync --frozen` requirement does not apply. Its artifact still feeds `import-lockfile.yml`. Not yet run in Actions.
 - Upstream additions worth adopting: `session.create` `idempotency_key`, `subagent.list` `delegations[]`, `session.events.since`, `subagent.steer/interrupt/tail`.
+
+Recertification follow-up slice: `npm audit` triage.
+
+- Before: two high advisories, both transitive and dev-only. `brace-expansion` (GHSA-6j4f-fj2g-mc7p, GHSA-qhr7-859c-m2p7; `<1.1.19`, `4.0.0-5.0.10`) via `minimatch` under `eslint`/`@typescript-eslint`. `source-map-js` (GHSA-68fv-2mgg-jv7q; `<1.2.2`) via `postcss` under the Vite build. Neither package is in the production runtime.
+- Fix applied with `npm audit fix --package-lock-only`, a patch-only lockfile change: `brace-expansion` 1.1.18 to 1.1.21 and 5.0.9 to 5.0.12, and `source-map-js` 1.2.1 to 1.2.2. `npm audit --json` now reports zero vulnerabilities.
+- `node_modules` was not refreshed in this slice. The orchestrator must run `npm ci` or equivalent before the next build, typecheck or test run that relies on those versions.
+
+Recertification follow-up slice (c5a3c0f): steer and active-session statuses.
+
+- `session.steer` acknowledgements are `queued` or `rejected` upstream; `redirected` is emitted by `session.redirect` at c5a3c0f. `steerSession` accepts `redirected` defensively and returns `{text, outcome}`; `steerOutcomeCopy` gives honest copy ("Redirected the running turn" / "Steer queued for the running turn"). No composer surface calls `steerSession` yet, so no UI copy is rendered.
+- `session.active_list` `streaming` maps to `working` and `resuming` maps to `starting` (`attentionStatus` in `session-attention.ts`). Unknown statuses stay `unknown`.
+- Evidence: unit tests in `tests/unit/session-steer.test.ts` and `tests/unit/session-attention.test.ts`; build, typecheck, lint, 399 unit and 39 contract tests passed. No browser behaviour changed.
 
 Changes after this document's 14 September update and before this branch (steering, nested subagents, #36–#38 protocol fixes) are on `main`; see Git history.
 
@@ -120,6 +130,29 @@ Known boundaries, stated so they are not mistaken for completion:
 - On a phone the approval card is taller than the transcript pane, so the invariant tested there is
   "pinned to the bottom, request tail on screen, nothing after it" rather than full visibility.
 - The `attention-strip` button remains the recovery path when the operator has deliberately scrolled away.
+
+## Phase 10 packaging: image build, SBOM and vulnerability scan
+
+Source: `.github/workflows/image-build.yml` (new; `docker.yml` production smoke is unchanged). Runs on pull requests and pushes to `main`, plus manual dispatch. It builds the production `Dockerfile` for `linux/amd64` with `docker/build-push-action` (`push: false`, image loaded locally), uses no registry login and no secrets, and has `contents: read` only.
+
+**Scope decision (operator, 2026-10-20): `linux/amd64` only.** The `linux/arm64` image in `13-acceptance-criteria.md` is out of scope and is not built.
+
+What the workflow proves on each run:
+
+- The amd64 image builds, including the native workspace boundary helper (`server/workspace/native-boundary.c`).
+- The compiled helper is x86-64: the ELF `e_machine` of `build/server/workspace/workspace-boundary.node` is read inside the image (62).
+- The Dockerfile `HEALTHCHECK` (`node build/server/healthcheck.js`, probes `/healthz`) is present in the image metadata. The compose files define no separate healthcheck, so the Dockerfile is the only definition.
+- An SPDX JSON SBOM is generated with `anchore/sbom-action` and uploaded as artifact `image-sbom-amd64-spdx`.
+- The image is scanned with Trivy (`severity: HIGH,CRITICAL`, `ignore-unfixed: false`). A table and a SARIF report are uploaded as artifact `image-vuln-scan-amd64`.
+
+**The vulnerability gate is report-only.** Both Trivy steps use `exit-code: '0'`, so findings do not turn CI red. The gate stays report-only until the first baseline is triaged; only then flip `exit-code` to `'1'` and record the agreed threshold here. Until then, a clean report is not evidence of no vulnerabilities.
+
+Known boundaries, stated so they are not mistaken for completion:
+
+- Nothing was run locally. The workflow was validated for YAML syntax and reviewed by hand; its CI run is the evidence.
+- No image is published. Registry push, OCI labels, provenance/signing and the semver/`latest` tag policy from `docs/09-docker-deployment.md` section 12 remain release work (Phase 10 release tasks, human-approved).
+- `npm audit` findings noted above under "Upstream recertification" are not covered by the image scan; triage them separately.
+- The `docs/13-acceptance-criteria.md` Packaging checkboxes stay unticked until a green CI run on the merge head is recorded here.
 
 ## Phase 8 slice 1 — Manage shell and read-only Skills
 

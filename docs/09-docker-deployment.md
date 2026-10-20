@@ -202,14 +202,11 @@ Workspace volume is the intentional writable area when enabled. If the Node runt
 
 Docker healthcheck should use `/healthz`, not upstream readiness, to avoid restart loops when Hermes is down.
 
-## 11. Multi-architecture
+## 11. Architecture
 
-Publish:
+Publish `linux/amd64` only. `linux/arm64` is out of scope (operator decision, 2026-10-20).
 
-- `linux/amd64`
-- `linux/arm64`
-
-Useful for x86 servers and Raspberry Pi/ARM homelabs.
+Current state (Phase 10 packaging, `.github/workflows/image-build.yml`): CI builds the amd64 image without pushing. Images are not yet published to a registry; that is a release step.
 
 ## 12. CI image pipeline
 
@@ -218,11 +215,13 @@ On PR:
 - lint/typecheck/tests;
 - build image;
 - Docker smoke test;
-- vulnerability scan.
+- vulnerability scan (report-only until the baseline is triaged; `exit-code: '0'` in `.github/workflows/image-build.yml`).
+
+Implemented on PR and `main` (`docker.yml`, `image-build.yml`): the amd64 smoke, the `linux/amd64` build without push, the SPDX SBOM, and the Trivy report. buildx with OCI labels, provenance, signing and the release tagging policy below remain tag-time work.
 
 On tag:
 
-- multi-arch buildx;
+- buildx (amd64);
 - OCI labels;
 - SBOM;
 - provenance/signature if available;
