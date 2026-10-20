@@ -1,22 +1,26 @@
 # Implementation Status
 
-## Upstream recertification in progress — 20 October 2026
+## Upstream recertification — 20 October 2026
 
-Branch `fix/hermes-main-recertify` moves the certified runtime from `b6b53c69` (12 Sep 2026) to **`NousResearch/hermes-agent@c5a3c0f8767a72203363d249add14142dbcf3cc7`** (upstream `main`, 20 Oct 2026; 22,735 commits later). **Not certified until the pinned vanilla-Hermes workflow passes on this branch's head.** Until then the accepted runtime below remains `b6b53c69`.
+Branch `fix/hermes-main-recertify` (PR #39) moves the certified runtime from `b6b53c69` (12 Sep 2026) to **`NousResearch/hermes-agent@c5a3c0f8767a72203363d249add14142dbcf3cc7`** (upstream `main`, 20 Oct 2026; 22,735 commits later). The pinned vanilla-Hermes workflow passed on `2cb462b` (run `39392640296`): gated and trusted-local deployment acceptance, Phase 3/M3 approval, sudo and secret in both modes, Phase 4b, read-only and writable workspace in both modes, and HTTPS/WSS — 94 distinct live gates. The certified runtime becomes `c5a3c0f` once this PR merges; the final head's own CI is the record.
 
-Source comparison of every RPC, event and REST route NG uses found the handshake, ws-ticket auth, session/prompt/history/subagent/command RPCs and REST session routes unchanged or compatibly extended; fixes #36–#38 match main's strict contracts. One behavioural break: main no longer emits `approval|clarify|sudo|secret.request`/`.expire` events. Interactive prompts arrive only as JSON-RPC server requests and are withdrawn by `request.cancel`. Foreground prompts were already handled; background-session attention now also observes server-request frames (metadata only: session id and method) and `request.cancel`, while keeping the legacy events for older runtimes.
+Upstream changes that required NG changes, each found by the live gate rather than assumed:
 
-Host gates on this branch: production build, both typechecks, lint, **384 unit tests and 38 HTTP/WebSocket contracts** pass under both umask 002 and 022. Workspace-write fixtures previously failed under umask 002 because the (correct) group-writable-root refusal rejected their 0775 directories; fixtures now set 0755 explicitly. No production check changed.
+- **Interactive prompts are server requests only.** Main no longer emits `approval|clarify|sudo|secret.request`/`.expire` or serves `clarify|sudo|secret.respond`; prompts arrive as JSON-RPC server requests and are withdrawn by `request.cancel`. Foreground handling (`PeerRequests`, `NativeQuestions`) already existed. Background-session attention now also observes server-request frames (metadata only) and `request.cancel`; legacy events are still honoured for older runtimes.
+- **Multi-select clarify answers** were sent newline-joined; Hermes splits only a list or JSON array string, so several picks arrived as one answer. They are now sent as a JSON array string (the wire accepts string values only). The previous unit test asserted the broken encoding.
+- **Trusted-local readiness** probed `/api/sessions`, which main answers 503 until the first session creates the store, so a fresh install could never become ready or admitted. The probe now uses token-protected, store-independent `/api/profiles`; a contract fixture models the uninitialised store.
+- **Live gates:** Phase 3 and M3 now drive prompts through `gateway.requests` as the UI does. Renamed gates: `native-partial-batch-acknowledgement` → `native-batch-answer-single-response` (main answers a clarify batch in one response); the lost-sudo/secret gates now assert reconnect recovery, no replay of the superseded request and interrupt withdrawal. The vacuous `secret.request` counter is replaced by server-request observation. The M3 fixture model matches the stage line because main appends a first-message onboarding note on a fresh home.
+- **CI:** main's frozen lock requires Python 3.14; M3 failures now print Hermes/provider log tails.
 
-Open follow-ups from the comparison:
+Host gates: production build, both typechecks, lint, **384 unit tests and 39 HTTP/WebSocket contracts** pass under umask 002 and 022 (workspace-write fixtures now set 0755 explicitly; previously they failed under 002 against the correct group-writable-root refusal).
 
-- `tests/integration/phase3-full.ts` counts `secret.request` events; on main that count is always zero, so its assertion is vacuous. Rewrite against server requests.
-- `process.stop`, `agents.list` and `reload.*` are served by upstream's legacy fallback router; verify live.
+Open follow-ups:
+
+- Remove the legacy event-driven input path (`AgentActivity` inputs and `NativeSession.respond` → `*.respond` RPCs) once older runtimes are dropped.
 - Steer status `redirected` and active-session statuses `streaming`/`resuming` are not yet handled.
-- Legacy `?token=` WS auth is refused in gated mode upstream; NG uses tickets, but recheck trusted-local.
 - `contract-reference.yml` still captures reference fixtures at `b6b53c69`.
 - `npm audit` reports two high-severity advisories (not CI-gated); triage under Phase 10.
-- Upstream additions worth adopting later: `session.create` `idempotency_key`, `subagent.list` `delegations[]`, `session.events.since`, `subagent.steer/interrupt/tail`.
+- Upstream additions worth adopting: `session.create` `idempotency_key`, `subagent.list` `delegations[]`, `session.events.since`, `subagent.steer/interrupt/tail`.
 
 Changes after this document's 14 September update and before this branch (steering, nested subagents, #36–#38 protocol fixes) are on `main`; see Git history.
 
