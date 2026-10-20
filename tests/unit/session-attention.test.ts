@@ -6,9 +6,11 @@ import type { ConnectionState } from '../../src/hermes/gateway-client.js';
 class Wire {
   state: ConnectionState = { phase: 'ready', generation: 1, attempt: 0 };
   events = new Set<(e: GatewayEvent) => void>(); states = new Set<(s: ConnectionState) => void>();
-  rows: unknown[] = []; count = 0; hook?: () => Promise<unknown>;
+  rows: unknown[] = []; count = 0; hook?: () => Promise<unknown>; peers = new Set<(sessionId: string, method: string) => void>();
   call = async (method: string) => { assert.equal(method, 'session.active_list'); this.count++; return this.hook ? this.hook() : { sessions: this.rows }; };
   onEvent(fn: (e: GatewayEvent) => void) { this.events.add(fn); return () => { this.events.delete(fn); }; }
+  onPeerRequest(fn: (sessionId: string, method: string) => void) { this.peers.add(fn); return () => { this.peers.delete(fn); }; }
+  peer(sessionId: string, method: string) { this.peers.forEach(fn => fn(sessionId, method)); }
   onState(fn: (s: ConnectionState) => void) { this.states.add(fn); fn(this.state); return () => { this.states.delete(fn); }; }
   emit(type: string, session_id = 'live') { this.events.forEach(fn => fn({ type, session_id, payload: { password: 'NEVER_RETAIN' } })); }
   row(status: string, id = 'live', session_key = 'saved') { return { id, session_key, status, title: 'A chat', preview: 'PRIVATE_BODY', model: 'PRIVATE_MODEL' }; }
@@ -53,4 +55,27 @@ test('working sessions with a confirmed pending approval are reported as waiting
   const store = new SessionAttention(wire); t.after(() => store.dispose()); store.setEnabled(true);
   wire.rows = [wire.row('working')]; await store.refresh();
   assert.equal(store.items[0]?.status, 'waiting'); assert.ok(!JSON.stringify(store.items).includes('PRIVATE_OPERATION'));
+});
+test('a server request for a backgrounded tracked session marks it waiting, and an untracked one creates no row', async t => {
+  const wire = new Wire(), store = new SessionAttention(wire); t.after(() => store.dispose()); store.setEnabled(true);
+  wire.rows = [wire.row('working')]; await store.refresh();
+  wire.peer('other', 'approval');
+  assert.equal(store.items.length, 1); assert.equal(store.items[0]?.status, 'working');
+  wire.peer('live', 'secret');
+  assert.equal(store.items[0]?.status, 'waiting');
+  assert.ok(!JSON.stringify(store.items).includes('NEVER_RETAIN'));
+});
+test('request.cancel refreshes the inventory without marking the session waiting', async t => {
+  const wire = new Wire(), store = new SessionAttention(wire); t.after(() => store.dispose()); store.setEnabled(true);
+  wire.rows = [wire.row('working')]; await store.refresh(); const before = wire.count;
+  wire.emit('request.cancel');
+  assert.equal(store.items[0]?.status, 'working');
+  await new Promise(resolve => setTimeout(resolve, 200));
+  assert.equal(wire.count, before + 1); assert.equal(store.items[0]?.status, 'working');
+});
+test('legacy approval.request still marks a tracked session waiting', async t => {
+  const wire = new Wire(), store = new SessionAttention(wire); t.after(() => store.dispose()); store.setEnabled(true);
+  wire.rows = [wire.row('working')]; await store.refresh();
+  wire.emit('approval.request');
+  assert.equal(store.items[0]?.status, 'waiting');
 });

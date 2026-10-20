@@ -4,7 +4,7 @@ import { mkdir, writeFile } from 'node:fs/promises';
 import { DashboardClient } from '../../src/hermes/dashboard-client.js';
 import { WorkspaceApi } from '../../client/workspace/api.js';
 import { browserAuth } from '../helpers/browser-auth.js';
-const pin = 'b6b53c69a6ed49cb099cf1bfe76b5e6edd718e5a';
+const pin = 'c5a3c0f8767a72203363d249add14142dbcf3cc7';
 const origin = 'https://127.0.0.1:8790', mode = process.env.PHASE4_TLS_MODE;
 assert.equal(process.env.HERMES_TEST_REF, pin);
 assert.ok(['dashboard', 'trusted-local'].includes(mode ?? ''));

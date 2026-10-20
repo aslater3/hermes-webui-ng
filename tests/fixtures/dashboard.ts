@@ -6,7 +6,7 @@ import { ModelScenarios } from './model-scenarios.js';
 import { AgentScenarios } from './agent-scenarios.js';
 import { WS_PROTOCOL } from '../../src/hermes/dashboard-client.js';
 
-export async function startFixture(port = 0, options: { sessionToken?: string; beforeWsTicket?: () => Promise<void>; beforePromptComplete?: (text: string) => Promise<void>; requireSubagentActivation?: boolean; emptyOwnedSubagentRoster?: boolean } = {}) {
+export async function startFixture(port = 0, options: { sessionToken?: string; beforeWsTicket?: () => Promise<void>; beforePromptComplete?: (text: string) => Promise<void>; requireSubagentActivation?: boolean; emptyOwnedSubagentRoster?: boolean; uninitializedSessionStore?: boolean } = {}) {
   const cookie = `fixture_auth=${randomBytes(24).toString('hex')}`;
   const tickets = new Set<string>();
   const interactions = new AgentScenarios();
@@ -72,6 +72,11 @@ export async function startFixture(port = 0, options: { sessionToken?: string; b
         last_active: session.updated, message_count: session.messages.length, source: 'webui-ng' }));
     const limit = Math.min(100, Math.max(1, Number(url.searchParams.get('limit') ?? 20)));
     const offset = Math.max(0, Number(url.searchParams.get('offset') ?? 0));
+    // Current Hermes refuses session browsing until the first session creates the store.
+    if (options.uninitializedSessionStore && url.pathname.startsWith('/api/sessions')) {
+      send(503, { detail: "Session store is not initialized. Start this profile's gateway to initialize it." }); return;
+    }
+    if (req.method === 'GET' && url.pathname === '/api/profiles') { send(200, { profiles: [{ name: 'default' }] }); return; }
     if (req.method === 'GET' && url.pathname === '/api/sessions') {
       send(200, { sessions: rows.slice(offset, offset + limit), total: rows.length, limit, offset }); return;
     }

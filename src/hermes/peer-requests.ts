@@ -7,7 +7,7 @@ export interface PeerRequest {
 }
 export interface PeerFrame { id: string | number; method: string; params: unknown }
 export type PeerAnswer = { choice?: string; answer?: string; answers?: Record<string, string>; value?: string };
-const methods = new Set(['approval', 'clarify', 'sudo', 'secret', 'vault.code', 'vault.unlock_prompt', 'vault.unlock', 'vault.save_login']);
+export const peerMethods: ReadonlySet<string> = new Set(['approval', 'clarify', 'sudo', 'secret', 'vault.code', 'vault.unlock_prompt', 'vault.unlock', 'vault.save_login']);
 const string = (value: unknown, limit = 4096, optional = false): string => {
   if (optional && value === undefined) return '';
   if (typeof value !== 'string' || value.length > limit || value.includes('\0'))
@@ -19,6 +19,7 @@ const strings = (value: unknown): string[] => {
   if (!Array.isArray(value) || value.length > 32) throw new ClientError('protocol', 'Invalid native choices.');
   return [...new Set(value.map(item => string(item, 2048)))];
 };
+const multiAnswer = (text: string): string => JSON.stringify(text.split('\n').filter(item => item.trim()));
 function projection(frame: PeerFrame): PeerRequest {
   const p = record(frame.params), sessionId = string(p.session_id, 256), id = string(frame.id, 128);
   if (!sessionId || !id) throw new ClientError('protocol', 'Native interactive ownership is missing.');
@@ -74,7 +75,7 @@ export class PeerRequests {
     this.send({ jsonrpc: '2.0', id, error: { code, message: code === -32601 ? 'This client does not implement the requested surface.' : 'Invalid native interactive request.' } });
   }
   receive(frame: PeerFrame): void {
-    if (!methods.has(frame.method)) { this.error(frame.id, -32601); return; }
+    if (!peerMethods.has(frame.method)) { this.error(frame.id, -32601); return; }
     if (!this.visible) return; // Authoritative open_requests restores unanswered questions on foreground.
     let request: PeerRequest;
     try { request = projection(frame); } catch { this.error(frame.id, -32602); return; }
@@ -115,7 +116,9 @@ export class PeerRequests {
     } else if (request.kind === 'clarify') {
       if (cancel) result = request.batch ? {} : { answer: '' };
       else if (!request.batch) result = { answer: string(answer.answer, 32768) };
-      else result = { answers: Object.fromEntries(request.questions.map(q => [q.id, q.locked ?? string(answer.answers?.[q.id], 32768)])) };
+      // Multi-select picks are newline-joined in the form; Hermes splits only a JSON array string.
+      else result = { answers: Object.fromEntries(request.questions.map(q => [q.id, q.locked ?? (q.multiple ?
+        multiAnswer(string(answer.answers?.[q.id], 32768)) : string(answer.answers?.[q.id], 32768))])) };
     } else result = { value: cancel ? '' : string(answer.value, 32768) };
     if (JSON.stringify({ jsonrpc: '2.0', id: request.id, result }).length > 1_048_576)
       throw new ClientError('protocol', 'The combined answer is too large. Shorten it before sending.');

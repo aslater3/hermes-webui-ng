@@ -9,7 +9,7 @@ import { ConnectionStore } from '../../src/hermes/connection-store.js';
 import { DiagnosticsRing } from '../../src/hermes/diagnostics.js';
 import { ClientError } from '../../src/hermes/protocol.js';
 import { browserAuth } from '../helpers/browser-auth.js';
-const pin = 'b6b53c69a6ed49cb099cf1bfe76b5e6edd718e5a';
+const pin = 'c5a3c0f8767a72203363d249add14142dbcf3cc7';
 const gates: string[] = [];
 const origin = process.env.PHASE0_ORIGIN ?? 'http://127.0.0.1:8787';
 const username = process.env.HERMES_DASHBOARD_BASIC_AUTH_USERNAME;

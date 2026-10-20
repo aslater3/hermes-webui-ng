@@ -20,6 +20,11 @@ provider_pid=''; hermes_pid=''; created=false
 cleanup() {
   result=$?; trap - EXIT
   docker logs webui-m3 2>/dev/null | tail -n 8 || true
+  if [ "$result" != 0 ]; then
+    # Generated credentials are masked above; print tails only, retain no raw logs as artifacts.
+    tail -n 60 "$RUNNER_TEMP/m3-hermes-$mode.log" 2>/dev/null || true
+    tail -n 20 "$RUNNER_TEMP/m3-provider-$mode.log" 2>/dev/null || true
+  fi
   docker rm -f webui-m3 >/dev/null 2>&1 || true
   if [ -n "$hermes_pid" ]; then sudo kill "$hermes_pid" 2>/dev/null || true; fi
   if [ "$created" = true ]; then sudo pkill -u "$account" || true; for attempt in $(seq 1 30); do if ! pgrep -u "$account" >/dev/null; then break; fi; sleep 0.1; done; sudo pkill -KILL -u "$account" || true; if [ -n "$hermes_pid" ]; then wait "$hermes_pid" 2>/dev/null || true; fi; sudo rm -f /etc/sudoers.d/hermes-m3-fixture; sudo userdel "$account" || true; fi

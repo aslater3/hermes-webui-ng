@@ -8,7 +8,7 @@ import { GatewayClient } from '../../src/hermes/gateway-client.js';
 import { ConnectionStore } from '../../src/hermes/connection-store.js';
 import { NativeSession } from '../../src/hermes/native-session.js';
 import { EXPECTED_RESPONSE } from './provider.js';
-const PIN = 'b6b53c69a6ed49cb099cf1bfe76b5e6edd718e5a';
+const PIN = 'c5a3c0f8767a72203363d249add14142dbcf3cc7';
 const origin = 'http://127.0.0.1:8789', gates: string[] = [];
 const sockets: WebSocket[] = [];
 const deadline = setTimeout(() => { console.error('Local acceptance deadline exceeded'); process.exit(1); }, 150_000);

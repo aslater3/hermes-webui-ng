@@ -1,4 +1,4 @@
-import { PeerRequests } from './peer-requests.js';
+import { PeerRequests, peerMethods } from './peer-requests.js';
 import { WS_PROTOCOL, type WsCredential } from './ws-auth.js';
 import type { DiagnosticsRing } from './diagnostics.js';
 import { ClientError, MAX_FRAME_CHARS, oversizedReplyId, parseFrames, record, type GatewayEvent } from './protocol.js';
@@ -69,6 +69,7 @@ export class GatewayClient {
   private readyPayload: Record<string, unknown> = {};
   private pending = new Map<string | number, Pending>();
   private events = new Set<(event: GatewayEvent) => void>();
+  private peerObservers = new Set<(sessionId: string, method: string) => void>();
   private states = new Set<(state: ConnectionState) => void>();
   state: ConnectionState = { phase: 'disconnected', generation: 0, attempt: 0 };
 
@@ -79,6 +80,19 @@ export class GatewayClient {
   onEvent(handler: (event: GatewayEvent) => void): () => void {
     this.events.add(handler);
     return () => { this.events.delete(handler); };
+  }
+  /** Metadata-only observer: sees session id and method of each well-formed, supported peer request. Never params. */
+  onPeerRequest(handler: (sessionId: string, method: string) => void): () => void {
+    this.peerObservers.add(handler);
+    return () => { this.peerObservers.delete(handler); };
+  }
+  private observePeerRequest(frame: { id: string | number; method: string; params: unknown }): void {
+    if (!peerMethods.has(frame.method)) return;
+    const params = frame.params;
+    if (!params || typeof params !== 'object' || Array.isArray(params)) return;
+    const sessionId = (params as Record<string, unknown>).session_id;
+    if (typeof sessionId !== 'string') return;
+    for (const observer of this.peerObservers) this.notify(() => observer(sessionId, frame.method));
   }
   onState(handler: (state: ConnectionState) => void): () => void {
     this.states.add(handler);
@@ -167,7 +181,10 @@ export class GatewayClient {
           for (const frame of parseFrames(message.data)) {
             if (generation !== this.generation) return;
             if (frame.kind === 'request') {
-              if (this.state.phase === 'ready') this.requests.receive(frame);
+              if (this.state.phase === 'ready') {
+                this.observePeerRequest(frame);
+                this.requests.receive(frame);
+              }
             } else if (frame.kind === 'reply') {
               const pending = this.pending.get(frame.id);
               if (!pending) continue;

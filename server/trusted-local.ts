@@ -81,7 +81,7 @@ export async function localAccess(config: Config): Promise<{ mode: string; authe
   const options: RequestInit = { headers, signal, redirect: 'error' };
   const status = await fetch(new URL('/api/status', config.upstream), options);
   if (!status.ok || (await smallJson(status)).auth_required !== false) throw new Error('Local mode mismatch');
-  const protectedResponse = await fetch(new URL('/api/sessions?limit=1', config.upstream), options);
+  const protectedResponse = await fetch(new URL('/api/profiles', config.upstream), options);
   const valid = protectedResponse.ok && protectedResponse.headers.get('content-type')?.includes('application/json');
   await protectedResponse.body?.cancel();
   if (!valid) throw new Error('Local upstream credential rejected');
