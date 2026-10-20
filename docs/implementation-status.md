@@ -120,3 +120,25 @@ Known boundaries, stated so they are not mistaken for completion:
 - On a phone the approval card is taller than the transcript pane, so the invariant tested there is
   "pinned to the bottom, request tail on screen, nothing after it" rather than full visibility.
 - The `attention-strip` button remains the recovery path when the operator has deliberately scrolled away.
+
+## Phase 10 packaging: multi-arch build, SBOM and vulnerability scan
+
+Source: `.github/workflows/image-multiarch.yml` (new; `docker.yml` production smoke is unchanged). Runs on pull requests and pushes to `main`, plus manual dispatch. It builds the production `Dockerfile` for `linux/amd64` and `linux/arm64` with `docker/build-push-action` (`push: false`, images loaded locally), uses no registry login and no secrets, and has `contents: read` only.
+
+What the workflow proves on each run:
+
+- Both platform images build. The arm64 build runs under QEMU (`docker/setup-qemu-action`), so `npm run build` compiles `server/workspace/native-boundary.c` with `cc` inside the build stage.
+- The compiled helper in each image is the right architecture: the ELF `e_machine` of `build/server/workspace/workspace-boundary.node` is read in a container of that platform (62 = x86-64, 183 = AArch64).
+- The Dockerfile `HEALTHCHECK` (`node build/server/healthcheck.js`, probes `/healthz`) is present in both images' metadata. The compose files define no separate healthcheck, so the Dockerfile is the only definition.
+- An SPDX JSON SBOM for the amd64 image is generated with `anchore/sbom-action` and uploaded as artifact `image-sbom-amd64-spdx`.
+- The amd64 image is scanned with Trivy (`severity: HIGH,CRITICAL`, `ignore-unfixed: false`). A table and a SARIF report are uploaded as artifact `image-vuln-scan-amd64`.
+
+**The vulnerability gate is report-only.** Both Trivy steps use `exit-code: '0'`, so findings do not turn CI red. The gate stays report-only until the first baseline is triaged; only then flip `exit-code` to `'1'` and record the agreed threshold here. Until then, a clean report is not evidence of no vulnerabilities.
+
+Known boundaries, stated so they are not mistaken for completion:
+
+- Nothing was run locally. The workflow was validated for YAML syntax and reviewed by hand. The first CI run is the evidence and may need fixes (for example arm64 build time, which is capped at 60 minutes).
+- The SBOM and scan cover only the amd64 image. The arm64 image is built and checked but not scanned or SBOM'd.
+- No image is published. Registry push, OCI labels, provenance/signing and the semver/`latest` tag policy from `docs/09-docker-deployment.md` section 12 remain release work (Phase 10 release tasks, human-approved).
+- `npm audit` findings noted above under "Upstream recertification" are not covered by the image scan; triage them separately.
+- The `docs/13-acceptance-criteria.md` Packaging checkboxes stay unticked until a green CI run on the merge head is recorded here.

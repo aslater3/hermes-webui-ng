@@ -1,0 +1,127 @@
+name: Multi-arch image, SBOM and scan
+
+# Build-only packaging checks. Nothing here logs in to a registry, pushes an
+# image, creates a release or reads secrets; artifacts stay on the workflow run.
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  image-multiarch:
+    runs-on: ubuntu-latest
+    # arm64 runs under QEMU and compiles the native workspace boundary helper
+    # (scripts/build-workspace-native.mjs via `npm run build`) inside the image build.
+    timeout-minutes: 60
+    env:
+      IMAGE_AMD64: hermes-webui-ng:amd64-ci
+      IMAGE_ARM64: hermes-webui-ng:arm64-ci
+      OUT_DIR: ${{ runner.temp }}/packaging
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: docker/setup-qemu-action@v4
+        with:
+          platforms: arm64
+      - uses: docker/setup-buildx-action@v4
+      - name: Build linux/amd64 production image (local load, no push)
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          platforms: linux/amd64
+          load: true
+          push: false
+          tags: ${{ env.IMAGE_AMD64 }}
+          cache-from: type=gha,scope=image-amd64
+          cache-to: type=gha,scope=image-amd64,mode=max
+      - name: Build linux/arm64 production image under QEMU (local load, no push)
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          platforms: linux/arm64
+          load: true
+          push: false
+          tags: ${{ env.IMAGE_ARM64 }}
+          cache-from: type=gha,scope=image-arm64
+          cache-to: type=gha,scope=image-arm64,mode=max
+      - name: Verify architectures, healthcheck metadata and native helper
+        run: |
+          set -euo pipefail
+          test "$(docker image inspect -f '{{.Architecture}}' "$IMAGE_AMD64")" = amd64
+          test "$(docker image inspect -f '{{.Architecture}}' "$IMAGE_ARM64")" = arm64
+          for image in "$IMAGE_AMD64" "$IMAGE_ARM64"; do
+            # The Dockerfile HEALTHCHECK must survive into the image metadata (probes /healthz).
+            docker image inspect -f '{{json .Config.Healthcheck.Test}}' "$image" | grep -q 'healthcheck.js'
+          done
+          # ELF e_machine (offset 18, little endian): x86-64 = 62, AArch64 = 183.
+          # node:22-bookworm-slim runtime, so the helper is read with node, not `file`.
+          check_helper() {
+            docker run --rm --platform "$1" --entrypoint node "$2" -e \
+              "const b=require('fs').readFileSync('build/server/workspace/workspace-boundary.node');console.log(b.readUInt16LE(18))"
+          }
+          test "$(check_helper linux/amd64 "$IMAGE_AMD64")" = 62
+          test "$(check_helper linux/arm64 "$IMAGE_ARM64")" = 183
+      - name: Prepare report directories
+        run: mkdir -p "$OUT_DIR/sbom" "$OUT_DIR/scan"
+      - name: Generate SPDX SBOM for linux/amd64 image
+        uses: anchore/sbom-action@v0
+        with:
+          image: ${{ env.IMAGE_AMD64 }}
+          format: spdx-json
+          output-file: ${{ env.OUT_DIR }}/sbom/hermes-webui-ng-amd64.spdx.json
+          upload-artifact: false
+      - name: Upload SBOM artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: image-sbom-amd64-spdx
+          path: ${{ env.OUT_DIR }}/sbom/hermes-webui-ng-amd64.spdx.json
+          if-no-files-found: error
+          retention-days: 30
+      # REPORT-ONLY: exit-code 0 until the initial HIGH/CRITICAL baseline is triaged.
+      # Flip to '1' (and remove this comment) only after the gate is agreed; see docs/implementation-status.md.
+      - name: Scan linux/amd64 image, table report (report-only)
+        if: success()
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: ${{ env.IMAGE_AMD64 }}
+          scanners: vuln
+          severity: HIGH,CRITICAL
+          format: table
+          output: ${{ env.OUT_DIR }}/scan/trivy-table.txt
+          exit-code: '0'
+          ignore-unfixed: false
+      - name: Scan linux/amd64 image, SARIF report (report-only)
+        if: success()
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: ${{ env.IMAGE_AMD64 }}
+          scanners: vuln
+          severity: HIGH,CRITICAL
+          format: sarif
+          output: ${{ env.OUT_DIR }}/scan/trivy.sarif
+          exit-code: '0'
+          ignore-unfixed: false
+      - name: Upload vulnerability scan artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: image-vuln-scan-amd64
+          path: |
+            ${{ env.OUT_DIR }}/scan/trivy-table.txt
+            ${{ env.OUT_DIR }}/scan/trivy.sarif
+          if-no-files-found: error
+          retention-days: 30
+      - name: Remove local CI images
+        if: success()
+        run: docker image rm -f "$IMAGE_AMD64" "$IMAGE_ARM64" || true

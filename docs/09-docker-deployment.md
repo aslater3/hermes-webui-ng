@@ -211,6 +211,8 @@ Publish:
 
 Useful for x86 servers and Raspberry Pi/ARM homelabs.
 
+Current state (Phase 10 packaging, `.github/workflows/image-multiarch.yml`): CI builds both platforms without pushing. The arm64 build runs under QEMU and compiles the native workspace boundary helper inside the build stage. Images are not yet published to a registry; that is a release step.
+
 ## 12. CI image pipeline
 
 On PR:
@@ -218,7 +220,9 @@ On PR:
 - lint/typecheck/tests;
 - build image;
 - Docker smoke test;
-- vulnerability scan.
+- vulnerability scan (report-only until the baseline is triaged; `exit-code: '0'` in `.github/workflows/image-multiarch.yml`).
+
+Implemented on PR and `main` (`docker.yml`, `image-multiarch.yml`): the amd64 smoke, `linux/amd64` and `linux/arm64` builds without push, the SPDX SBOM for amd64, and the Trivy report. Multi-arch buildx with OCI labels, provenance, signing and the release tagging policy below remain tag-time work.
 
 On tag:
 
