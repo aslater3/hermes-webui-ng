@@ -118,6 +118,12 @@ test('reply text interleaves with tools in arrival order and stays complete agai
   assert.equal(interleavedText(a.state,'earlier text Looking first. Found it.'),false);
   assert.equal(a.receive(event('message.delta',{text:'x'})),false,'text deltas do not trigger a second publish');
 });
+test('a reply without tool activity stays one ordinary streaming message',()=>{
+  const a=new AgentActivity();
+  a.receive(event('message.start',{}));
+  for(const text of ['Streaming ','line 1']) a.receive(event('message.delta',{text}));
+  assert.equal(interleavedText(a.state,'Streaming line 1'),false);
+});
 test('a live peer approval suppresses the duplicate queue projection instead of expiring it',()=>{
   const a=new AgentActivity();
   const approval={request_id:'q1',command:'rm -rf build',choices:['once','deny']};

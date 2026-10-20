@@ -36,9 +36,13 @@ export const ACTIVITY_LIMITS = {
 /** The live timeline text is complete only when it matches the session's streamed reply; after a
  *  reconnect gap (or a cap) the caller falls back to the single streamed box instead of a partial copy. */
 export function interleavedText(state: ActivityState, streaming: string): boolean {
-  let length = 0;
-  for (const entry of state.timeline) if (entry.kind === 'text') length += entry.text.length;
-  return length > 0 && length === streaming.length;
+  // A reply with no tool activity stays one ordinary streaming message: there is nothing to interleave.
+  let length = 0, tools = false;
+  for (const entry of state.timeline) {
+    if (entry.kind === 'text') length += entry.text.length;
+    else if (entry.kind === 'tool') tools = true;
+  }
+  return tools && length > 0 && length === streaming.length;
 }
 const KINDS: InputKind[] = ['approval', 'clarify', 'sudo', 'secret'];
 const clean = (value: string) => value.replace(/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/g, '');
