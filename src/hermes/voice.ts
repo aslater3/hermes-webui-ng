@@ -328,3 +328,15 @@ export class SpeechPlayback {
     this.ports.onChange();
   }
 }
+
+/**
+ * How the composer's view scope (`<account generation>|<conversation key>`) moved. A new conversation receiving
+ * its stored id (`n|` -> `n|ref`) is the same composer and draft, so a dictation take is adopted, not dropped.
+ * Any other change (another conversation, another account) is a switch.
+ */
+export type ScopeTransition = 'same' | 'initial' | 'adopt' | 'switch';
+export function scopeTransition(previous: string | undefined, next: string): ScopeTransition {
+  if (previous === undefined) return 'initial';
+  if (previous === next) return 'same';
+  return previous.endsWith('|') && next.startsWith(previous) && next.length > previous.length ? 'adopt' : 'switch';
+}

@@ -325,3 +325,14 @@ test('read aloud: a stale fetch cannot start after its playback was replaced', a
   assert.equal(s.player.state.phase === 'playing' && s.player.state.key, 'm2');
   assert.equal(s.audios.length, 1);
 });
+
+test('view scope: a new conversation receiving its id adopts a take; other changes are switches', async () => {
+  const { scopeTransition } = await import('../../src/hermes/voice.js');
+  assert.equal(scopeTransition(undefined, '1|'), 'initial');
+  assert.equal(scopeTransition('1|', '1|'), 'same');
+  assert.equal(scopeTransition('1|', '1|["default","abc"]'), 'adopt');
+  assert.equal(scopeTransition('1|["default","abc"]', '1|["default","def"]'), 'switch');
+  assert.equal(scopeTransition('1|["default","abc"]', '1|'), 'switch');
+  assert.equal(scopeTransition('1|', '2|'), 'switch');
+  assert.equal(scopeTransition('1|', '10|["default","abc"]'), 'switch');
+});
