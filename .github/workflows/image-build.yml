@@ -23,7 +23,8 @@ jobs:
     timeout-minutes: 30
     env:
       IMAGE_AMD64: hermes-webui-ng:amd64-ci
-      OUT_DIR: ${{ runner.temp }}/packaging
+      # runner.* is not available in job-level env; github.workspace is.
+      OUT_DIR: ${{ github.workspace }}/.packaging-reports
     steps:
       - uses: actions/checkout@v4
         with:
