@@ -50,7 +50,9 @@ export function mcpServerList(input: unknown): McpServer[] {
       transport,
       enabled: row.enabled !== false,
       auth,
-      toolCount: Array.isArray(tools) ? tools.filter(tool => typeof tool === 'string').length : undefined,
+      // NG's server replaces the tool-name list with `tool_count` (server/proxy/scrub.ts); a raw list is still accepted.
+      toolCount: typeof row.tool_count === 'number' && Number.isSafeInteger(row.tool_count) && row.tool_count >= 0 ? row.tool_count
+        : Array.isArray(tools) ? tools.filter(tool => typeof tool === 'string').length : undefined,
       plugin: safeText(row.plugin, 128),
     };
   });

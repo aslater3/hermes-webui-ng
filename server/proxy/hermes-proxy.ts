@@ -4,6 +4,7 @@ import { Transform, type Duplex } from 'node:stream';
 import type { Config } from '../config.js';
 import { localHandshake } from '../trusted-local.js';
 import { endToEnd, requestHeaders, rewriteLocation } from './headers.js';
+import { scrubberFor } from './scrub.js';
 
 export type Log = (event: { event: string; requestId: string; status: number; durationMs: number }) => void;
 
@@ -79,6 +80,33 @@ export function proxyHttp(
       headers['x-content-type-options'] = 'nosniff';
       headers['referrer-policy'] = 'no-referrer';
       headers['x-request-id'] = requestId;
+      const scrub = scrubberFor(req.method, path);
+      if (scrub) {
+        // Buffer (bounded), forward only the allowlisted shape; anything unexpected fails closed.
+        const status = response.statusCode ?? 502;
+        if (status < 200 || status >= 300 || response.headers['content-encoding'] || !response.headers['content-type']?.includes('application/json')) {
+          response.resume(); fail(status >= 400 && status < 600 ? status : 502, 'UPSTREAM_REFUSED'); return;
+        }
+        const chunks: Buffer[] = []; let size = 0;
+        response.on('data', (chunk: Buffer) => {
+          size += chunk.length;
+          if (size > config.maxBodyBytes) { response.destroy(); fail(502, 'INVALID_UPSTREAM_RESPONSE'); return; }
+          chunks.push(chunk);
+        });
+        response.once('error', () => fail(502, 'UPSTREAM_UNREACHABLE'));
+        response.once('end', () => {
+          if (done) return;
+          let body: string;
+          try { body = JSON.stringify(scrub(JSON.parse(Buffer.concat(chunks).toString('utf8')))); }
+          catch { fail(502, 'INVALID_UPSTREAM_RESPONSE'); return; }
+          done = true;
+          delete headers['content-length']; delete headers['transfer-encoding']; delete headers.etag;
+          headers['content-type'] = 'application/json';
+          res.writeHead(status, headers);
+          res.end(req.method === 'HEAD' ? undefined : body);
+        });
+        return;
+      }
       res.writeHead(response.statusCode ?? 502, headers);
       response.once('error', () => {
         done = true;

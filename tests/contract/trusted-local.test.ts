@@ -159,3 +159,15 @@ test('local wire: MCP list, health and system stats are proxied and projected; M
   ] as const) assert.equal((await fetch(h.origin + path, { method, headers: { Origin: h.origin } })).status, 403, `${method} ${path}`);
   assert.ok(!JSON.stringify(h.logs).includes(TOKEN));
 });
+
+test('local wire: MCP server url, command, args, env and tool names are scrubbed on the server, not only in the browser', async t => {
+  const h = await setup(t);
+  const response = await fetch(h.origin + '/__hermes/api/mcp/servers?profile=default');
+  assert.equal(response.status, 200);
+  const raw = await response.text();
+  for (const secret of ['FIXTURE_MCP_URL_PASSWORD', 'FIXTURE_MCP_QUERY_TOKEN', 'FIXTURE_MCP_HEADER_SECRET', 'FIXTURE_MCP_ENV_SECRET', 'FIXTURE_MCP_ARG_SECRET', '/home/fixture/private', 'mcp.example.test']) assert.ok(!raw.includes(secret), secret);
+  const servers = (JSON.parse(raw) as { servers: Record<string, unknown>[] }).servers;
+  const allowed = new Set(['name', 'transport', 'auth', 'enabled', 'source', 'plugin', 'tool_count']);
+  for (const server of servers) for (const key of Object.keys(server)) assert.ok(allowed.has(key), key);
+  assert.equal(servers.find(server => server.name === 'github')?.tool_count, 2);
+});
