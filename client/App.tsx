@@ -2,11 +2,12 @@ import { ConversationDetails } from './ConversationDetails.js';
 import './local-access.css';
 import './workspace-trigger.css';
 import { lazy, Suspense, useEffect, useRef, useState, useSyncExternalStore } from 'react';
-import { Folder, PanelRight, Command, MessageSquare, MoreHorizontal, PanelLeft, Plus, Search, Settings2, Moon, Sun, Link, History, RefreshCw, KeyRound } from 'lucide-react';
+import { Folder, PanelRight, Command, MessageSquare, MoreHorizontal, PanelLeft, Plus, Search, Settings2, Moon, Sun, Link, History, RefreshCw, KeyRound, Sparkles } from 'lucide-react';
 import type { AppRuntime } from './runtime.js';
 import { IconButton, Modal, Notice, useMedia, useViewport } from './primitives.js';
 import { Sidebar } from './Sidebar.js';
 import { Settings } from './Settings.js';
+import { Management } from './Management.js';
 import { SignIn } from './SignIn.js';
 import { Conversation } from './Conversation.js';
 import { readTheme, applyTheme, THEME_KEY, type Theme } from './preferences.js';
@@ -18,7 +19,7 @@ const Workspace = lazy(() => import('./workspace/Workspace.js'));
 export default function App({ runtime: rt }: { runtime: AppRuntime }) {
   const revision = useSyncExternalStore(rt.subscribe, rt.getSnapshot), mobile = useMedia('(max-width: 850px)');
   const wide = useMedia('(min-width: 1180px)'), [details, setDetails] = useState(false), [files, setFiles] = useState(false);
-  const [panel, setPanel] = useState<'settings' | 'commands' | 'sessions' | 'conversation' | null>(null);
+  const [panel, setPanel] = useState<'settings' | 'manage' | 'commands' | 'sessions' | 'conversation' | null>(null);
   const [collapsed, setCollapsed] = useState(false), [theme, setTheme] = useState<Theme>(readTheme), [commandQuery, setCommandQuery] = useState('');
   const [copyNote, setCopyNote] = useState(''), key = useRef<HTMLInputElement>(null);
   const hasAccess = rt.connection.hasAccess, localAccess = rt.connection.state.auth === 'local-access';
@@ -52,6 +53,7 @@ export default function App({ runtime: rt }: { runtime: AppRuntime }) {
     { label: 'Search conversations', icon: Search, disabled: !hasAccess, run: () => { if (mobile || collapsed) { setCollapsed(false); setPanel(mobile ? 'sessions' : null); } else setPanel(null); setTimeout(() => document.getElementById('shell-session-search')?.focus(), 0); } },
     { label: 'Open workspace', icon: Folder, disabled: !hasAccess, run: () => { setPanel(null); setDetails(false); setFiles(true); } },
     { label: 'Conversation details', icon: PanelRight, disabled: !hasAccess, run: () => { setPanel(null); setFiles(false); setDetails(true); } },
+    { label: 'Manage Hermes', icon: Sparkles, disabled: !hasAccess, run: () => setPanel('manage') },
     { label: 'Connection and settings', icon: Settings2, run: () => setPanel('settings') },
     { label: 'Reconnect to Hermes', icon: RefreshCw, run: () => { rt.run(() => rt.connection.start()); setPanel(null); } },
     { label: 'Use dark appearance', icon: Moon, run: () => { changeTheme('dark'); setPanel(null); } },
@@ -59,7 +61,7 @@ export default function App({ runtime: rt }: { runtime: AppRuntime }) {
   ].filter(item => item.label.toLowerCase().includes(commandQuery.toLowerCase()));
   return <>
     {!hasAccess ? <SignIn key={rt.accountGeneration} runtime={rt} onSettings={() => setPanel('settings')}/> : <div inert={rt.pwa.state.updating} className={`workspace${collapsed ? ' rail-collapsed' : ''}${details && wide ? ' with-details' : ''}${files && wide ? ' with-files' : ''}`}>
-      {!mobile && <Sidebar runtime={rt} compact={collapsed} onCollapse={() => setCollapsed(!collapsed)} onChoose={() => { if (collapsed) setCollapsed(false); }} onSettings={() => setPanel('settings')} onCommands={commands}/>}
+      {!mobile && <Sidebar runtime={rt} compact={collapsed} onCollapse={() => setCollapsed(!collapsed)} onChoose={() => { if (collapsed) setCollapsed(false); }} onSettings={() => setPanel('settings')} onManage={() => setPanel('manage')} onCommands={commands}/>}
       <main className="chat-main"><header className="app-header"><div className="header-title">{mobile && <IconButton label="Open conversations" onClick={() => setPanel('sessions')}><PanelLeft size={20}/></IconButton>}{!mobile && <MessageSquare size={17} className="muted"/>}<h1 title={title}>{title}</h1>{!mobile && <span className="header-profile">{rt.chat.selected?.profile || 'default'}</span>}</div>
         <div className="header-actions"><button className={`connection-pill${rt.ready ? ' connected' : ' degraded'}`} aria-label={`Connection status: ${connectionLabel}`} onClick={() => setPanel('settings')}><span className="status-dot"/><span>{connectionLabel}</span></button><IconButton label="Open command palette" onClick={commands}><Command size={18}/></IconButton><IconButton label="Open workspace" onClick={() => { setDetails(false); setFiles(!files); }}><Folder size={18}/></IconButton>{wide && <IconButton label="Toggle conversation details" aria-pressed={details} onClick={() => { setFiles(false); setDetails(!details); }}><PanelRight size={18}/></IconButton>}<IconButton label="Conversation actions" onClick={() => setPanel('conversation')}><MoreHorizontal size={20}/></IconButton></div>
       </header>
@@ -75,7 +77,8 @@ export default function App({ runtime: rt }: { runtime: AppRuntime }) {
     {/* Reopen above the new underlying mobile dialog at a breakpoint. Draft/operation state stays in AppRuntime. */}
     {hasAccess && rt.workspaceMutations.state.phase !== 'closed' && <Suspense fallback={<p role="status">Opening workspace action…</p>}><MutationDialog key={wide ? 'desktop' : 'mobile'} runtime={rt}/></Suspense>}
     {panel === 'settings' && <Settings key={rt.accountGeneration} runtime={rt} theme={theme} setTheme={changeTheme} onClose={() => setPanel(null)}/>}
-    {panel === 'sessions' && <Modal title="Conversations" kind="sessions" onClose={() => setPanel(null)}><Sidebar runtime={rt} onChoose={() => setPanel(null)} onSettings={() => setPanel('settings')} onCommands={commands}/></Modal>}
+    {panel === 'manage' && hasAccess && <Management key={rt.accountGeneration} runtime={rt} onClose={() => setPanel(null)}/>}
+    {panel === 'sessions' && <Modal title="Conversations" kind="sessions" onClose={() => setPanel(null)}><Sidebar runtime={rt} onChoose={() => setPanel(null)} onSettings={() => setPanel('settings')} onManage={() => setPanel('manage')} onCommands={commands}/></Modal>}
     {panel === 'commands' && <Modal title="Quick actions" kind="commands" onClose={() => setPanel(null)}><div className="command-search"><Search size={18}/><input data-initial-focus aria-label="Find an action" placeholder="What would you like to do?" value={commandQuery} onChange={event => setCommandQuery(event.target.value)} onKeyDown={event => { if (event.key === 'Enter') { const first = palette.find(item => !item.disabled); first?.run(); } }}/></div><div className="command-list">{palette.map(({ label, icon: Icon, disabled, run }) => <button key={label} disabled={disabled} onClick={run}><Icon size={18}/>{label}<span>↵</span></button>)}{!palette.length && <p className="muted">No matching actions.</p>}</div><footer className="command-footer"><span>Tab to navigate · Enter to select</span><span>esc to close</span></footer></Modal>}
     {panel === 'conversation' && <Modal title="Conversation actions" kind="actions" onClose={() => setPanel(null)}><div className="action-list"><button onClick={() => { setPanel(null); setFiles(false); setDetails(true); }}><PanelRight size={17}/>Conversation details</button><button onClick={commands}><Command size={17}/>Quick actions</button><button disabled={!rt.ready} onClick={() => { rt.newChat(); setPanel(null); }}><Plus size={17}/>New conversation</button>
       <button disabled={!rt.chat.selected || !rt.readable} onClick={() => { rt.run(() => rt.chat.latest()); setPanel(null); }}><RefreshCw size={17}/>Refresh from Hermes</button>
