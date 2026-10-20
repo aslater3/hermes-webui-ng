@@ -6,6 +6,7 @@ export type Availability = 'unknown' | 'available' | 'unavailable' | 'requires-c
 const REST = {
   sessionsList: '/api/sessions', sessionsSearch: '/api/sessions/search',
   profiles: '/api/profiles', models: '/api/model/options',
+  skills: '/api/skills', skillContent: '/api/skills/content',
 } as const;
 export type Feature = keyof typeof REST | 'gateway' | 'heartbeat' | 'changeEvents' | 'workspace' | 'pwa' | 'reasoning';
 export interface Capability { state: Availability; evidence: 'unverified' | 'gateway' | 'schema' | 'webui' | 'rpc'; implemented: boolean }
@@ -13,7 +14,7 @@ export type CapabilityMap = Record<Feature, Capability>;
 function initial(): CapabilityMap {
   return Object.fromEntries(
     ['gateway', 'heartbeat', 'changeEvents', ...Object.keys(REST), 'workspace', 'pwa', 'reasoning'].map((name) => [name, {
-      state: 'unknown', evidence: 'unverified', implemented: ['gateway', 'heartbeat', 'changeEvents', 'sessionsList', 'sessionsSearch', 'models', 'profiles', 'reasoning', 'pwa', 'workspace'].includes(name),
+      state: 'unknown', evidence: 'unverified', implemented: ['gateway', 'heartbeat', 'changeEvents', 'sessionsList', 'sessionsSearch', 'models', 'profiles', 'reasoning', 'pwa', 'workspace', 'skills', 'skillContent'].includes(name),
     }]),
   ) as CapabilityMap;
 }

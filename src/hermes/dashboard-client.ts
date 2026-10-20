@@ -1,5 +1,6 @@
 import { ClientError, record, textField } from './protocol.js';
 import { WsAuthClient } from './ws-auth.js';
+import { skillList, skillDocument, skillName, type SkillDocument, type SkillRow } from './skills.js';
 import { sessionQuery, sessionPage, searchPage, historyPage, firstMessage, sessionId, profileName, HISTORY_LIMIT, type SessionQuery, type SessionRef } from './session-rest.js';
 import type { DiagnosticsRing } from './diagnostics.js';
 export { WS_PROTOCOL, type WsCredential } from './ws-auth.js';
@@ -18,6 +19,7 @@ const ROUTES = {
   login: '/__hermes/auth/password-login', logout: '/__hermes/auth/logout',
   schema: '/__hermes/openapi.json', capabilities: '/api/webui/capabilities',
   sessions: '/__hermes/api/sessions', sessionSearch: '/__hermes/api/sessions/search', sessionHistory: '/__hermes/api/sessions',
+  skills: '/__hermes/api/skills', skillContent: '/__hermes/api/skills/content',
 } as const;
 type Route = keyof typeof ROUTES;
 
@@ -178,6 +180,18 @@ export class DashboardClient {
     if (profileName(ref.profile)) query.set('profile', profileName(ref.profile)!);
     const suffix = `/${encodeURIComponent(sessionId(ref.id))}/messages?${query}`;
     return historyPage(await this.request('sessionHistory', 'GET', undefined, signal, suffix), ref, offset);
+  }
+  /** Read-only profile-scoped skill catalogue. Mutations are deliberately absent from this client. */
+  async skills(profile?: string, signal?: AbortSignal): Promise<SkillRow[]> {
+    const query = new URLSearchParams();
+    if (profileName(profile)) query.set('profile', profile!);
+    return skillList(await this.request('skills', 'GET', undefined, signal, query.size ? `?${query}` : ''));
+  }
+  /** Raw SKILL.md text for read-only display. The server-side path is never returned to callers. */
+  async skillContent(name: string, profile?: string, signal?: AbortSignal): Promise<SkillDocument> {
+    const query = new URLSearchParams({ name: skillName(name) });
+    if (profileName(profile)) query.set('profile', profile!);
+    return skillDocument(await this.request('skillContent', 'GET', undefined, signal, `?${query}`), name);
   }
   async sessionFirstMessage(ref: SessionRef, signal?: AbortSignal) {
     const query = new URLSearchParams({ limit: '1', offset: '0', order: 'oldest' });
