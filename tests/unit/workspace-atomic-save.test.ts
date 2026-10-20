@@ -10,6 +10,8 @@ import { workspaceRoots, openWorkspacePath, tree } from '../../server/workspace/
 async function fixture(t: TestContext) {
   const base = await mkdtemp(join(tmpdir(), 'workspace-save-'));
   await mkdir(join(base, 'project')); await mkdir(join(base, 'outside'));
+  // mkdir's mode is masked by the host umask (002 leaves group-write set); the server correctly rejects such roots.
+  await chmod(join(base, 'project'), 0o755);
   const root = workspaceRoots(join(base, 'project'))[0]!;
   await writeFile(join(root.path, 'file.txt'), 'original\r\n', { mode: 0o640 });
   await writeFile(join(base, 'outside', 'secret.txt'), 'OUTSIDE_CANARY');
@@ -92,7 +94,7 @@ test('symlink, hardlink, FIFO, ancestor swaps and replaced roots fail closed', a
   await symlink(outside, join(f.root.path, 'link')); await link(outside, join(f.root.path, 'hard'));
   execFileSync('mkfifo', [join(f.root.path, 'pipe')]);
   for (const path of ['link', 'hard', 'pipe']) await assert.rejects(f.writer.save(f.root, f.policy, { ...f.data, path }));
-  await mkdir(join(f.root.path, 'nested')); await writeFile(join(f.root.path, 'nested/file.txt'), 'nested');
+  await mkdir(join(f.root.path, 'nested')); await chmod(join(f.root.path, 'nested'), 0o755); await writeFile(join(f.root.path, 'nested/file.txt'), 'nested');
   const nested = { ...f.data, path: 'nested/file.txt', expectedVersion: (await f.snapshot('nested/file.txt')).version };
   await assert.rejects(f.writer.save(f.root, f.policy, nested, { beforeCommit: async () => {
     await rename(join(f.root.path, 'nested'), join(f.root.path, 'parked'));
@@ -101,7 +103,7 @@ test('symlink, hardlink, FIFO, ancestor swaps and replaced roots fail closed', a
   assert.equal(await readFile(join(f.root.path, 'parked/file.txt'), 'utf8'), 'nested');
   assert.deepEqual(await readdir(join(f.root.path, 'parked')), ['file.txt']);
   assert.equal(await readFile(outside, 'utf8'), 'OUTSIDE_CANARY');
-  await rename(f.root.path, join(f.base, 'old')); await mkdir(f.root.path);
+  await rename(f.root.path, join(f.base, 'old')); await mkdir(f.root.path); await chmod(f.root.path, 0o755);
   await assert.rejects(f.writer.save(f.root, f.policy, f.data), { code: 'WORKSPACE_ROOT_CHANGED' });
 });
 test('temporary siblings are never visible in file listings or accepted as project paths', async t => {

@@ -2,7 +2,7 @@ import test, { type TestContext } from 'node:test';
 import assert from 'node:assert/strict';
 import https from 'node:https';
 import { execFileSync } from 'node:child_process';
-import { mkdtemp, mkdir, readFile, writeFile, rm } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, writeFile, rm, chmod } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { loadConfig } from '../../server/config.js';
@@ -12,6 +12,8 @@ interface Result { roots?: { writable: boolean }[]; version?: string; size?: num
 const prefix = '/__hermes/webui-local/';
 async function setup(t: TestContext, local = false, enabled = true) {
   const base = await mkdtemp(join(tmpdir(), 'write-wire-')), root = join(base, 'project'); await mkdir(root);
+  // mkdir's mode is masked by the host umask; the server correctly rejects a group/world-writable root.
+  await chmod(root, 0o755);
   await writeFile(join(root, 'file.txt'), 'original\r\n', { mode: 0o600 });
   const cert = join(base, 'server.crt'), key = join(base, 'server.key');
   execFileSync('openssl', ['req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-days', '1', '-keyout', key, '-out', cert, '-subj', '/CN=localhost', '-addext', 'subjectAltName=IP:127.0.0.1'], { stdio: 'ignore' });
