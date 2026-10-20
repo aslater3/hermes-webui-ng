@@ -1,5 +1,25 @@
 # Implementation Status
 
+## Upstream recertification in progress — 20 October 2026
+
+Branch `fix/hermes-main-recertify` moves the certified runtime from `b6b53c69` (12 Sep 2026) to **`NousResearch/hermes-agent@c5a3c0f8767a72203363d249add14142dbcf3cc7`** (upstream `main`, 20 Oct 2026; 22,735 commits later). **Not certified until the pinned vanilla-Hermes workflow passes on this branch's head.** Until then the accepted runtime below remains `b6b53c69`.
+
+Source comparison of every RPC, event and REST route NG uses found the handshake, ws-ticket auth, session/prompt/history/subagent/command RPCs and REST session routes unchanged or compatibly extended; fixes #36–#38 match main's strict contracts. One behavioural break: main no longer emits `approval|clarify|sudo|secret.request`/`.expire` events. Interactive prompts arrive only as JSON-RPC server requests and are withdrawn by `request.cancel`. Foreground prompts were already handled; background-session attention now also observes server-request frames (metadata only: session id and method) and `request.cancel`, while keeping the legacy events for older runtimes.
+
+Host gates on this branch: production build, both typechecks, lint, **384 unit tests and 38 HTTP/WebSocket contracts** pass under both umask 002 and 022. Workspace-write fixtures previously failed under umask 002 because the (correct) group-writable-root refusal rejected their 0775 directories; fixtures now set 0755 explicitly. No production check changed.
+
+Open follow-ups from the comparison:
+
+- `tests/integration/phase3-full.ts` counts `secret.request` events; on main that count is always zero, so its assertion is vacuous. Rewrite against server requests.
+- `process.stop`, `agents.list` and `reload.*` are served by upstream's legacy fallback router; verify live.
+- Steer status `redirected` and active-session statuses `streaming`/`resuming` are not yet handled.
+- Legacy `?token=` WS auth is refused in gated mode upstream; NG uses tickets, but recheck trusted-local.
+- `contract-reference.yml` still captures reference fixtures at `b6b53c69`.
+- `npm audit` reports two high-severity advisories (not CI-gated); triage under Phase 10.
+- Upstream additions worth adopting later: `session.create` `idempotency_key`, `subagent.list` `delegations[]`, `session.events.since`, `subagent.steer/interrupt/tail`.
+
+Changes after this document's 14 September update and before this branch (steering, nested subagents, #36–#38 protocol fixes) are on `main`; see Git history.
+
 Updated: 14 September 2026. **The required Phase 6 workspace file-write scope has passed its software exit gate.** Delivery is through PR #17 with individual remote checkpoints preserved. The original roadmap explicitly makes Git stage/unstage/commit optional: those mutations are deferred and remain disabled. Phase 7 is preserved. iOS background notifications are investigated only; physical-phone and release-wide certification remain open.
 
 ## Exact accepted application and evidence
