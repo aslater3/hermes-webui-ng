@@ -5,6 +5,8 @@ import { memoryStatus, type MemoryStatus } from './memory.js';
 import { cronJob, cronJobId, cronJobList, cronRunPage, CRON_ACTIONS, type CronActionKind, type CronJob, type CronRun } from './cron.js';
 import { sessionQuery, sessionPage, searchPage, historyPage, firstMessage, sessionId, profileName, HISTORY_LIMIT, type SessionQuery, type SessionRef } from './session-rest.js';
 import type { DiagnosticsRing } from './diagnostics.js';
+import { mcpServerList, type McpServer } from './mcp.js';
+import { hermesStatus, hermesHealth, systemStats, type HermesStatus, type HermesHealth, type SystemStats } from './hermes-status.js';
 export { WS_PROTOCOL, type WsCredential } from './ws-auth.js';
 export interface Identity { user_id: string; provider: string }
 export interface Provider { name: string; display_name: string; supports_password: boolean }
@@ -24,6 +26,7 @@ const ROUTES = {
   audioTranscribe: '/__hermes/api/audio/transcribe', audioSpeak: '/__hermes/api/audio/speak', audioVoice: '/__hermes/api/audio/voice-config',
   skills: '/__hermes/api/skills', skillContent: '/__hermes/api/skills/content',
   memory: '/__hermes/api/memory',
+  mcpServers: '/__hermes/api/mcp/servers', health: '/__hermes/api/health', systemStats: '/__hermes/api/system/stats',
   cronJobs: '/__hermes/api/cron/jobs', cronJob: '/__hermes/api/cron/jobs', cronRuns: '/__hermes/api/cron/jobs', cronAction: '/__hermes/api/cron/jobs',
 } as const;
 type Route = keyof typeof ROUTES;
@@ -233,6 +236,24 @@ export class DashboardClient {
     const query = new URLSearchParams();
     if (profileName(profile)) query.set('profile', profile!);
     return memoryStatus(await this.request('memory', 'GET', undefined, signal, query.size ? `?${query}` : ''));
+  }
+  /** Read-only MCP server list. Only `GET /api/mcp/servers` is used: no test, auth, catalog or install route. */
+  async mcpServers(profile?: string, signal?: AbortSignal): Promise<McpServer[]> {
+    const query = new URLSearchParams();
+    if (profileName(profile)) query.set('profile', profile!);
+    return mcpServerList(await this.request('mcpServers', 'GET', undefined, signal, query.size ? `?${query}` : ''));
+  }
+  /** Diagnostics reads. `/api/status` is the existing public probe; its paths, ports and PIDs are dropped by the projection. */
+  async hermesStatus(profile?: string, signal?: AbortSignal): Promise<HermesStatus> {
+    const query = new URLSearchParams();
+    if (profileName(profile)) query.set('profile', profile!);
+    return hermesStatus(await this.request('status', 'GET', undefined, signal, query.size ? `?${query}` : ''));
+  }
+  async hermesHealth(signal?: AbortSignal): Promise<HermesHealth> {
+    return hermesHealth(await this.request('health', 'GET', undefined, signal));
+  }
+  async systemStats(signal?: AbortSignal): Promise<SystemStats> {
+    return systemStats(await this.request('systemStats', 'GET', undefined, signal));
   }
   /** Cron jobs are always read for one explicit profile: the upstream default `profile=all` would cross profile boundaries. */
   private cronQuery(profile?: string): string {

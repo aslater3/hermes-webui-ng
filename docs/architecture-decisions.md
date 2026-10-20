@@ -52,6 +52,10 @@ Phase 6 retains the native Hermes boundary and adds only dedicated project-file 
 
 Phase 8 slices B1 and B2. Memory is read-only (`GET /api/memory`; provider config is never fetched). Cron has reads plus pause, resume and run-now behind explicit confirmation, single-flight, no automatic retry, and a re-read after each action. Actions are available only in gated mode. Trusted-local gains four GET routes and keeps every write refused. Full decision: `adr-029-memory-cron-management.md`.
 
+## ADR-031 — MCP and Diagnostics read views, Dashboard guidance, Phase 8 completion
+
+Phase 8 slice C. MCP server list is read-only (`GET /api/mcp/servers`; URLs, commands, args, env, headers and OAuth material dropped; no test, auth, catalog or install). Diagnostics reads `GET /api/status`, `/api/health` and `/api/system/stats` as bounded projections, and hands the support report to Settings. The Dashboard tab is text guidance with no links. Trusted-local gains exactly three GET routes; every write and secret-bearing route stays 403. Full decision: `adr-031-mcp-diagnostics-dashboard-guidance.md`.
+
 ## ADR-030 — Phase 9 attachments and browser voice
 
 Accepted 20 October 2026. Full decision: `adr-030-attachments-and-browser-voice.md`. Attachments use native gateway RPC (`image.attach_bytes`, `pdf.attach`, `image.detach`) because the queued-for-next-turn state lives only there; the existing `/image` and `/paste` commands now share that pipeline. Non-image files are deferred (`file.attach` stages into the workspace). Browser voice uses only the gated Dashboard audio REST routes; trusted-local hides voice and its GET/HEAD-only route allowlist is unchanged. Hermes does not advertise RPC methods, so attachment support is detected by use and reported honestly. Physical-device verification is not claimed.

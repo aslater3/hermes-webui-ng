@@ -202,3 +202,17 @@ test('gated wire: memory and cron reads proxy through the session; cron actions 
   assert.equal((await fetch(h.origin + '/__hermes/api/cron/jobs/a1b2c3d4e5f6/trigger?profile=default', { method: 'POST', headers: { Origin: h.origin } })).status, 401);
   assert.equal(h.fixture.metrics.cronActions, 1);
 });
+
+test('synthetic wire: MCP server url, command, args, env and tool names never leave the host in gated mode', async (t) => {
+  const h = await harness(t);
+  await h.dashboard.status();
+  await h.dashboard.login('basic', 'fixture', 'fixture-password');
+  for (const profile of ['default', 'work']) {
+    const response = await h.auth.fetcher(`${h.origin}/__hermes/api/mcp/servers?profile=${profile}`, { headers: { Accept: 'application/json' } });
+    assert.equal(response.status, 200);
+    const raw = await response.text();
+    for (const secret of ['FIXTURE_MCP_URL_PASSWORD', 'FIXTURE_MCP_QUERY_TOKEN', 'FIXTURE_MCP_HEADER_SECRET', 'FIXTURE_MCP_ENV_SECRET', 'FIXTURE_MCP_ARG_SECRET', '/home/fixture/private', 'mcp.example.test']) assert.ok(!raw.includes(secret), secret);
+    for (const server of (JSON.parse(raw) as { servers: Record<string, unknown>[] }).servers)
+      assert.deepEqual(Object.keys(server).filter(key => ['url', 'command', 'args', 'env', 'headers', 'tools', 'oauth_tokens'].includes(key)), []);
+  }
+});
