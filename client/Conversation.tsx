@@ -84,8 +84,9 @@ export function Conversation({ runtime: rt, revision }: { runtime: AppRuntime; r
   const attachTransient = running || state.phase === 'waiting' || !!rt.steering;
   // The busy-turn reason stays the button's accessible description only: a visible caption line here would
   // grow the composer exactly while a pinned request needs the transcript height.
-  const attachReasonText = attachReason(rt, attachTransient, !!state.runtimeId);
-  const attachEnabled = writable && !historical && !!state.runtimeId && state.phase === 'idle' && !rt.steering && rt.attachments.support !== 'unavailable';
+  const attachReasonText = attachReason(rt, attachTransient);
+  // A new chat (no runtime yet) can attach: the first attach starts the conversation, as Send does.
+  const attachEnabled = writable && !historical && rt.ready && !chat.busy && (!state.runtimeId || state.phase === 'idle') && !rt.steering && rt.attachments.support !== 'unavailable';
   const [dropping, setDropping] = useState(false);
   const dropHandlers = {
     onDragEnter: (event: ReactDragEvent) => { if (event.dataTransfer.types.includes('Files')) { event.preventDefault(); setDropping(true); } },
