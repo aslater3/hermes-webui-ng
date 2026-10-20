@@ -98,8 +98,8 @@ export function createApp(config: Config, log: Log = (event) => console.log(JSON
             'X-WebUI-Static': '1',
             'X-Content-Type-Options': 'nosniff',
             'Referrer-Policy': 'no-referrer',
-            'Permissions-Policy': 'camera=(), microphone=(), geolocation=()',
-            'Content-Security-Policy': `default-src 'self'; worker-src 'self'; manifest-src 'self'; script-src 'self'; style-src 'self'${nonce ? ` 'nonce-${nonce}'` : ''}; connect-src 'self'; img-src 'self' data:; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'`,
+            'Permissions-Policy': 'camera=(), microphone=(self), geolocation=()',
+            'Content-Security-Policy': `default-src 'self'; worker-src 'self'; manifest-src 'self'; script-src 'self'; style-src 'self'${nonce ? ` 'nonce-${nonce}'` : ''}; connect-src 'self'; img-src 'self' data:; media-src 'self' blob:; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'`,
           });
           res.end(req.method === 'HEAD' ? undefined : content);
         })

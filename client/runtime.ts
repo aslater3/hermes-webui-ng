@@ -4,7 +4,7 @@ import { PwaController } from './pwa.js';
 import { SessionAttention } from '../src/hermes/session-attention.js';
 import { profileIdentifier, type ModelChoice, type Effort } from '../src/hermes/model-catalog.js';
 import { DocumentRequests } from './document-requests.js';
-import { DashboardClient } from '../src/hermes/dashboard-client.js';
+import { DashboardClient, HttpError } from '../src/hermes/dashboard-client.js';
 import { GatewayClient } from '../src/hermes/gateway-client.js';
 import { WsAuthClient } from '../src/hermes/ws-auth.js';
 import { ConnectionStore } from '../src/hermes/connection-store.js';
@@ -15,6 +15,8 @@ import { slashInput } from '../src/hermes/command-catalog.js';
 import { steerOutcomeCopy, steerSession } from '../src/hermes/session-steer.js';
 import { ClientError } from '../src/hermes/protocol.js';
 import type { SessionRef } from '../src/hermes/session-rest.js';
+import { AttachmentTray, type Owner } from '../src/hermes/attachments.js';
+import { DictationMachine, SpeechPlayback, VoiceError, classifyVoiceHttp, dataUrlToBlob, insertTranscript, recordingMime, type PlaybackAudio, type RecorderLike, type StreamLike, type RecordingMime } from '../src/hermes/voice.js';
 
 /** One disposable client lifetime; React never builds RPC envelopes or owns durable sessions. */
 export class AppRuntime {
@@ -27,6 +29,45 @@ export class AppRuntime {
   readonly connection: ConnectionStore;
   readonly chat: ChatController;
   readonly attention: SessionAttention;
+  /** Queued composer attachments for the selected native session (local only, never persisted). */
+  /** Dictation context is the view key (account + conversation), so a late transcript cannot land in another one. */
+  readonly dictation: DictationMachine<{ key: string; profile?: string }> = new DictationMachine<{ key: string; profile?: string }>({
+    mime: voiceMime(),
+    requestStream: async () => {
+      if (!voiceMime() || !navigator.mediaDevices?.getUserMedia) throw new VoiceError('unsupported');
+      return navigator.mediaDevices.getUserMedia({ audio: true }) as Promise<StreamLike>;
+    },
+    createRecorder: (stream, recorderType) => new MediaRecorder(stream as MediaStream, { mimeType: recorderType, audioBitsPerSecond: 32000 }) as unknown as RecorderLike,
+    transcribe: async (audio, payloadType, signal, context) => {
+      const dataUrl = await blobToDataUrl(audio, payloadType);
+      try { return await this.dashboard.transcribe(dataUrl, payloadType, context.profile, signal); }
+      catch (error) { throw voiceFailure(error); }
+    },
+    isCurrent: context => context.key === this.viewKeyNow(),
+    insert: transcript => this.setDraft(insertTranscript(this.chat.draft, transcript).text),
+    now: () => performance.now(),
+    schedule: (callback, ms) => { const timer = setTimeout(callback, ms); return () => clearTimeout(timer); },
+    onChange: () => this.notify(),
+  });
+  /** Read aloud: one playback at a time. The audio object URL is revoked when playback ends or stops. */
+  readonly speech = new SpeechPlayback({
+    fetchSpeech: async (text, signal) => {
+      try { const reply = await this.dashboard.speak(text, this.chat.native.state.profile, signal); return dataUrlToBlob(reply.dataUrl, reply.mimeType); }
+      catch (error) { throw voiceFailure(error); }
+    },
+    createAudio: url => new Audio(url) as unknown as PlaybackAudio,
+    createUrl: blob => URL.createObjectURL(blob),
+    revoke: url => URL.revokeObjectURL(url),
+    onChange: () => this.notify(),
+  });
+  /** Hermes voice availability from the audio config route. 'unknown' still lets the user try. */
+  voiceSupport: 'unknown' | 'available' | 'unavailable' = 'unknown';
+  private lastViewKey?: string;
+  readonly attachments: AttachmentTray = new AttachmentTray({
+    revoke: url => URL.revokeObjectURL(url),
+    discard: (owner, paths) => { void this.discardAttachmentPaths(owner, paths); },
+    notify: () => this.notify(),
+  });
   readonly workspaceMutations: WorkspaceMutations;
   accountGeneration = 0;
   error = '';
@@ -95,6 +136,8 @@ export class AppRuntime {
     this.cleanup.push(this.pwa.subscribe(this.notify)); void this.pwa.start();
     this.cleanup.push(this.attention.subscribe(this.notify), this.chat.subscribe(() => {
       this.chat.native.commands.setVisible(document.visibilityState === 'visible');
+      this.attachments.setOwner(this.attachmentOwner());
+      this.syncViewScope();
       const state = this.chat.native.state;
       if (this.steerRuntimeId && (state.runtimeId !== this.steerRuntimeId || state.phase !== 'running')) {
         this.steering = false; this.steerStatus = ''; this.steerRuntimeId = undefined;
@@ -104,11 +147,16 @@ export class AppRuntime {
     }), this.attention.subscribe(() => {
       const ref = this.chat.selected, live = this.chat.subagent && ref ? this.attention.subagentBySession(ref.id) : undefined;
       if (live) this.chat.describeSubagent({ parent: live.parent, goal: live.goal });
-    }), this.gateway.onState(() => { this.attention.setEnabled(this.ready); this.notify(); }));
+    }), this.gateway.onState(() => {
+      this.attention.setEnabled(this.ready);
+      // A dropped connection cannot be detached upstream now; never keep showing chips that may be stale.
+      if (!this.ready) this.attachments.clear(false);
+      this.notify();
+    }));
     this.cleanup.push(this.connection.onIdentityBoundary(() => {
       this.workspaceMutations.clear();
       ++this.accountGeneration; this.openedLocation = false; this.gateway.requests.clear();
-      this.attention.clear(); this.chat.clear(); this.error = ''; this.steering = false; this.steerStatus = ''; this.steerRuntimeId = undefined; history.replaceState(null, '', location.pathname);
+      this.attention.clear(); this.chat.clear(); this.attachments.clear(false); this.error = ''; this.steering = false; this.steerStatus = ''; this.steerRuntimeId = undefined; history.replaceState(null, '', location.pathname);
       document.querySelectorAll<HTMLInputElement>('input[type="password"]').forEach(input => { input.value = ''; });
       this.notify();
     }));
@@ -122,6 +170,8 @@ export class AppRuntime {
       const visible = document.visibilityState === 'visible';
       this.connection.poll(visible ? 30_000 : 0); this.attention.setVisible(visible);
       this.gateway.requests.setVisible(visible);
+      // A hidden page cannot finish a recording or keep speaking: stop, discard, and say so when it returns.
+      if (!visible) { this.dictation.cancel('interrupted'); this.speech.stop(); }
       this.chat.native.commands.setVisible(visible); this.notify();
       if (visible) this.run(async () => { await this.connection.resume(); if (this.ready && this.chat.native.state.runtimeId) await this.chat.native.refresh(); });
     };
@@ -147,6 +197,7 @@ export class AppRuntime {
     listen(window, 'offline', () => this.run(() => this.connection.setOffline(true)));
     this.connection.poll();
     this.run(() => navigator.onLine ? this.connection.start() : this.connection.setOffline(true));
+    this.cleanup.push(() => { this.dictation.cancel(); this.speech.stop(); });
   }
   newChat = () => {
     if (!this.ready || this.chat.busy || this.workspaceMutations.state.phase !== 'closed') return;
@@ -177,6 +228,34 @@ export class AppRuntime {
     });
   };
   setDraft = (value: string) => { this.chat.setDraft(value); this.notify(); };
+  /** Voice is never offered through trusted-local: its route allowlist is GET/HEAD only by design. */
+  get voiceAllowed(): boolean { return this.dashboard.admissionMode !== 'trusted-local'; }
+  /** This browser can record and has a MIME Hermes accepts. Read-aloud does not need it. */
+  get dictationCapable(): boolean { return !!voiceMime() && typeof navigator.mediaDevices?.getUserMedia === 'function'; }
+  /** The conversation the user is looking at. Voice state is scoped to it and dropped when it changes. */
+  viewKeyNow(): string { return `${this.accountGeneration}|${this.chat.selected ? draftKey(this.chat.selected) : ''}`; }
+  startDictation(): void {
+    if (!this.ready || !this.voiceAllowed || this.voiceSupport === 'unavailable') return;
+    this.dictation.start({ key: this.viewKeyNow(), profile: this.chat.native.state.profile });
+    this.notify();
+  }
+  async probeVoice(): Promise<void> {
+    if (this.voiceSupport !== 'unknown' || !this.ready || !this.voiceAllowed) return;
+    try { this.voiceSupport = (await this.dashboard.voiceAvailable(this.chat.native.state.profile)) ? 'available' : 'unavailable'; }
+    catch (error) { if (error instanceof HttpError && error.status === 404) this.voiceSupport = 'unavailable'; }
+    this.notify();
+  }
+  private syncViewScope(): void {
+    const key = this.viewKeyNow();
+    if (key === this.lastViewKey) return;
+    const initial = this.lastViewKey === undefined;
+    this.lastViewKey = key;
+    // The first sync only records the scope: it is not a conversation switch and must not drop a take.
+    if (initial) return;
+    this.speech.stop();
+    this.dictation.cancel();
+    this.dictation.dismiss();
+  }
   send = () => this.run(async () => {
     if (!this.ready || this.chat.busy || this.workspaceMutations.state.phase !== 'closed' || !this.chat.draft.trim()) return;
     if (!this.chat.selected) {
@@ -210,8 +289,24 @@ export class AppRuntime {
       }
       return;
     }
-    await this.chat.send();
+    const owner = this.attachmentOwner();
+    const sent = await this.chat.send();
+    // Hermes consumes queued attachments on an accepted real turn (a prompt.submit); slash commands do not.
+    // consume() only acts when the tray still belongs to that owner, so a switch mid-send cannot clear another session.
+    if (sent && !slashInput(text)) this.attachments.consume(owner);
   });
+  /** The native session that queued attachments belong to; undefined until Hermes has attached one. */
+  attachmentOwner(): Owner | undefined {
+    const state = this.chat.native.state;
+    return state.runtimeId ? { key: `${this.accountGeneration}|${state.profile ?? ''}|${state.runtimeId}`, runtimeId: state.runtimeId, profile: state.profile } : undefined;
+  }
+  /** Best-effort upstream removal of queued attachment paths. Skipped when disconnected. */
+  async discardAttachmentPaths(owner: Owner, paths: string[]): Promise<void> {
+    if (!this.ready) return;
+    for (const path of paths) {
+      await this.gateway.call('image.detach', { session_id: owner.runtimeId, ...(owner.profile ? { profile: owner.profile } : {}), path }).catch(() => undefined);
+    }
+  }
   private async settingsSession() {
     if (!this.ready || this.chat.busy || this.chat.historical || this.workspaceMutations.state.phase !== 'closed')
       throw new ClientError('disconnected', 'Connect to an idle conversation to change settings');
@@ -291,4 +386,28 @@ export class AppRuntime {
     this.cleanup.forEach(fn => fn()); this.cleanup = [];
     cancelAnimationFrame(this.frame); this.attention.dispose(); this.chat.dispose(); this.connection.dispose(); this.listeners.clear();
   }
+}
+
+/** Recorder support and the MIME Hermes will receive. Undefined where MediaRecorder cannot record audio. */
+function voiceMime(): RecordingMime | undefined {
+  if (typeof MediaRecorder === 'undefined' || typeof MediaRecorder.isTypeSupported !== 'function') return undefined;
+  return recordingMime(type => MediaRecorder.isTypeSupported(type));
+}
+function voiceFailure(error: unknown): VoiceError {
+  if (error instanceof VoiceError) return error;
+  if (error instanceof HttpError) return new VoiceError(classifyVoiceHttp(error.status));
+  if (error instanceof ClientError) return new VoiceError(classifyVoiceHttp(undefined, error.kind === 'network' || error.kind === 'timeout' ? error.kind : 'disconnected'));
+  return new VoiceError('failed');
+}
+function blobToDataUrl(blob: Blob, type: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new VoiceError('failed'));
+    reader.onload = () => {
+      const value = reader.result;
+      if (typeof value !== 'string') reject(new VoiceError('failed'));
+      else resolve(value.replace(/^data:[^,]*,/, `data:${type};base64,`));
+    };
+    reader.readAsDataURL(blob);
+  });
 }

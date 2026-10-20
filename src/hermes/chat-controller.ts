@@ -298,18 +298,21 @@ export class ChatController {
     catch (error) { this.fail(error, scope); }
     finally { if (scope === this.scope) { this.busy = false; this.publish(); } }
   }
-  async send(): Promise<void> {
-    if (!this.ready() || this.busy || this.historical || !this.draft.trim() || this.native.state.phase !== 'idle') return;
+  /** Resolves true when Hermes accepted a submitted prompt (queued attachments are consumed by that turn). */
+  async send(): Promise<boolean> {
+    if (!this.ready() || this.busy || this.historical || !this.draft.trim() || this.native.state.phase !== 'idle') return false;
     const scope = this.scope, text = this.draft, native = this.native;
     this.error = undefined;
+    let accepted = false;
     try {
       if (slashInput(text)) await native.commands.execute(text, 'composer');
-      else await native.submit(literalPrompt(text));
+      else { await native.submit(literalPrompt(text)); accepted = true; }
       if (scope === this.scope && this.native === native && this.draft === text && !native.commands.state.confirmation && native.commands.state.action?.kind !== 'browser') {
         this.draft = ''; this.drafts.delete(draftKey(this.selected));
       }
     } catch (error) { this.fail(error, scope); }
     finally { if (scope === this.scope) { this.refreshIndexSoon(); this.publish(); } }
+    return accepted;
   }
   async interrupt(): Promise<void> {
     if (!this.ready() || this.busy || this.historical) return;

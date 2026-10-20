@@ -23,6 +23,7 @@ const ROUTES = {
   login: '/__hermes/auth/password-login', logout: '/__hermes/auth/logout',
   schema: '/__hermes/openapi.json', capabilities: '/api/webui/capabilities',
   sessions: '/__hermes/api/sessions', sessionSearch: '/__hermes/api/sessions/search', sessionHistory: '/__hermes/api/sessions',
+  audioTranscribe: '/__hermes/api/audio/transcribe', audioSpeak: '/__hermes/api/audio/speak', audioVoice: '/__hermes/api/audio/voice-config',
   skills: '/__hermes/api/skills', skillContent: '/__hermes/api/skills/content',
   memory: '/__hermes/api/memory',
   mcpServers: '/__hermes/api/mcp/servers', health: '/__hermes/api/health', systemStats: '/__hermes/api/system/stats',
@@ -57,6 +58,11 @@ export async function boundedValue(response: Response, maxBytes = 4_194_304): Pr
     if (error instanceof ClientError) throw error;
     throw new ClientError('protocol', 'Hermes Dashboard returned invalid JSON');
   } finally { await reader.cancel().catch(() => {}); }
+}
+
+function voiceSuffix(profile: string | undefined): string {
+  const name = profileName(profile);
+  return name ? `?${new URLSearchParams({ profile: name })}` : '';
 }
 
 /** Hermes alone owns auth cookies; neither credentials nor raw responses are persisted. */
@@ -195,6 +201,23 @@ export class DashboardClient {
     if (profileName(ref.profile)) query.set('profile', profileName(ref.profile)!);
     const suffix = `/${encodeURIComponent(sessionId(ref.id))}/messages?${query}`;
     return historyPage(await this.request('sessionHistory', 'GET', undefined, signal, suffix), ref, offset);
+  }
+  /** Dictation: one recorded clip goes to the host's configured STT provider. Provider keys never reach the browser. */
+  async transcribe(dataUrl: string, mimeType: string, profile: string | undefined, signal?: AbortSignal): Promise<string> {
+    const data = await this.request('audioTranscribe', 'POST', { data_url: dataUrl, mime_type: mimeType }, signal, voiceSuffix(profile));
+    if (data.ok !== true || typeof data.transcript !== 'string') throw new ClientError('protocol', 'Hermes returned an invalid transcript');
+    return data.transcript;
+  }
+  /** Read aloud: the host's TTS chain synthesizes the text. Returns a base64 audio data URL. */
+  async speak(text: string, profile: string | undefined, signal?: AbortSignal): Promise<{ dataUrl: string; mimeType: string }> {
+    const data = await this.request('audioSpeak', 'POST', { text }, signal, voiceSuffix(profile));
+    if (data.ok !== true || typeof data.data_url !== 'string' || !data.data_url.startsWith('data:audio/'))
+      throw new ClientError('protocol', 'Hermes returned invalid speech');
+    return { dataUrl: data.data_url, mimeType: typeof data.mime_type === 'string' ? data.mime_type : 'audio/mpeg' };
+  }
+  /** Availability probe only. The response's provider and key fields are deliberately not read or kept. */
+  async voiceAvailable(profile: string | undefined, signal?: AbortSignal): Promise<boolean> {
+    return (await this.request('audioVoice', 'GET', undefined, signal, voiceSuffix(profile))).ok === true;
   }
   /** Read-only profile-scoped skill catalogue. Mutations are deliberately absent from this client. */
   async skills(profile?: string, signal?: AbortSignal): Promise<SkillRow[]> {

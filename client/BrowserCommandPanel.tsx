@@ -6,6 +6,7 @@ import { ClientError, record } from '../src/hermes/protocol.js';
 import type { CommandsState } from '../src/hermes/native-commands.js';
 import type { AppRuntime } from './runtime.js';
 import { branchCommandConversation, createCommandConversation } from './browser-command-actions.js';
+import { attachFile } from './attachment-actions.js';
 import { Notice } from './primitives.js';
 
 type Intent = NonNullable<CommandsState['action']>;
@@ -59,41 +60,30 @@ export function BrowserCommandPanel({ runtime: rt, intent, onClose, setDraft }: 
     finally { inFlight.current = false; if (current()) setBusy(false); }
   };
 
-  const imageBase64 = (blob: Blob): Promise<string> => new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onerror = () => reject(reader.error ?? new Error('Could not read the image.'));
-    reader.onload = () => {
-      const value = reader.result;
-      if (typeof value !== 'string' || !value.includes(',')) reject(new Error('Could not encode the image.'));
-      else resolve(value.slice(value.indexOf(',') + 1));
-    };
-    reader.readAsDataURL(blob);
-  });
+  // Every browser-side attachment goes through the composer's shared pipeline (attachFile), which owns
+  // validation, owner/generation checks and the chip tray. The panel only reports the outcome.
   const attachBlob = async (blob: Blob, filename: string) => {
     if (!current() || !rt.chat.native.state.runtimeId) throw new ClientError('disconnected', 'The selected conversation changed before attaching the image.');
-    if (!blob.size || blob.size > 25 * 1024 * 1024 || (blob.type && !blob.type.startsWith('image/')))
-      throw new ClientError('protocol', 'Choose a supported image up to 25 MB. Nothing was attached.');
-    const encoded = await imageBase64(blob);
-    if (!current()) throw new ClientError('disconnected', 'The selected conversation changed before the image upload.');
-    const raw = record(await rt.gateway.call('image.attach_bytes', {
-      session_id: rt.chat.native.state.runtimeId,
-      ...(rt.chat.native.state.profile ? { profile: rt.chat.native.state.profile } : {}),
-      content_base64: encoded, filename: filename.slice(0, 512) || 'browser-image.png',
-    }));
-    if (!current()) throw new ClientError('disconnected', 'The selected conversation changed after the image was attached. It was not replayed.');
-    if (raw.attached !== true || typeof raw.count !== 'number') throw new ClientError('protocol', 'Hermes did not confirm the image attachment. Check native state before retrying.');
-    setAttached(`Attached ${typeof raw.name === 'string' ? raw.name : filename} for the next prompt.`);
+    const chip = await attachFile(rt, blob, filename || 'browser-image.png');
+    setAttached(`Attached ${chip.name} for the next prompt.`);
     if (intent.source === 'composer' && rt.chat.draft === intent.text) setDraft('');
   };
   const attachHostPath = async (path: string) => {
     if (!current() || !rt.chat.native.state.runtimeId) throw new ClientError('disconnected', 'The selected conversation changed before attaching the image.');
+    const owner = rt.attachmentOwner(), ticket = rt.attachments.begin(owner);
+    if (!owner || !ticket) throw new ClientError('disconnected', 'The selected conversation changed before attaching the image.');
     const raw = record(await rt.gateway.call('image.attach', {
-      session_id: rt.chat.native.state.runtimeId,
-      ...(rt.chat.native.state.profile ? { profile: rt.chat.native.state.profile } : {}), path,
+      session_id: owner.runtimeId,
+      ...(owner.profile ? { profile: owner.profile } : {}), path,
     }));
-    if (!current()) throw new ClientError('disconnected', 'The selected conversation changed after the image was attached. It was not replayed.');
     if (raw.attached !== true || typeof raw.count !== 'number') throw new ClientError('protocol', 'Hermes did not confirm the host image attachment. Check native state before retrying.');
-    setAttached(`Attached ${typeof raw.name === 'string' ? raw.name : path} for the next prompt.`);
+    const hostPath = typeof raw.path === 'string' ? raw.path : path;
+    const name = typeof raw.name === 'string' ? raw.name : path;
+    if (!rt.attachments.accept(ticket, { kind: 'image', name, size: 0, paths: [hostPath] })) {
+      void rt.discardAttachmentPaths(owner, [hostPath]);
+      throw new ClientError('disconnected', 'The conversation changed after the image was attached. It was removed there and not shown here.');
+    }
+    setAttached(`Attached ${name} for the next prompt.`);
     if (intent.source === 'composer' && rt.chat.draft === intent.text) setDraft('');
   };
   const pasteImage = async () => {
