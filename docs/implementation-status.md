@@ -185,6 +185,16 @@ Expected effect (to be confirmed, not claimed, by the `image-build` run on this 
 
 Local evidence: none for the image. Docker is not available in this environment; the Dockerfile change was reviewed by hand and is validated only by the CI image build, smoke and native-helper ELF check.
 
+### Initial chat bundle excludes editor and heavy chunks (performance acceptance)
+
+Automated check: `tests/contract/bundle-split.test.ts`, run by `npm run test:contract`, which the Recovery checkpoint workflow runs after `npm run build`.
+
+- `vite.config.mjs` has a small build plugin that writes the module list of every output chunk to `build/vite-module-graph.json`. It writes under `build/`, not `dist/`, so the file is never served, and the Dockerfile copies only `build/server`, so it is not in the image. No served asset changed.
+- The test reads `dist/index.html`, takes the module entry script it loads, and walks only that entry's static import closure. Dynamic imports are lazy by definition and are excluded from the walk.
+- It asserts that the closure contains no CodeMirror or Lezer module, no Markdown renderer (react-markdown, remark, rehype, micromark, mdast, hast, unified, vfile), no Mermaid, no `client/Management.tsx`, and no workspace editor component (`Workspace`, `CodePreview`, `EditText`, `MutationDialog`).
+- It is not vacuous: each family, other than Mermaid, must be present in a lazy chunk. Mermaid is not a dependency today, so it is only a forbidden pattern.
+- Verified: passes on the current build (the entry statically imports no chunk; Markdown, Management, Workspace and CodeMirror are all dynamic chunks). A mutation check that adds a CodeMirror module to the entry's module list fails with "initial chunk must not contain codemirror".
+
 ## Phase 8 slice 1 — Manage shell and read-only Skills
 
 What landed (ADR-028):
