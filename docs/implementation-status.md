@@ -201,3 +201,31 @@ Known boundaries and deferred work:
 - The trigger copy on a paused job says it resumes the job. That follows upstream `_trigger_cron_job_sync` (`force` resumes and claims). Verify against a live Hermes before claiming it as product evidence.
 - Memory reset, provider setup, provider switching and provider config are not implemented (ADR-029).
 - Run history is capped at 20 entries per job in the UI and 100 in the projection. There is no pagination.
+
+## Phase 8 slice C — MCP, Diagnostics and Dashboard guidance (ADR-031); Phase 8 complete (software)
+
+What landed (branch `feat/phase8-mcp-diagnostics`, stacked on the Memory/Cron branch PR #44; the orchestrator owns the merge):
+
+- **MCP tab (read-only).** `GET /api/mcp/servers?profile=` projected to name, transport, enabled, an auth label (`OAuth` or `Header token`), selected tool count and plugin name. URLs, commands, args, env, headers, OAuth material and tool name lists are dropped. Connection status and last errors are not reported by this Hermes route, and the UI says so rather than inventing them.
+- **Diagnostics tab (read-only).** `GET /api/status` (existing probe), `GET /api/health` and `GET /api/system/stats`, projected to counts, states, version and coarse host metrics. Paths, ports, PIDs, hostnames, install IDs and commit are dropped. NG facts come from the existing connection report. The support report is reached through Settings, Diagnostics, and is not duplicated. Sections fail independently and keep stale values per profile.
+- **Hermes Dashboard tab.** Plain-text guidance for Config, Providers, Memory setup, Cron editing and MCP management. No links: NG cannot prove an upstream Dashboard URL is reachable in either mode.
+- **Capabilities.** `mcpServers`, `health`, `systemStats` from OpenAPI GET paths. Tabs render only when available. Diagnostics and Dashboard also need their dependencies as described in ADR-031.
+- **Trusted-local allowlist.** Exactly `GET /api/mcp/servers`, `GET /api/health`, `GET /api/system/stats` added. Contract and unit tests keep MCP write, test, auth, catalog and install routes, gateway start and stop, `/api/ops/*`, `/api/config/raw`, `/api/credentials/pool` and `/api/webhooks` at 403. Query-token smuggling on the new paths is refused.
+- **Fixtures.** `tests/fixtures/dashboard.ts` seeds MCP URL passwords, query tokens, Authorization headers, env and args, host paths, ports, PIDs, hostnames and install IDs. Tests assert none reach the projection, the proxied wire, or the DOM.
+
+Evidence (synthetic gated fixture on :8787 and the in-process contract fixture; not vanilla-Hermes proof):
+
+- `npm run build`, `typecheck`, `lint`: pass.
+- Unit: 434/434 pass, including the new `tests/unit/mcp-diagnostics.test.ts` (11 tests: projection secret dropping, malformed and bounded input, browser profile scoping and stale handling, dispose safety, capability advertisement, allowlist allow and refuse).
+- Contract: 44/44 pass, including the new MCP, health and stats case in `tests/contract/trusted-local.test.ts`.
+- Browser: `tests/e2e/management-mcp-diagnostics.spec.ts` (9 tests) passes on desktop-chromium, android-chromium and narrow-320, with axe, 44px targets, no horizontal overflow, profile switch and secret-absence checks. `tests/e2e/management-memory-cron.spec.ts` (10 tests) and `tests/e2e/management-skills.spec.ts` (4 tests) also pass on all three projects. The Skills spec now counts its three named tabs rather than all tabs, because the shared fixture advertises more routes.
+- Exit gate: "Management surfaces do not introduce direct Hermes filesystem/state access." Holds. Every Management read goes through `DashboardClient` routes under `/__hermes/api/`. A grep of `client/` and `src/hermes/` finds no filesystem, `state.db`, `config.yaml` or home-directory access. The allowlist tests prove the local wire admits only the enumerated reads.
+- Not run locally: iPhone WebKit (CI covers it), physical devices, real Hermes upstream, trusted-local in the browser (contract tests cover the bridge).
+
+Known boundaries and deferred work:
+
+- The proxy is a pass-through, so raw upstream bodies (including fields the projection drops) cross the same-origin proxy. Redaction is enforced in the browser projection and tested there.
+- MCP management (add, edit, remove, enable toggle, test, auth, catalog, install) is not implemented in any mode. Each needs its own write-review record.
+- Config editing and provider setup are not implemented; they are text guidance only.
+- Log viewing and log links beyond the Settings support-report hand-off are deferred.
+- All evidence is synthetic. Real-upstream acceptance for these shapes is open, as for Memory and Cron.

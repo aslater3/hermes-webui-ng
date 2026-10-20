@@ -25,7 +25,8 @@ test('desktop and mobile: open Manage, search, read a skill, and see stale data 
   await login(page);
   await openManage(page);
   // Skills, Memory and Cron are all advertised by the fixture; each tab renders only because Hermes offers it.
-  await expect(manage(page).getByRole('tab')).toHaveCount(3);
+  // The fixture advertises more routes than Skills alone, so count the original three by name rather than all tabs.
+  await expect(manage(page).getByRole('tab', { name: /^(Skills|Memory|Cron)$/ })).toHaveCount(3);
   await expect(manage(page).getByText('default profile · read-only', { exact: false })).toBeVisible();
   await expect(manage(page).getByRole('button', { name: /axolotl/ })).toBeVisible();
   await manage(page).getByRole('searchbox', { name: 'Search skills' }).fill('axol');

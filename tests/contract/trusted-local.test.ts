@@ -131,3 +131,43 @@ test('local wire: memory and cron reads are proxied and redacted; actions, memor
   assert.equal(h.upstream.metrics.cronActions, 0);
   assert.ok(!JSON.stringify(h.logs).includes(TOKEN));
 });
+
+test('local wire: MCP list, health and system stats are proxied and projected; MCP writes, probes, auth, catalog and secret routes stay 403', async t => {
+  const h = await setup(t);
+  const { DashboardClient } = await import('../../src/hermes/dashboard-client.js');
+  const dashboard = new DashboardClient(h.origin);
+  await dashboard.status();
+  const servers = await dashboard.mcpServers('default');
+  assert.deepEqual(servers.map(server => server.name), ['github', 'filesystem', 'oauth-calendar']);
+  assert.equal(servers[0]!.toolCount, 2);
+  const status = await dashboard.hermesStatus('default');
+  const health = await dashboard.hermesHealth();
+  const stats = await dashboard.systemStats();
+  assert.equal(status.version, '0.13.2'); assert.equal(health.ok, true); assert.equal(stats.os, 'Linux');
+  const rendered = JSON.stringify({ servers, status, health, stats });
+  for (const secret of ['FIXTURE_MCP_URL_PASSWORD', 'FIXTURE_MCP_QUERY_TOKEN', 'FIXTURE_MCP_HEADER_SECRET', 'FIXTURE_MCP_ENV_SECRET',
+    'FIXTURE_MCP_ARG_SECRET', 'FIXTURE_MCP_OAUTH_TOKEN', '/home/fixture/private', '/srv/hermes', 'fixture-host.internal', 'FIXTURE_INSTALL_ID', '48211', '9119', 'deadbeefcafe'])
+    assert.equal(rendered.includes(secret), false, secret);
+  for (const [method, path] of [
+    ['POST', '/__hermes/api/mcp/servers'], ['PUT', '/__hermes/api/mcp/servers'], ['DELETE', '/__hermes/api/mcp/servers/github'],
+    ['PUT', '/__hermes/api/mcp/servers/github/enabled'], ['POST', '/__hermes/api/mcp/servers/github/test?profile=default'],
+    ['POST', '/__hermes/api/mcp/servers/github/auth'], ['GET', '/__hermes/api/mcp/oauth/flows/abc'], ['GET', '/__hermes/api/mcp/catalog'],
+    ['POST', '/__hermes/api/mcp/catalog/install'], ['GET', '/__hermes/api/mcp/servers?token=leak'], ['GET', '/__hermes/api/mcp/servers/github'],
+    ['POST', '/__hermes/api/gateway/start'], ['POST', '/__hermes/api/gateway/stop'], ['POST', '/__hermes/api/ops/dump'],
+    ['GET', '/__hermes/api/config/raw'], ['GET', '/__hermes/api/credentials/pool'], ['POST', '/__hermes/api/webhooks'],
+    ['POST', '/__hermes/api/health/retirement'], ['GET', '/__hermes/api/health/idle'], ['POST', '/__hermes/api/system/stats'],
+  ] as const) assert.equal((await fetch(h.origin + path, { method, headers: { Origin: h.origin } })).status, 403, `${method} ${path}`);
+  assert.ok(!JSON.stringify(h.logs).includes(TOKEN));
+});
+
+test('local wire: MCP server url, command, args, env and tool names are scrubbed on the server, not only in the browser', async t => {
+  const h = await setup(t);
+  const response = await fetch(h.origin + '/__hermes/api/mcp/servers?profile=default');
+  assert.equal(response.status, 200);
+  const raw = await response.text();
+  for (const secret of ['FIXTURE_MCP_URL_PASSWORD', 'FIXTURE_MCP_QUERY_TOKEN', 'FIXTURE_MCP_HEADER_SECRET', 'FIXTURE_MCP_ENV_SECRET', 'FIXTURE_MCP_ARG_SECRET', '/home/fixture/private', 'mcp.example.test']) assert.ok(!raw.includes(secret), secret);
+  const servers = (JSON.parse(raw) as { servers: Record<string, unknown>[] }).servers;
+  const allowed = new Set(['name', 'transport', 'auth', 'enabled', 'source', 'plugin', 'tool_count']);
+  for (const server of servers) for (const key of Object.keys(server)) assert.ok(allowed.has(key), key);
+  assert.equal(servers.find(server => server.name === 'github')?.tool_count, 2);
+});
