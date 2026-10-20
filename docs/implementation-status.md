@@ -153,3 +153,26 @@ Known boundaries, stated so they are not mistaken for completion:
 - No image is published. Registry push, OCI labels, provenance/signing and the semver/`latest` tag policy from `docs/09-docker-deployment.md` section 12 remain release work (Phase 10 release tasks, human-approved).
 - `npm audit` findings noted above under "Upstream recertification" are not covered by the image scan; triage them separately.
 - The `docs/13-acceptance-criteria.md` Packaging checkboxes stay unticked until a green CI run on the merge head is recorded here.
+
+## Phase 8 slice 1 — Manage shell and read-only Skills
+
+What landed (ADR-028):
+
+- A **Manage** entry in the sidebar footer, the conversations drawer and the quick-actions palette. The dialog renders only available tabs. Skills is the only one.
+- Read-only Skills view over official `GET /api/skills?profile=` and `GET /api/skills/content?name=&profile=`. Results are projected to typed fields. The upstream server `path` is dropped. SKILL.md renders through the sanitised Markdown component.
+- Capability gating via OpenAPI `GET` advertisement (`skills`, `skillContent`). An absent route shows "Not supported by this Hermes version."
+- Profile-scoped and generation-scoped (`SkillBrowser`). Profile switches clear rows. A failed refresh keeps same-profile rows as stale.
+- Trusted-local allowlist widened by exactly the two GET routes. Contract tests keep writes and hub/cron routes at 403. Gated mode goes through the authenticated proxy.
+
+Evidence (this branch, synthetic fixture only, not vanilla-Hermes proof):
+
+- `npm run build`, `typecheck`, `lint`: pass. Unit 404/404 (`tests/unit/skills.test.ts`, `trusted-local.test.ts` additions). Contract 41/41 (`trusted-local`, `proxy` gated-mode additions).
+- Browser: `tests/e2e/management-skills.spec.ts` 12/12 on desktop-chromium, android-chromium and narrow-320 (local probe harness on :8787). Related shell, viewport, local-shell, browser-commands and session-usage specs 99/99 on the same projects. The axe check is in the first test.
+- Not run locally: iPhone WebKit (CI covers it), physical devices, real Hermes upstream.
+
+Known boundaries and deferred work:
+
+- No install, uninstall, toggle, create or edit. Hub search, preview and scan are not implemented. Each needs its own write-review and allowlist ADR.
+- No deep link to the upstream Dashboard. The URL is not known to be browser-reachable in gated mode.
+- Memory, Automations/Cron, MCP, Config and Diagnostics tabs are not rendered.
+- Skill content is capped at 200,000 characters and the list at 2,000 rows. Larger catalogues are not paginated.

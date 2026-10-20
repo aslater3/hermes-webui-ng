@@ -82,3 +82,23 @@ test('local wire: native conversations, reconnect and invalidated access use no 
   let cleared = false; store.onIdentityBoundary(() => { cleared = true; }); failed = true; await store.resume();
   assert.equal(cleared, true); assert.equal(store.hasAccess, false); assert.equal(gateway.state.phase, 'disconnected');
 });
+
+test('local wire: skill reads are allowed only as exact GET routes; writes and hub/cron routes stay 403', async t => {
+  const h = await setup(t);
+  const { DashboardClient } = await import('../../src/hermes/dashboard-client.js');
+  const dashboard = new DashboardClient(h.origin);
+  await dashboard.status();
+  const rows = await dashboard.skills('default');
+  assert.deepEqual(rows.map(row => row.name), ['arxiv', 'axolotl', 'local-notes']);
+  const doc = await dashboard.skillContent('arxiv', 'default');
+  assert.equal(doc.name, 'arxiv'); assert.match(doc.content, /# arxiv/);
+  assert.ok(!JSON.stringify({ rows, doc }).includes('/srv/hermes'));
+  assert.deepEqual((await dashboard.skills('work')).map(row => row.name), ['arxiv']);
+  assert.deepEqual(await dashboard.skills('empty-profile'), []);
+  for (const [method, path] of [
+    ['POST', '/__hermes/api/skills'], ['PUT', '/__hermes/api/skills/content'], ['PUT', '/__hermes/api/skills/toggle'],
+    ['POST', '/__hermes/api/skills/hub/install'], ['GET', '/__hermes/api/skills/hub/search?q=x'], ['GET', '/__hermes/api/skills/content/extra'],
+    ['GET', '/__hermes/api/skills?token=leak'], ['GET', '/__hermes/api/cron/jobs'], ['POST', '/__hermes/api/cron/jobs'],
+  ] as const) assert.equal((await fetch(h.origin + path, { method, headers: { Origin: h.origin } })).status, 403, `${method} ${path}`);
+  assert.ok(!JSON.stringify(h.logs).includes(TOKEN));
+});

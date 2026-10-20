@@ -1,6 +1,6 @@
 import { ActiveSessions } from './ActiveSessions.js';
 import { useEffect, useRef, useState } from 'react';
-import { ArrowLeft, ArrowRight, MessageSquare, Plus, Search, RefreshCw, PanelLeftClose, Settings2, Command } from 'lucide-react';
+import { ArrowLeft, ArrowRight, MessageSquare, Plus, Search, RefreshCw, PanelLeftClose, Settings2, Command, Sparkles } from 'lucide-react';
 import type { AppRuntime } from './runtime.js';
 import { Brand, IconButton } from './primitives.js';
 import { dateGroup } from './preferences.js';
@@ -8,8 +8,8 @@ import { draftKey } from '../src/hermes/chat-controller.js';
 import { visibleSessionRows } from '../src/hermes/session-visibility.js';
 import './sidebar-attention.css';
 
-export function Sidebar({ runtime: rt, onChoose, onSettings, onCommands, onCollapse, compact = false }: {
-  runtime: AppRuntime; onChoose: () => void; onSettings: () => void; onCommands: () => void; onCollapse?: () => void; compact?: boolean;
+export function Sidebar({ runtime: rt, onChoose, onSettings, onManage, onCommands, onCollapse, compact = false }: {
+  runtime: AppRuntime; onChoose: () => void; onSettings: () => void; onManage?: () => void; onCommands: () => void; onCollapse?: () => void; compact?: boolean;
 }) {
   const index = rt.chat.browser.index, [query, setQuery] = useState(index.query);
   const rows = index.query ? index.rows : visibleSessionRows(index.rows, rt.attention.items);
@@ -48,6 +48,6 @@ export function Sidebar({ runtime: rt, onChoose, onSettings, onCommands, onColla
         <IconButton label="Next conversations" disabled={!rt.readable || !index.hasNext || index.phase === 'loading'} onClick={() => rt.run(() => rt.chat.browser.list('', index.offset + 20))}><ArrowRight size={15}/></IconButton>
         <IconButton label="Refresh conversations" disabled={!rt.readable} onClick={() => rt.run(() => rt.chat.browser.refresh())}><RefreshCw size={14}/></IconButton></div>
     </>}
-    <div className="sidebar-footer"><button className="account-button" onClick={onSettings} aria-label="Open settings"><span className="account-avatar">H</span>{!compact && <span><strong>Hermes Agent</strong><small>Connection & appearance</small></span>}{!compact && <Settings2 size={17}/>}</button></div>
+    <div className="sidebar-footer">{onManage && <button className="manage-button" onClick={onManage} aria-label="Manage Hermes"><Sparkles size={16}/>{!compact && <span>Manage</span>}</button>}<button className="account-button" onClick={onSettings} aria-label="Open settings"><span className="account-avatar">H</span>{!compact && <span><strong>Hermes Agent</strong><small>Connection & appearance</small></span>}{!compact && <Settings2 size={17}/>}</button></div>
   </aside>;
 }

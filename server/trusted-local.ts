@@ -43,7 +43,8 @@ export function localPathAllowed(path: string, method: string): boolean {
   if (!['GET', 'HEAD'].includes(method)) return false;
   const url = new URL(path, 'http://local');
   for (const key of url.searchParams.keys()) if (['token', 'ticket', 'internal'].includes(key.toLowerCase())) return false;
-  return ['/api/status', '/api/sessions', '/api/sessions/search', '/api/profiles', '/api/model/options', '/openapi.json'].includes(url.pathname) ||
+  // GET-only read surfaces for the Management/Skills view. Writes and hub routes stay unavailable in trusted-local.
+  return ['/api/status', '/api/sessions', '/api/sessions/search', '/api/profiles', '/api/model/options', '/api/skills', '/api/skills/content', '/openapi.json'].includes(url.pathname) ||
     /^\/api\/sessions\/[^/]+\/messages$/.test(url.pathname);
 }
 export function localUpgradePath(req: IncomingMessage, path: string, config: Config): string | undefined {
