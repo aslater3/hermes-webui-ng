@@ -1,14 +1,25 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { steerSession } from '../../src/hermes/session-steer.js';
+import { steerSession, steerOutcomeCopy } from '../../src/hermes/session-steer.js';
 
 test('natural steering uses session.steer exactly once and accepts the pinned queued acknowledgement', async () => {
   const calls: { method: string; params?: Record<string, unknown> }[] = [];
   const text = await steerSession({ call: async (method, params) => {
     calls.push({ method, params }); return { status: 'queued', text: 'Change direction now' };
   } }, 'live-1', '  Change direction now  ');
-  assert.equal(text, 'Change direction now');
+  assert.deepEqual(text, { text: 'Change direction now', outcome: 'queued' });
   assert.deepEqual(calls, [{ method: 'session.steer', params: { session_id: 'live-1', text: 'Change direction now' } }]);
+});
+
+test('a redirected steer acknowledgement is accepted and reported with redirect copy', async () => {
+  const result = await steerSession({ call: async (_method, params) => ({ status: 'redirected', text: String(params?.text) }) }, 'live-1', 'Use the other file');
+  assert.deepEqual(result, { text: 'Use the other file', outcome: 'redirected' });
+  assert.equal(steerOutcomeCopy(result.outcome), 'Redirected the running turn');
+  assert.equal(steerOutcomeCopy('queued'), 'Steered into current turn');
+});
+
+test('a redirected acknowledgement that changes the text is still rejected as unsupported', async () => {
+  await assert.rejects(steerSession({ call: async () => ({ status: 'redirected', text: 'other' }) }, 'live-1', 'x'), /unsupported steer acknowledgement/);
 });
 
 test('literal slash escape is preserved as steer text rather than interpreted as a slash command', async () => {
