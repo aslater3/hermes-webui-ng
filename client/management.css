@@ -65,3 +65,15 @@
 .diagnostics-section { display: grid; gap: 6px; }
 .diagnostics-section h4 { margin: 8px 0 0; font-size: 13px; color: var(--muted); }
 .diagnostics-panel button, .mcp-panel button { min-height: 44px; }
+/* The tab row must never shrink: in the flex column of a height-capped dialog it was squeezed to ~2px once a list
+   loaded, so Manage looked as if it jumped straight into Skills. */
+.management-tabs { flex-shrink: 0; }
+.management-tab { flex: none; white-space: nowrap; }
+.management-body { flex: 1 1 auto; }
+.detail-placeholder { margin: 0; padding: 24px 12px; color: var(--muted); text-align: center; align-self: start; }
+@media (max-width: 759px) { .detail-placeholder { display: none; } }
+/* Desktop: two panes need the room, and a steady height stops the dialog jumping while lists load. */
+@media (min-width: 760px) {
+  .modal-management { width: min(1040px, calc(100% - 64px)); height: min(80dvh, 760px); }
+  .modal-management .modal-inner { height: 100%; }
+}

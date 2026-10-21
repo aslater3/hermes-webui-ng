@@ -113,6 +113,7 @@ function SkillsPanel({ browser, profile }: { browser: SkillBrowser; profile?: st
           <span className="skill-row-meta">{[row.category || 'uncategorised', PROVENANCE[row.provenance], row.enabled ? undefined : 'Disabled in Hermes'].filter(Boolean).join(' · ')}</span>
         </button></li>)}</ul>
       </section>
+      {!selected && <p className="detail-placeholder">Select a skill to read its instructions.</p>}
       {selected && <section className="skill-detail" aria-label={`Skill: ${selected}`}>
         <button type="button" className="secondary skill-back" onClick={closeSkill}><ArrowLeft size={16}/>All skills</button>
         {detail.phase === 'loading' && <p role="status" className="muted">Loading {selected}…</p>}
@@ -205,6 +206,7 @@ function CronPanel({ browser, scope, actions, actionsBlockedByMode }: { browser:
           <span className="cron-row-meta">{[row.schedule || 'Schedule unknown', stateLabel(row), row.nextRunAt && row.enabled ? `next ${formatTime(row.nextRunAt)}` : undefined, row.lastStatus ? `last ${row.lastStatus}` : undefined, row.failureStreak ? `${row.failureStreak} failures in a row` : undefined].filter(Boolean).join(' · ')}</span>
         </button></li>)}</ul>
       </section>
+      {!selected && <p className="detail-placeholder">Select a job to see its schedule and recent runs.</p>}
       {selected && <section className="cron-detail" aria-label={`Cron job: ${job?.name ?? selected}`}>
         <button type="button" className="secondary cron-back" onClick={closeJob}><ArrowLeft size={16}/>All jobs</button>
         {detail.phase === 'loading' && <p role="status" className="muted">Loading job…</p>}
