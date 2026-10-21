@@ -4,7 +4,8 @@ import { join } from 'node:path';
 import { startFixture } from '../build/tests/fixtures/dashboard.js';
 import { createApp } from '../build/server/app.js';
 import { loadConfig } from '../build/server/config.js';
-const fixture = await startFixture();
+// The seeded agent loop is a stored session in the session list (tests/e2e/agent-steps.spec.ts).
+const fixture = await startFixture(0, { agentLoop: true });
 const localToken = 'LOCAL_BROWSER_FIXTURE_NOT_A_REAL_SECRET';
 const local = await startFixture(0, { sessionToken: localToken });
 fixture.seed(1, 110);

@@ -1,0 +1,11 @@
+/* Pinned above the composer while a turn runs. Wraps instead of overflowing at 320px. */
+.now-line {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 4px 8px; min-width: 0; margin: 0 0 8px; padding: 8px 12px;
+  border: 1px solid var(--border); border-radius: 12px; background: var(--accent-soft); color: var(--text); font-size: 13px; line-height: 1.4;
+}
+.now-line svg { color: var(--accent); flex-shrink: 0; }
+.now-label, .now-detail { min-width: 0; overflow-wrap: anywhere; }
+.now-label { font-weight: 600; }
+.now-detail { color: var(--muted); font-style: italic; flex-basis: 100%; }
+.now-time { color: var(--muted); font-variant-numeric: tabular-nums; margin-left: auto; }
+@media (prefers-reduced-motion: reduce) { .now-line .spin { animation: none; } }
