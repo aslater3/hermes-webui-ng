@@ -76,7 +76,10 @@ export class NativeSession {
         this.activity.record({ key: `peer:${request.id}`, id: request.id, kind: request.kind === 'approval' || request.kind === 'clarify' ? request.kind : 'secret',
           status, outcome: label, prompt: request.title, command: request.kind === 'approval' ? request.detail : undefined,
           choices: [], questions: [], answered: [], blocked: false });
-        this.publish({});
+        // Answering is the end of the wait: never leave the composer locked on a stale 'waiting' snapshot.
+        if (status === 'answered' && this.state.phase === 'waiting' && !this.hasPeerRequest()) {
+          ++this.revision; this.publish({ phase: 'running' }); void this.refresh().catch(() => {});
+        } else this.publish({});
       })] : []),
       gateway.onEvent((event) => this.event(event)),
       gateway.onState((connection) => this.connection(connection)),
@@ -270,6 +273,12 @@ export class NativeSession {
       }
     }
     if (this.activity.receive(event)) this.publish({});
+    // New agent activity means the turn moved on; a 'waiting' phase with no open request is stale.
+    if (this.state.phase === 'waiting' && !this.hasPeerRequest() &&
+        ['reasoning.delta', 'message.delta', 'tool.start', 'tool.progress', 'tool.complete'].includes(event.type) &&
+        !this.activity.state.inputs.some(input => ['pending', 'sending'].includes(input.status))) {
+      ++this.revision; this.publish({ phase: 'running' }); void this.refresh().catch(() => {});
+    }
     if (event.type === 'message.delta') {
       if (!this.foreground) return;
       const payload = record(event.payload);

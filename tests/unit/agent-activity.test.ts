@@ -145,3 +145,46 @@ test('a settled peer request is recorded at its point in the turn with its outco
   a.record({...a.state.inputs[0]!,outcome:'Denied'});
   assert.equal(a.state.inputs.length,1);assert.equal(a.state.inputs[0]?.outcome,'Approved once');
 });
+
+test('a retried model call replaces the abandoned partial reasoning instead of repeating it',()=>{
+  const a=new AgentActivity();
+  a.receive(event('message.start',{}));
+  a.receive(event('thinking.delta',{text:'🤔 pondering...'}));
+  for(const text of ['Profile the ','window loop.']) a.receive(event('reasoning.delta',{text}));
+  a.receive(event('thinking.delta',{text:''})); // the call failed; Hermes retries the same step
+  for(const text of ['Profile the ','window loop with cProfile.']) a.receive(event('reasoning.delta',{text}));
+  const reasoning=a.state.timeline.filter(e=>e.kind==='reasoning');
+  assert.equal(reasoning.length,1);
+  assert.equal(reasoning[0]?.kind==='reasoning'&&reasoning[0].text,'Profile the window loop with cProfile.');
+  assert.equal(a.state.reasoning,'Profile the window loop with cProfile.');
+});
+
+test('reasoning across a tool step stays two segments; the call boundary does not erase it',()=>{
+  const a=new AgentActivity();
+  a.receive(event('message.start',{}));
+  a.receive(event('reasoning.delta',{text:'First look at the data.'}));
+  a.receive(event('thinking.delta',{text:''}));
+  a.receive(event('tool.start',{tool_id:'t1',name:'terminal'}));
+  a.receive(event('tool.complete',{tool_id:'t1',name:'terminal',result:'ok'}));
+  a.receive(event('reasoning.delta',{text:'Now profile it.'}));
+  assert.deepEqual(a.state.timeline.filter(e=>e.kind==='reasoning').map(e=>e.kind==='reasoning'?e.text:''),['First look at the data.','Now profile it.']);
+});
+
+test('a bounded reasoning.available preview never shortens streamed reasoning',()=>{
+  const a=new AgentActivity();
+  a.receive(event('message.start',{}));
+  const full='x'.repeat(900);
+  a.receive(event('reasoning.delta',{text:full}));
+  a.receive(event('reasoning.available',{text:full.slice(0,500)}));
+  assert.equal(a.state.reasoning.length,900);
+  assert.equal(a.state.timeline.filter(e=>e.kind==='reasoning').length,1);
+});
+
+test('thinking.delta is a status line: the latest replaces the previous and an empty one clears it',()=>{
+  const a=new AgentActivity();
+  a.receive(event('thinking.delta',{text:'🤔 pondering...'}));
+  a.receive(event('thinking.delta',{text:'🧐 analysing...'}));
+  assert.equal(a.state.thinking,'🧐 analysing...');
+  a.receive(event('thinking.delta',{text:''}));
+  assert.equal(a.state.thinking,'');
+});
