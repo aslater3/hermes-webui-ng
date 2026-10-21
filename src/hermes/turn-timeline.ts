@@ -189,6 +189,13 @@ export function mergeAtoms(saved: readonly Atom[], live: readonly Atom[]): Atom[
     if (atom.kind === 'call' && atom.call.callId && savedCall.has(atom.call.callId)) { anchorLive = index; anchorSaved = savedCall.get(atom.call.callId)!; }
   });
   const result = saved.map(atom => ({ ...atom }) as Atom);
+  // A shared call keeps the duration the live event measured when the stored result carries none.
+  for (const atom of live) {
+    if (atom.kind !== 'call' || !atom.call.callId || atom.call.seconds === undefined) continue;
+    const index = savedCall.get(atom.call.callId);
+    const target = index === undefined ? undefined : result[index];
+    if (target?.kind === 'call' && target.call.seconds === undefined) target.call = { ...target.call, seconds: atom.call.seconds };
+  }
   const tail = result.filter((_, index) => index > anchorSaved);
   const claimed = new Set<Atom>();
   // A saved step with the same text takes the live key (the row keeps its DOM node) and is claimed once.
@@ -201,12 +208,17 @@ export function mergeAtoms(saved: readonly Atom[], live: readonly Atom[]): Atom[
     }
     if (!norm(atom.text)) return;
     // Before the anchor the history already holds the step: keep its key, drop the live copy.
-    if (index < anchorLive) { const twin = twinIn(result, atom); if (twin) { claimed.add(twin); twin.key = atom.key; } return; }
+    if (index < anchorLive) { const twin = twinIn(result, atom); if (twin) { claimed.add(twin); twin.key = atom.key; keepTiming(twin, atom); } return; }
     const twin = twinIn(tail, atom);
-    if (twin) { claimed.add(twin); twin.key = atom.key; return; }
+    if (twin) { claimed.add(twin); twin.key = atom.key; keepTiming(twin, atom); return; }
     kept.push(atom);
   });
   return [...result, ...kept];
+}
+
+/** A saved thought without stored timestamps keeps the duration the live copy measured. */
+function keepTiming(saved: Atom, live: Atom): void {
+  if (saved.kind === 'thought' && live.kind === 'thought' && saved.seconds === undefined) saved.seconds = live.seconds;
 }
 
 /** Atoms to rows: consecutive calls form one group; a text is the reply only when no call follows it. */

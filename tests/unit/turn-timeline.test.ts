@@ -155,6 +155,32 @@ test('a finished live turn merges into its saved history: each step once, in ord
   assert.equal(groups(merged.items)[0]?.calls.find(call => call.callId === 'c1')?.status, 'failed');
 });
 
+test('a live thought keeps the duration it measured when the saved copy has no timestamps', () => {
+  const live = liveActivity([
+    ['reasoning.delta', { text: 'Weighing the options.' }],
+    ['tool.start', { tool_id: 'c1', name: 'terminal', args: { command: 'make' } }],
+    ['tool.complete', { tool_id: 'c1', name: 'terminal', result: '{"exit_code":0}' }],
+  ], [0, 2500]);
+  const saved = [user('go'), rest({ id: 2, role: 'assistant', content: '', reasoning_content: 'Weighing the options.',
+    tool_calls: [call('c1', 'terminal', { command: 'make' })] }), result('c1', 'terminal', { exit_code: 0 })] as DisplayMessage[];
+  const turn = turnOf(conversationSegments(saved, { activity: live.state, running: false, interleaved: false }));
+  const thought = turn.items[0];
+  assert.equal(thought?.kind === 'thought' ? thought.seconds : undefined, 2.5);
+  assert.equal(turn.items.length, 2, 'the thought and its group, once each');
+});
+
+test('a shared call keeps the duration measured live when the stored result has none', () => {
+  const live = liveActivity([
+    ['tool.start', { tool_id: 'c1', name: 'terminal', args: { command: 'make' } }],
+    ['tool.complete', { tool_id: 'c1', name: 'terminal', duration_s: 2.2, result: '{"exit_code":0}' }],
+  ], [0, 1]);
+  const saved = [user('go'), rest({ id: 2, role: 'assistant', content: '', tool_calls: [call('c1', 'terminal', { command: 'make' })] }),
+    result('c1', 'terminal', { exit_code: 0 })] as DisplayMessage[];
+  const [group] = groups(turnOf(conversationSegments(saved, { activity: live.state, running: false, interleaved: false })).items);
+  assert.equal(group?.calls[0]?.seconds, 2.2);
+  assert.equal(group?.seconds, 2.2);
+});
+
 test('live calls the history does not know yet are appended to the saved group', () => {
   const saved = [user('go'), rest({ id: 2, role: 'assistant', content: '', tool_calls: [call('c1', 'terminal', { command: 'make' }), call('c2', 'terminal', { command: 'ls' })] }),
     result('c1', 'terminal', { exit_code: 0 })] as DisplayMessage[];

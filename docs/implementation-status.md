@@ -402,3 +402,25 @@ Work in progress; the React rendering lands in the following slices.
 - Now line: shown only while the running row is scrolled out of view (IntersectionObserver); activating it brings the row back.
 - Specs changed because they asserted removed markup: `agent-steps.spec.ts` (saved long turn now one turn with 26 rows; Now test waits for the running row and scrolls it out of view), `reply-interleave.spec.ts` (narration/tools/reply rows; the interleave fixture now stores the tool call in history, as Hermes does), `reasoning-placement.spec.ts` (thought rows and order), `m3-activity.spec.ts` (the archive panel is removed; the test asserts it is absent), `history-content.spec.ts` (tool and reasoning rows).
 - Known limit: earlier turns' live-only tool rows (no saved counterpart, e.g. fixture turns) are dropped when the next turn starts, as the archive was bounded to six turns anyway.
+
+### Slice 3: evidence, boundaries
+
+Merge rule (`src/hermes/turn-timeline.ts`, `mergeAtoms`), in short:
+1. Saved and live steps are flattened to atoms (thought, text, call) in order.
+2. The last call present in both is the anchor; live steps before it are already in history.
+3. A live call whose `tool_call_id` history holds is dropped; the saved row keeps the key, and a live duration fills a missing saved one.
+4. Live text or thoughts are dropped when a saved step of the same kind contains them (after the anchor, or anywhere before it); the saved step takes the live key so the row keeps its DOM node.
+5. Consecutive calls form one group across the handover; a text is the reply only when no call follows it.
+
+Evidence (synthetic fixture on the probe harness; not vanilla-Hermes evidence):
+
+- Unit: `tests/unit/turn-timeline.test.ts` (15 tests: saved turn shape, grouping, timing from timestamps, live running and failed calls, merge with keys and order, duration carry-over, tool-free answers, segment keys, labels). Gate: build, typecheck, lint, unit 519 pass, contract 56 pass.
+- E2E, `tests/e2e/turn-timeline.spec.ts`: a saved long turn (one header, 8 rows then 26, dividers, 44 px rows, full command and output when expanded, failing call marked by text); a live turn where a running call ticks, is opened, and becomes `ok` in place with its duration and output (node identity checked), the narration and failing call appear once, the history refresh and a reload show the same five rows; the Now line hidden while the row is on screen and shown when it is scrolled out, with its jump control. `reply-interleave`, `reasoning-placement`, `history-content`, `agent-steps` (saved long turn), `m3-activity`, `shell*`, `session-attention`, `approval-attention`, `steering`, `peer-requests`, `thinking-indicator`, `attachments`, `voice`, `agent-hit-area`, `session-usage`, `conversation-details` pass on desktop-chromium, android-chromium and narrow-320 (axe clean on the timeline, no horizontal overflow at 320 px).
+- Not run on this harness, and failing before and after the change: `agent-inputs`, `chat-layout` and other legacy diagnostic specs that wait for `#auth-state` (the probe harness does not serve the diagnostic page).
+- Screenshots: `test-results/turn-timeline-saved-{desktop-chromium,android-chromium,narrow-320}.png` (the turn), `test-results/turn-timeline-saved-page-*.png` (the page), `test-results/turn-timeline-live-*.png`, `test-results/turn-timeline-now-*.png`, `test-results/agent-steps-*.png`.
+
+Deferred or not verified:
+
+- Earlier turns no longer keep a bounded in-tab archive of live-only tool rows; saved history is the record. A fixture turn with no saved tool rows loses its tool rows when the next turn starts.
+- Thought durations for saved turns depend on stored timestamps on the previous row and the reasoning row; a Hermes history without them shows "Thought" with no duration.
+- Not verified on a physical iPhone or Android device; WebKit is not run locally (CI covers iPhone). Approval and credential cards still use the bounded `AgentView` input cards, not the timeline.

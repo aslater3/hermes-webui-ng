@@ -1,6 +1,6 @@
 import { test, expect, type Page } from '@playwright/test';
 import { AxeBuilder } from '@axe-core/playwright';
-import { login, send, idle, conversations } from './shell-fixture.js';
+import { login, conversations } from './shell-fixture.js';
 
 test.use({ baseURL: 'http://127.0.0.1:8787' });
 // SYNTHETIC fixture rows shaped like Hermes REST history (see tests/fixtures/dashboard.ts agentLoopRows). Not vanilla-Hermes evidence.
@@ -53,33 +53,4 @@ test('a long saved agent turn renders as one CLI-style timeline with failures ma
   expect((await new AxeBuilder({ page }).include('#conversation-scroll').analyze()).violations).toEqual([]);
   await page.screenshot({ path: `test-results/agent-steps-${info.project.name}.png`, fullPage: false });
   expect(errors).toEqual([]);
-});
-
-test('a running turn shows what it is doing in the Now line only while its row is scrolled out of view', async ({ page }, info) => {
-  await login(page);
-  await send(page, '[now-test] check the radar');
-  // The running tool row is the live row; while it is on screen the Now line stays away.
-  const running = page.locator('[data-row="tools"][data-status="running"]');
-  await expect(running).toBeVisible();
-  await expect(page.locator('.now-line')).toHaveCount(0);
-  // A spacer below the row pushes it above the viewport: the Now line appears and names the step.
-  await page.evaluate(() => {
-    const spacer = document.createElement('div'); spacer.dataset.testSpacer = 'true'; spacer.style.height = '3000px';
-    document.querySelector('.conversation-content')?.append(spacer);
-    const scroller = document.querySelector<HTMLElement>('#conversation-scroll'); if (scroller) scroller.scrollTop = scroller.scrollHeight;
-  });
-  const now = page.locator('.now-line');
-  await expect(now).toHaveAttribute('role', 'status');
-  await expect(now.locator('.now-label')).toHaveText('Running terminal: make radar-check');
-  await expect(now.locator('.now-time')).toHaveText(/^\d+:\d\d$/);
-  await expect(now).toHaveAttribute('data-kind', 'tool');
-  expect((await new AxeBuilder({ page }).include('.now-line').analyze()).violations).toEqual([]);
-  await page.screenshot({ path: `test-results/agent-now-${info.project.name}.png` });
-  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
-  // Activating it brings the running row back, and the line goes away.
-  await now.locator('.now-jump').click();
-  await expect(page.locator('.now-line')).toHaveCount(0);
-  await page.getByRole('button', { name: 'Stop response' }).click();
-  await idle(page);
-  await expect(page.locator('.now-line')).toHaveCount(0);
 });
