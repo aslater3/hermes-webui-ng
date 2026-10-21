@@ -16,6 +16,8 @@ export interface ToolStep {
   args: string; output: string;
   /** No assistant call matched this result (native history, or a result without its call). */
   orphan: boolean; timestamp?: number;
+  /** Hermes tool_call_id when the call is known; the same id the live tool.start/complete events carry. */
+  callId?: string;
 }
 export interface ReasoningStep { kind: 'reasoning'; key: string; preview: string; text: string; truncated: boolean; timestamp?: number; }
 export type AgentStep = ToolStep | ReasoningStep;
@@ -78,6 +80,12 @@ export function keyArgument(name: string, args: Record<string, unknown>): string
   const value = Object.values(args).find((item): item is string => typeof item === 'string' && item.trim() !== '' && item.length <= 200);
   return value ?? '';
 }
+/** Elapsed seconds a stored result reports (duration_s and friends), when it is a finite non-negative number. */
+export function toolSeconds(output: string): number | undefined {
+  const result = output.trim().startsWith('{') ? parseObject(output) : undefined;
+  const seconds = [result?.duration_s, result?.duration_seconds, result?.duration].find((value): value is number => typeof value === 'number' && Number.isFinite(value) && value >= 0);
+  return seconds;
+}
 /** Verdict from a stored tool result. Only a parsed result object yields ok/failed; anything else stays unknown. */
 export function toolVerdict(output: string | undefined, hasResult: boolean): { outcome: ToolOutcome; verdict: string; duration?: string } {
   // No stored result (native history omits most outputs): say nothing rather than imply something went missing.
@@ -99,7 +107,7 @@ export function toolVerdict(output: string | undefined, hasResult: boolean): { o
   if (failed) return { outcome: 'failed', verdict: hasError ? 'error' : 'failed', duration };
   return { outcome: 'ok', verdict: bytes !== undefined ? `${bytes} bytes written` : 'done', duration };
 }
-function toolStep(key: string, name: string, argsJson: string | undefined, call: DisplayMessage | undefined, result: DisplayMessage | undefined, timestamp: number | undefined): ToolStep {
+export function toolStep(key: string, name: string, argsJson: string | undefined, call: DisplayMessage | undefined, result: DisplayMessage | undefined, timestamp: number | undefined): ToolStep {
   // A native-history row has no paired call but carries the call's own arguments.
   const sourceArgs = argsJson || (!call ? result?.toolArgs : undefined);
   const cleanArgs = sourceArgs ? redact(sourceArgs, ARGS_LIMIT) : '';

@@ -384,3 +384,12 @@ Known boundaries:
 - Expanded arguments and outputs keep the existing bounded display (8 KB) and are redacted with the shared helper, but the helper is pattern-based. It is not a guarantee against every secret format.
 - Live tool cards in the chronological activity panel keep their existing layout; only history steps are grouped.
 - Not verified on physical iPhone or Android devices, and WebKit is not run locally; CI covers iPhone.
+
+## CLI-style turn timeline, slice 1: projection and merge (branch `feat/cli-style-timeline`)
+
+Work in progress; the React rendering lands in the following slices.
+
+- `src/hermes/turn-timeline.ts` projects loaded history and the live `AgentActivity` into one timeline per assistant turn: `thought`, `tools` (consecutive calls form one group), `narration` (assistant text before a later call), and `reply` (the last text, when no call follows it). Live and saved steps merge so a step shows once, in order, keyed by Hermes `tool_call_id` (or the live key for text), so a running row keeps its identity when history replaces it.
+- Thought time is measured only when both sides are stored: saved thinking time runs from the previous stored row to the reasoning envelope; live thinking time runs from the first reasoning delta to the next non-reasoning event. A missing side shows no duration.
+- `src/hermes/agent-activity.ts`: reasoning and text timeline entries carry the epoch ms they started (`at`), for display only.
+- Evidence: `tests/unit/turn-timeline.test.ts` (13 tests: saved turns, grouping, durations, live running and failed calls, merge with keys and order, live-only and saved-only tool-free answers, segment keys). Gate: build, typecheck, lint, unit 517 pass, contract 56 pass.
