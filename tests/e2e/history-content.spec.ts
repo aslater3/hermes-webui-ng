@@ -27,17 +27,18 @@ test('native tool summaries, structured replies and public reasoning render clea
   for (let pass = 0; pass < 2; pass++) {
     await expect(page.locator('[data-role="assistant"]')).toHaveCount(2);
     await expect(page.locator('[data-role="assistant"]')).toContainText(['Structured response survives reload.', 'Sidecar-only answer survives reload.']);
-    const tool = page.locator('[data-role="tool"]');
-    await expect(tool).toContainText('terminal'); await expect(tool).not.toContainText('Hermes');
-    await tool.locator('summary').click(); await expect(tool.locator('pre')).toHaveText('git status');
-    const reasoning = page.locator('.history-reasoning'); await reasoning.locator('summary').click();
-    await expect(reasoning.locator('pre')).toHaveText('Public reasoning saved by Hermes.');
+    const tool = page.locator('[data-row="tools"]');
+    await expect(tool).toContainText('git status'); await expect(tool).not.toContainText('Hermes');
+    await tool.locator('.turn-row-toggle').click(); await expect(tool.locator('.turn-command')).toHaveText('git status');
+    const reasoning = page.locator('[data-row="thought"]'); await reasoning.locator('.turn-row-toggle').click();
+    await expect(reasoning.locator('.turn-thought-text')).toHaveText('Public reasoning saved by Hermes.');
     await expect(page.locator('#conversation-scroll')).not.toContainText('[Non-text entry]');
     await expect(page.locator('#conversation-scroll')).not.toContainText('PRIVATE_TOOL_ARG');
     const decorative = await page.locator('article.message svg').evaluateAll(nodes => nodes.every(node => node.getAttribute('aria-hidden') === 'true'));
     expect(decorative).toBe(true);
-    await expect(page.locator('[data-role="assistant"] .hermes-mark[aria-hidden="true"][alt=""]')).toHaveCount(2);
-    await expect(page.locator('[data-role="assistant"] .lucide-sparkles')).toHaveCount(0);
+    // One Hermes header for the turn, whatever the number of rows under it.
+    await expect(page.locator('[data-role="turn"] .message-label')).toHaveCount(1);
+    await expect(page.locator('.turn-timeline .lucide-sparkles')).toHaveCount(0);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     if (!pass) { await page.reload(); await idle(page); }
   }

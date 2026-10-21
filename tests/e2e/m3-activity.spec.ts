@@ -2,27 +2,21 @@ import { test, expect } from '@playwright/test';
 import { login, send, idle, settings } from './shell-fixture.js';
 test.use({ baseURL: 'http://127.0.0.1:8787' });
 
-test('earlier observed activity expands on demand without reviving answered forms', async ({ page }, info) => {
+test('answered approvals do not revive after a later turn, and earlier turns are not kept as a second copy', async ({ page }, info) => {
   await login(page);
   for (let n = 0; n < 2; n++) {
     await send(page, `[agent-test] approval archive ${n}`);
     await page.getByRole('button', { name: 'Allow once', exact: true }).click(); await idle(page);
   }
   await send(page, 'Normal turn following tool activity'); await idle(page);
-  await expect(page.locator('.agent-earlier > summary')).toContainText('(2 turns)');
-  await expect(page.locator('.agent-archive .agent-tool')).toHaveCount(0);
-  await page.locator('.agent-earlier > summary').click();
-  await expect(page.locator('.agent-archived-turn')).toHaveCount(2);
-  await page.locator('.agent-archived-turn > summary').first().click();
-  await expect(page.locator('.agent-archive .agent-tool')).toHaveCount(1);
-  await page.locator('.agent-archive .agent-tool > summary').click();
-  await expect(page.locator('.agent-archive')).toContainText('SYNTHETIC_AGENT_COMPLETE');
-  await expect(page.locator('.agent-archive input, .agent-archive textarea, .agent-archive button')).toHaveCount(0);
+  // The turn timeline is the only copy of tool activity; the old "Earlier activity" panel is gone.
+  await expect(page.locator('.agent-earlier')).toHaveCount(0);
+  await expect(page.locator('.agent-archive')).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Allow once', exact: true })).toHaveCount(0);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await page.screenshot({ path: info.outputPath('earlier-activity.png') });
   await page.reload(); await idle(page);
-  await expect(page.locator('.agent-earlier')).toBeHidden();
+  await expect(page.locator('.agent-earlier')).toHaveCount(0);
   expect(await page.evaluate(() => localStorage.length + sessionStorage.length)).toBe(0);
 });
 

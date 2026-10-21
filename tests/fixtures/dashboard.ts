@@ -421,7 +421,12 @@ export async function startFixture(port = 0, options: { agentLoop?: boolean; ses
           later(() => event('tool.start', params.session_id, { tool_id: 'il-1', name: 'terminal', args: { command: 'make' } }), 150);
           later(() => event('tool.complete', params.session_id, { tool_id: 'il-1', name: 'terminal', result: '{"exit_code":0}' }), 250);
           later(() => delta('The build passes.'), 350);
-          later(() => { session.messages.push({ role: 'assistant', text: session.inflight }); session.updated = Date.now()/1000;
+          later(() => {
+            // Saved history keeps the tool call between the two replies, as Hermes stores a turn.
+            session.messages.push({ role: 'assistant', text: 'Checking the build first.', raw: { role: 'assistant', content: 'Checking the build first.', tool_calls: [{ id: 'il-1', type: 'function', function: { name: 'terminal', arguments: '{"command":"make"}' } }] } });
+            session.messages.push({ role: 'tool', text: '{"exit_code":0}', raw: { role: 'tool', tool_call_id: 'il-1', tool_name: 'terminal', content: '{"exit_code":0}' } });
+            session.messages.push({ role: 'assistant', text: 'The build passes.', raw: { role: 'assistant', content: 'The build passes.' } });
+            session.updated = Date.now()/1000;
             event('message.complete', params.session_id, { text: session.inflight });
             later(() => { session.running = false; session.inflight = ''; event('session.info', params.session_id, { running: false }); }, 20); }, 3000);
           return;

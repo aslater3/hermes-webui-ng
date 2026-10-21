@@ -3,28 +3,28 @@ import { login, send, idle } from './shell-fixture.js';
 
 test.use({ baseURL: 'http://127.0.0.1:8787' });
 
-test('reasoning cards remain collapsed and interleave chronologically with tools', async ({ page }) => {
+test('thought rows stay collapsed and interleave chronologically with tool rows', async ({ page }) => {
   await login(page);
   await send(page, '[agent-test] approval reasoning timeline');
 
-  const timeline = page.locator('.agent-timeline');
-  const reasoning = timeline.locator('.agent-reasoning-card');
-  await expect(timeline.locator('.agent-tool')).toHaveCount(1);
-  await expect(reasoning).toHaveCount(2);
-  await expect(reasoning.first()).not.toHaveAttribute('open', '');
-  await expect(reasoning.nth(1)).not.toHaveAttribute('open', '');
-  await expect(reasoning.first().locator('summary')).toContainText('Testing an explicit, controlled interaction.');
-  await expect(reasoning.nth(1).locator('summary')).toContainText('Reviewing the tool activity before continuing.');
+  const thoughts = page.locator('[data-row="thought"]');
+  await expect(page.locator('[data-row="tools"]')).toHaveCount(1);
+  await expect(thoughts).toHaveCount(2);
+  await expect(thoughts.first().locator('.turn-row-toggle')).toHaveAttribute('aria-expanded', 'false');
+  await expect(thoughts.nth(1).locator('.turn-row-toggle')).toHaveAttribute('aria-expanded', 'false');
+  await expect(thoughts.first().locator('.turn-preview')).toContainText('Testing an explicit, controlled interaction.');
+  await expect(thoughts.nth(1).locator('.turn-preview')).toContainText('Reviewing the tool activity before continuing.');
 
-  expect(await timeline.locator(':scope > .agent-reasoning-card, :scope > .agent-tool').evaluateAll(nodes =>
-    nodes.map(node => node.classList.contains('agent-reasoning-card') ? 'reasoning' : 'tool'))).toEqual(['reasoning', 'tool', 'reasoning']);
+  expect(await page.locator('.turn-rows > li').evaluateAll(nodes => nodes.map(node => node.dataset.row).filter(row => row !== 'narration')))
+    .toEqual(['thought', 'tools', 'thought']);
 
-  await reasoning.first().locator('summary').click();
-  await expect(reasoning.first()).toHaveAttribute('open', '');
-  await expect(reasoning.first()).toContainText('<img src=x onerror=alert(1)>');
-  await expect(reasoning.locator('img')).toHaveCount(0);
+  await thoughts.first().locator('.turn-row-toggle').click();
+  await expect(thoughts.first().locator('.turn-row-toggle')).toHaveAttribute('aria-expanded', 'true');
+  await expect(thoughts.first().locator('.turn-thought-text')).toContainText('<img src=x onerror=alert(1)>');
+  await expect(page.locator('.turn-rows img')).toHaveCount(0);
 
   await page.getByRole('button', { name: 'Allow once', exact: true }).click();
   await idle(page);
-  await expect(reasoning.first()).toHaveAttribute('open', '');
+  // The row the user opened stays open after the turn settles.
+  await expect(thoughts.first().locator('.turn-row-toggle')).toHaveAttribute('aria-expanded', 'true');
 });

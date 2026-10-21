@@ -11,9 +11,10 @@ import type { AppRuntime } from './runtime.js';
 import type { NativeSession } from '../src/hermes/native-session.js';
 import { AgentView } from '../src/hermes/agent-view.js';
 import { interleavedText } from '../src/hermes/agent-activity.js';
-import { groupHistory, type HistoryItem } from '../src/hermes/agent-steps.js';
+import { groupHistory } from '../src/hermes/agent-steps.js';
+import { conversationSegments } from '../src/hermes/turn-timeline.js';
 import { currentAction } from '../src/hermes/agent-now.js';
-import { AgentSteps } from './AgentSteps.js';
+import { TurnTimeline } from './TurnTimeline.js';
 import { NowLine } from './NowLine.js';
 import { draftKey } from '../src/hermes/chat-controller.js';
 import { enterSends } from '../src/hermes/chat-behaviour.js';
@@ -55,7 +56,7 @@ function Activity({ owner, enabled, historical, revision, attention }: { owner: 
   const root = useRef<HTMLElement>(null), view = useRef<AgentView | null>(null);
   useLayoutEffect(() => {
     if (!attention) return;
-    const renderer = new AgentView(root.current!, attention); view.current = renderer;
+    const renderer = new AgentView(root.current!, attention, { inputsOnly: true }); view.current = renderer;
     renderer.update(owner, enabled, historical);
     return () => { renderer.dispose(); root.current?.replaceChildren(); attention.replaceChildren(); view.current = null; };
   }, [attention]);
@@ -136,13 +137,28 @@ export function Conversation({ runtime: rt, revision }: { runtime: AppRuntime; r
   }, [draft]);
   const send = () => { if (rt.steering) return; rt.setDraft(draft); jump(); rt.send(); };
   const useStarter = (value: string) => { setDraft(value); rt.setDraft(value); if (matchMedia('(pointer:fine)').matches) composer.current?.focus(); };
-  const activityAt = messages.reduce((last, message, index) => message.role === 'user' ? index + 1 : last, messages.length);
-  // Tool calls and their results render as one agent-steps block per run; a reply with text stays a message.
+  // One timeline per assistant turn: saved rows and the live activity of the running turn merge here, so a step appears once.
+  const activity = chat.native.activity.state;
+  const segments = useMemo(() => conversationSegments(messages, snapshot ? undefined : { activity, running, interleaved }),
+    [messages, activity, running, streaming, interleaved, snapshot]);
   const historyItems = useMemo(() => groupHistory(messages), [messages]);
-  const renderHistory = (items: HistoryItem[]) => items.map(item => item.kind === 'steps'
-    ? <AgentSteps key={`${scope}:steps:${item.start}`} steps={item.steps}/>
-    : <Message key={`${scope}:${item.start}`} {...item.message}/>);
-  const now = currentAction({ running: running && !historical, activity: chat.native.activity.state, streaming, history: historyItems });
+  const now = currentAction({ running: running && !historical, activity, streaming, history: historyItems });
+  // The Now line says what the turn is doing only while the running row is scrolled out of view.
+  const [liveOffscreen, setLiveOffscreen] = useState(false);
+  useEffect(() => {
+    const container = scroller.current;
+    if (!container || !running) { setLiveOffscreen(false); return; }
+    const row = container.querySelector<HTMLElement>('[data-live-row="true"]');
+    if (!row) { setLiveOffscreen(true); return; }
+    const observer = new IntersectionObserver(([entry]) => setLiveOffscreen(!entry?.isIntersecting), { root: container });
+    observer.observe(row);
+    return () => observer.disconnect();
+  }, [running, segments]);
+  const jumpToLive = () => {
+    const row = scroller.current?.querySelector<HTMLElement>('[data-live-row="true"]');
+    following.current = false;
+    row?.scrollIntoView({ block: 'center' });
+  };
   const olderAvailable = !!chat.selected && !busy && !loading && (historical ? saved.page?.returned === 100 : (state.totalMessages ?? saved.page?.returned ?? 0) >= 100);
   const placeholder = chat.subagent ? 'Subagent transcripts are read-only. Steer it from the parent conversation.' : chat.readOnly ? 'This conversation has ended and is read-only' : historical ? 'Return to latest to continue this conversation' : !rt.ready ? 'Connect to Hermes to send a message' : running ? 'Steer Hermes while it works…' : state.phase === 'waiting' ? 'Answer Hermes above or stop the response' : 'Message Hermes…';
   return <SpeechContext.Provider value={speechControls}>
@@ -157,10 +173,11 @@ export function Conversation({ runtime: rt, revision }: { runtime: AppRuntime; r
       {state.deliveryUnknown && <Notice>Delivery was not confirmed. Check the recovered conversation before resending. Nothing has been replayed.</Notice>}
       {empty && <div className="welcome"><div className="welcome-mark"><HermesMark size={30}/></div><p className="eyebrow">A SPACE FOR YOUR NEXT IDEA</p><h1>What are we working on?</h1><p>Think it through. Build it out. Make it happen with Hermes.</p><div className="welcome-suggestions">{starters.map(({ icon: Icon, title, subtitle, draft }) => <button key={title} onClick={() => useStarter(draft)} disabled={!writable} title={`Use “${title}” as a draft`}><Icon size={19}/><span><strong>{title}</strong><small>{subtitle}</small></span><ArrowUpRight size={15}/></button>)}</div></div>}
       {loading && <div className="loading-conversation" role="status"><LoaderCircle size={19} className="spin"/>Opening your conversation…</div>}
-      {renderHistory(historyItems.filter(item => item.start < activityAt))}
+      {segments.map(segment => segment.kind === 'message'
+        ? <Message key={`${scope}:${segment.key}`} {...segment.message}/>
+        : <TurnTimeline key={`${scope}:${segment.key}`} items={segment.items}/>)}
       <CommandTaskResults commands={chat.native.commands}/>
       <Activity owner={chat.native} enabled={rt.ready && !loading} historical={snapshot} revision={revision} attention={attention}/>
-      {renderHistory(historyItems.filter(item => item.start >= activityAt))}
       {streaming && !interleaved && <div className="message message-assistant streaming"><div className="message-label"><span className="assistant-mark"><HermesMark size={15}/></span>Hermes <span className="working-label">Working</span></div><pre className="plain-message">{streaming}<span className="stream-cursor"/></pre></div>}
       {busy && !streaming && !pending && <div className="thinking-indicator" role="status"><span/><span/><span/>Hermes is working</div>}
       {state.phase === 'waiting' && !pending && <Notice>Hermes is waiting for input, but no recoverable request is available. Use Stop response to cancel this turn, then ask again for a fresh request.</Notice>}
@@ -175,7 +192,7 @@ export function Conversation({ runtime: rt, revision }: { runtime: AppRuntime; r
     <div className={`composer-dock${dropping ? ' is-dropping' : ''}`} {...dropHandlers}>
       {dropping && <div className="drop-target" aria-hidden="true">{attachEnabled ? 'Drop to attach to your next message' : 'Open an idle conversation to attach files'}</div>}
       {unread && <button className="jump-latest" onClick={jump}><ArrowDown size={15}/>Jump to latest</button>}
-      <NowLine action={now}/>
+      <NowLine action={liveOffscreen ? now : undefined} onJump={jumpToLive}/>
       {pending > 0 && <button className="attention-strip" onClick={() => { following.current = false; content.current?.querySelector('[data-native-requests], .agent-requests')?.scrollIntoView({ block: 'center', behavior: 'instant' }); }}><span className="attention-dot"/>{pending} request{pending === 1 ? '' : 's'} need your input<ArrowUpRight size={15}/></button>}
       <form className="composer" id="shell-composer" onSubmit={event => { event.preventDefault(); send(); }}>
         {commands.popup}

@@ -60,7 +60,9 @@ export class AgentView {
   private visibility = () => { if (document.visibilityState !== 'visible') this.clearCredentials(); };
   private pagehide = () => this.clearCredentials();
   dispose(): void { this.clear(); this.approvalTone.dispose(); document.removeEventListener('visibilitychange', this.visibility); window.removeEventListener('pagehide', this.pagehide); }
-  constructor(private readonly root: HTMLElement, attention?: HTMLElement) {
+  /** `inputsOnly` is the product shell: the turn's steps render in the shell's own timeline, so this view keeps
+   *  only the request cards and their warnings. The diagnostic page uses the full view. */
+  constructor(private readonly root: HTMLElement, attention?: HTMLElement, private readonly options: { inputsOnly?: boolean } = {}) {
     const heading = node('h2', 'Agent activity and input'); heading.id = 'agent-title';
     this.root.setAttribute('aria-labelledby', heading.id);
     this.summary.setAttribute('role', 'status'); this.warning.setAttribute('role', 'status');
@@ -70,7 +72,10 @@ export class AgentView {
     this.timeline.setAttribute('aria-label', 'Chronological Hermes activity');
     this.earlier.append(this.earlierLabel, this.earlierBody);
     this.earlier.addEventListener('toggle', () => this.renderArchive());
-    this.root.append(heading, this.summary, this.warning, this.inline, this.thinking, this.timeline, this.earlier);
+    if (options.inputsOnly) {
+      heading.className = 'sr-only';
+      this.root.append(heading, this.summary, this.warning, this.inline);
+    } else this.root.append(heading, this.summary, this.warning, this.inline, this.thinking, this.timeline, this.earlier);
     // Without an attention region every card stays in the activity stream, which is what the
     // diagnostic page assumes; the product shell supplies one at the end of the transcript.
     this.awaiting = attention ? node('div', '', 'agent-requests awaiting') : this.inline;
@@ -121,6 +126,11 @@ export class AgentView {
     for (const [key, card] of this.inputs) if (!liveKeys.has(key)) { this.erase(card); card.root.remove(); this.inputs.delete(key); }
     for (const input of activity.inputs) this.input(owner, input, enabled && !historical && !owner.state.interrupting);
     this.place(activity.inputs, historical);
+    if (this.options.inputsOnly) {
+      this.summary.textContent = count ? `${count} request${count === 1 ? '' : 's'} awaiting confirmation.` : '';
+      this.root.hidden = historical || !(activity.inputs.length || activity.recoveryGap || activity.malformed || activity.missedLive);
+      return;
+    }
     const inputs = new Map(activity.inputs.map(input => [input.key, input]));
     this.thinking.hidden = !activity.thinking; this.thinking.textContent = activity.thinking;
 
