@@ -18,6 +18,7 @@ import { HistoryMessage as Message } from './HistoryMessage.js';
 import { subagentSummary } from '../src/hermes/subagent-catalog.js';
 import { AttachButton, AttachmentTray, attachableFiles, attachReason } from './attachments.js';
 import { attachFiles } from './attachment-actions.js';
+import { composerBlockedReason } from '../src/hermes/composer-reason.js';
 import { DictateButton, DictationStatus, SpeechContext, VOICE_TRUSTED_LOCAL_COPY, VOICE_UNSUPPORTED_COPY } from './voice.js';
 
 /** Chronological activity stream. Requests that still block the turn render into the attention host
@@ -80,6 +81,11 @@ export function Conversation({ runtime: rt, revision }: { runtime: AppRuntime; r
   // stays owned by its native request UI instead of turning free-form composer input into a hidden steer.
   const writable = !peerRows.length && rt.ready && !chat.native.commands.blocked && !chat.native.settings.state.busy && chat.native.settings.state.outcome !== 'unknown' && !chat.native.settings.state.confirmation && !loading && !historical && (!chat.selected || state.phase === 'idle' || running);
   const commands = useCommands(rt, draft, value => { setDraft(value); rt.setDraft(value); }, composer, writable && !rt.steering);
+  // Say why the composer is closed instead of only greying Send.
+  const commandsState = chat.native.commands.state, settingsState = chat.native.settings.state;
+  const blockedReason = composerBlockedReason({ writable, openRequests: peerRows.length, ready: rt.ready,
+    commands: { uncertain: commandsState.uncertain, confirmation: commandsState.confirmation, busy: commandsState.busy, browserPanel: commandsState.action?.kind === 'browser' },
+    settings: settingsState, loading, historical, phase: state.phase });
   const attachOwner = rt.attachmentOwner();
   const attachTransient = running || state.phase === 'waiting' || !!rt.steering;
   // The busy-turn reason stays the button's accessible description only: a visible caption line here would
@@ -173,10 +179,10 @@ export function Conversation({ runtime: rt, revision }: { runtime: AppRuntime; r
             {!historical && <AttachButton runtime={rt} enabled={attachEnabled} reason={attachReasonText} reasonId="attach-reason"/>}
             {voiceOffered && rt.dictationCapable && <DictateButton runtime={rt} enabled={dictateEnabled}/>}
             {running && <button type="submit" className="send-button steer-button" aria-label="Steer current response" title="Steer current response" disabled={!writable || rt.steering || !draft.trim()}>{rt.steering ? <LoaderCircle size={18} className="spin"/> : <ArrowUp size={20}/>}</button>}
-            {busy ? <button type="button" className="send-button stop-button" aria-label="Stop response" title="Stop response" disabled={!rt.ready || !!state.submitting || !!state.interrupting} onClick={() => rt.run(() => chat.interrupt())}>{state.interrupting ? <LoaderCircle size={18} className="spin"/> : <Square size={15} fill="currentColor"/>}</button> : <button type="submit" className="send-button" aria-label="Send message" title="Send message" disabled={!writable || !draft.trim()}><ArrowUp size={20}/></button>}
+            {busy ? <button type="button" className="send-button stop-button" aria-label="Stop response" title="Stop response" disabled={!rt.ready || !!state.submitting || !!state.interrupting} onClick={() => rt.run(() => chat.interrupt())}>{state.interrupting ? <LoaderCircle size={18} className="spin"/> : <Square size={15} fill="currentColor"/>}</button> : <button type="submit" className="send-button" aria-label="Send message" title={blockedReason || 'Send message'} disabled={!writable || !draft.trim()} aria-describedby={blockedReason && draft.trim() ? 'composer-blocked' : undefined}><ArrowUp size={20}/></button>}
           </div>
         </div>
-      </form><div className="composer-caption"><span className="composer-privacy">Your conversations stay in Hermes.</span>{attachReasonText && !historical && <span id="attach-reason" className={attachTransient ? 'sr-only' : 'small muted'}>{attachReasonText}</span>}{!rt.voiceAllowed ? <span className="voice-caption">{VOICE_TRUSTED_LOCAL_COPY}</span> : rt.voiceSupport === 'unavailable' && <span className="voice-caption">{VOICE_UNSUPPORTED_COPY}</span>}{running && rt.steerRuntimeId === state.runtimeId && rt.steerStatus && <span className="small muted" role="status">{rt.steerStatus}</span>}{commands.button}{!historical && rt.ready && state.runtimeId && <UsageButton key={`${rt.accountGeneration}:${scope}:${state.runtimeId}`} usage={state.usage}/>}<span className="desktop-hint">{running ? 'Enter to steer this turn · Shift + Enter for a new line' : 'Enter to send · Shift + Enter for a new line'}</span></div>
+      </form><div className="composer-caption">{blockedReason && draft.trim() ? <span id="composer-blocked" className="small" role="status">{blockedReason}</span> : <span className="composer-privacy">Your conversations stay in Hermes.</span>}{attachReasonText && !historical && <span id="attach-reason" className={attachTransient ? 'sr-only' : 'small muted'}>{attachReasonText}</span>}{!rt.voiceAllowed ? <span className="voice-caption">{VOICE_TRUSTED_LOCAL_COPY}</span> : rt.voiceSupport === 'unavailable' && <span className="voice-caption">{VOICE_UNSUPPORTED_COPY}</span>}{running && rt.steerRuntimeId === state.runtimeId && rt.steerStatus && <span className="small muted" role="status">{rt.steerStatus}</span>}{commands.button}{!historical && rt.ready && state.runtimeId && <UsageButton key={`${rt.accountGeneration}:${scope}:${state.runtimeId}`} usage={state.usage}/>}<span className="desktop-hint">{running ? 'Enter to steer this turn · Shift + Enter for a new line' : 'Enter to send · Shift + Enter for a new line'}</span></div>
     </div>
     {commands.overlay}
   </SpeechContext.Provider>;
