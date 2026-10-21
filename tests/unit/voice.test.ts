@@ -200,6 +200,12 @@ test('an oversized recording is refused before upload', async () => {
   assert.ok(AUDIO_MAX_BYTES < 1_048_576 * 3 / 4, 'raw cap keeps base64 plus envelope under the gated proxy body limit');
 });
 
+test('hiding the page with no take in progress changes nothing and shows no message', () => {
+  const h = harness();
+  h.machine.cancel('interrupted');
+  assert.deepEqual(h.machine.state, { phase: 'idle' });
+});
+
 test('a hidden page cancels the take with visible copy and aborts any upload', async () => {
   const h = harness({ transcript: new Promise(() => undefined) as unknown as string });
   h.machine.start({ key: 'a' }); await flush(); h.machine.stop(); await flush();

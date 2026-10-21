@@ -188,7 +188,8 @@ export class DictationMachine<C> {
   /** Drops the recording or transcription without sending. A reason leaves visible copy explaining why. */
   cancel(reason?: VoiceFailure): void {
     const run = this.run;
-    if (!run) { if (reason) this.set({ phase: 'error', failure: reason }); return; }
+    // Nothing in progress (idle, or an earlier message still showing): there is no take to stop, so say nothing.
+    if (!run) return;
     this.run = undefined;
     this.clearTimers(run);
     run.controller.abort();
