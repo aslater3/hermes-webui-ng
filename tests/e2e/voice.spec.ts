@@ -192,3 +192,14 @@ test('trusted-local hides voice with honest copy and never calls audio routes', 
   expect(audio.seen).toEqual([]);
   expect((await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa']).analyze()).violations).toEqual([]);
 });
+
+test('switching away and back while not recording shows no voice message', async ({ page }) => {
+  await stubDevices(page); await login(page);
+  await expect(dictate(page)).toBeEnabled();
+  for (const state of ['hidden', 'visible']) await page.evaluate(value => {
+    Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => value });
+    document.dispatchEvent(new Event('visibilitychange'));
+  }, state);
+  await expect(status(page)).toHaveCount(0);
+  await expect(page.getByText('Recording stopped because this page was hidden')).toHaveCount(0);
+});
