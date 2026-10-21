@@ -135,6 +135,9 @@ export class AgentActivity {
   archive: ActivityTurn[] = [];
   private turn = 0;
   private timelineSequence = 0;
+  /** Hermes clears its spinner (`thinking.delta` "") when a model call ends, on success and on error. Reasoning that
+   *  arrives after that with no tool or reply in between is a retried attempt of the same step. */
+  private callEnded = false;
   private terminal = new Set<string>();
   private archiveTurn(): void {
     const s = this.state;
@@ -216,11 +219,13 @@ export class AgentActivity {
         return true;
       }
       if (event.type === 'message.start') {
+        this.callEnded = false;
         this.archiveTurn();
         this.state.inputs.forEach(input => this.remember(input.key));
         this.state = this.empty(); return true;
       }
       if (event.type === 'message.delta') {
+        this.callEnded = false;
         const fragment = text(record(event.payload).text, ACTIVITY_LIMITS.stream);
         if (!fragment) return false;
         let timeline = [...this.state.timeline], truncated = this.state.truncated;
@@ -234,14 +239,24 @@ export class AgentActivity {
         this.state = { ...this.state, timeline, truncated }; return false;
       }
       if (event.type === 'thinking.delta') {
-        const p = record(event.payload), next = this.state.thinking + text(p.text);
-        this.state = {...this.state, thinking:next.slice(-ACTIVITY_LIMITS.text), truncated:this.state.truncated || next.length >= ACTIVITY_LIMITS.text}; return true;
+        // A status line (spinner/wait notice), not reasoning: show the latest; "" clears it and marks a call boundary.
+        const status = text(record(event.payload).text, 512);
+        if (!status) this.callEnded = true;
+        this.state = {...this.state, thinking:status}; return true;
       }
       if (['reasoning.delta','reasoning.available'].includes(event.type)) {
         const p = record(event.payload), fragment = text(p.text);
         const available = event.type === 'reasoning.available';
-        const next = available ? fragment : this.state.reasoning + fragment;
         let timeline = [...this.state.timeline], timelineTruncated = false;
+        const last = timeline.at(-1);
+        // A retried model call streams its reasoning again from the start: replace the abandoned partial attempt
+        // (which otherwise reads as text that stops, then repeats) instead of appending to it.
+        const retry = !available && !!fragment && this.callEnded && last?.kind === 'reasoning';
+        if (fragment && !available) this.callEnded = false;
+        if (retry) timeline[timeline.length - 1] = { ...last, text: '', truncated: false };
+        const base = retry ? '' : this.state.reasoning;
+        // reasoning.available is a bounded preview (Hermes caps it at 500 chars): never let it shorten streamed text.
+        const next = available ? (this.state.reasoning.length >= fragment.length ? this.state.reasoning : fragment) : base + fragment;
         if (fragment && (!available || !timeline.some(entry => entry.kind === 'reasoning'))) {
           const last = timeline.at(-1);
           if (!available && last?.kind === 'reasoning') {
@@ -260,6 +275,7 @@ export class AgentActivity {
           truncated:this.state.truncated || next.length >= ACTIVITY_LIMITS.text || timelineTruncated}; return true;
       }
       if (['tool.start','tool.progress','tool.complete'].includes(event.type)) {
+        this.callEnded = false;
         const p = record(event.payload), toolId = id(p.tool_id);
         const old = this.state.tools.find((t) => t.id === toolId);
         if (old && ['complete','error'].includes(old.state) && event.type !== 'tool.complete') return true;
