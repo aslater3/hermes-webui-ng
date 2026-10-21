@@ -64,6 +64,7 @@ test('a running turn shows what it is doing now, ticks elapsed time, and clears 
   // The tool finishes and the reply starts: the Now line follows the change.
   await expect(now).toHaveAttribute('data-kind', 'writing', { timeout: 10_000 });
   await expect(now.locator('.now-label')).toHaveText('Writing reply…');
+  expect((await new AxeBuilder({ page }).include('.now-line').analyze()).violations).toEqual([]);
   await page.screenshot({ path: `test-results/agent-now-${info.project.name}.png` });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await page.getByRole('button', { name: 'Stop response' }).click();
