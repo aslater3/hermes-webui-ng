@@ -1,4 +1,5 @@
 import { PeerRequests, peerMethods } from './peer-requests.js';
+import { EventSequencer, type ReplayOutcome } from './event-replay.js';
 import { WS_PROTOCOL, type WsCredential } from './ws-auth.js';
 import type { DiagnosticsRing } from './diagnostics.js';
 import { ClientError, MAX_FRAME_CHARS, oversizedReplyId, parseFrames, record, type GatewayEvent } from './protocol.js';
@@ -69,6 +70,11 @@ export class GatewayClient {
   private readyPayload: Record<string, unknown> = {};
   private pending = new Map<string | number, Pending>();
   private events = new Set<(event: GatewayEvent) => void>();
+  /** Delivers each (session, seq) once and orders replayed-after-reconnect events (event-replay.ts). */
+  private readonly sequencer = new EventSequencer(event => {
+    this.requests.cancel(event);
+    for (const listener of this.events) this.notify(() => listener(event));
+  });
   private peerObservers = new Set<(sessionId: string, method: string) => void>();
   private states = new Set<(state: ConnectionState) => void>();
   state: ConnectionState = { phase: 'disconnected', generation: 0, attempt: 0 };
@@ -82,6 +88,23 @@ export class GatewayClient {
     return () => { this.events.delete(handler); };
   }
   /** Metadata-only observer: sees session id and method of each well-formed, supported peer request. Never params. */
+  /** A session's connection dropped: hold its live events after the next ready until it replays the gap. */
+  holdForReplay(sessionId: string): void { this.sequencer.hold(sessionId); }
+  releaseReplay(sessionId: string): void { this.sequencer.release(sessionId); }
+  /** Deliver what this session missed while disconnected (Hermes' bounded ring), in seq order, exactly once. */
+  replay(sessionId: string): Promise<ReplayOutcome> {
+    return this.sequencer.replay(sessionId, async (sid, lastSeen) => {
+      try {
+        const page = record(await this.call('session.events.since', { session_id: sid, last_seen: lastSeen }));
+        return { events: Array.isArray(page.events) ? page.events : [], truncated: page.truncated === true,
+          epoch: typeof page.epoch === 'string' ? page.epoch : undefined };
+      } catch (error) {
+        // A Hermes without the replay ring: nothing to recover, and that is not a gap we can report.
+        if (error instanceof ClientError && error.rpcCode === -32601) return { events: [], truncated: false };
+        throw error;
+      }
+    });
+  }
   onPeerRequest(handler: (sessionId: string, method: string) => void): () => void {
     this.peerObservers.add(handler);
     return () => { this.peerObservers.delete(handler); };
@@ -123,6 +146,7 @@ export class GatewayClient {
   }
   close(): void {
     this.enabled = false;
+    this.sequencer.reset();
     this.invalidate(new ClientError('disconnected', 'Connection closed; pending delivery is unknown'));
     this.publish('disconnected');
   }
@@ -198,6 +222,7 @@ export class GatewayClient {
               else pending.resolve(frame.result);
             } else if (frame.event.type === 'gateway.ready' && this.state.phase !== 'ready') {
               this.readyPayload = record(frame.event.payload);
+              this.sequencer.setEpoch(this.readyPayload.replay_epoch);
               this.metrics.readyAt = Date.now();
               this.options.diagnostics?.add({ event: 'gateway.ready', generation });
               clearTimeout(this.timer);
@@ -212,8 +237,7 @@ export class GatewayClient {
               this.startHeartbeat(generation);
             } else if (this.state.phase === 'ready') {
               this.options.diagnostics?.add({ event: 'gateway.event', generation });
-              this.requests.cancel(frame.event);
-              for (const listener of this.events) this.notify(() => listener(frame.event));
+              this.sequencer.accept(frame.event);
             }
           }
         } catch {

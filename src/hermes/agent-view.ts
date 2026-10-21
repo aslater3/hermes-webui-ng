@@ -104,8 +104,8 @@ export class AgentView {
     this.root.hidden = historical || !(owner.activity.archive.length || activity.inputs.length || activity.timeline.length || activity.tools.length || activity.reasoning || activity.thinking || activity.recoveryGap || activity.malformed);
     if (!enabled || historical) this.clearCredentials();
     this.summary.textContent = `${count ? `${count} request${count === 1 ? '' : 's'} awaiting confirmation. ` : ''}Current turn activity is shown chronologically. Saved history stays in Hermes.`;
-    this.warning.hidden = !activity.recoveryGap && !activity.malformed && !activity.droppedTools && !activity.truncated;
-    this.warning.textContent = [activity.recoveryGap ? 'A credential request lost its connection. This Hermes version cannot recover a pending sudo/secret form. Use Stop response to cancel the pending turn, then ask again for a fresh request; nothing is resent.' : '',
+    this.warning.hidden = !activity.recoveryGap && !activity.malformed && !activity.droppedTools && !activity.truncated && !activity.missedLive;
+    this.warning.textContent = [activity.missedLive ? 'Some live activity was missed while disconnected; the saved conversation is complete.' : '', activity.recoveryGap ? 'A credential request lost its connection. This Hermes version cannot recover a pending sudo/secret form. Use Stop response to cancel the pending turn, then ask again for a fresh request; nothing is resent.' : '',
       activity.malformed ? 'Some agent data could not be displayed safely. Do not approve an operation with incomplete details.' : '',
       activity.droppedTools ? `${activity.droppedTools} earlier tool cards omitted from this bounded view.` : '',
       activity.truncated ? 'Some activity or reasoning output reached the display limit.' : ''].filter(Boolean).join(' ');

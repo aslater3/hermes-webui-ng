@@ -30,6 +30,7 @@ export interface GatewayEvent {
   type: string;
   session_id?: string;
   payload?: unknown;
+  /** Per-session monotonic sequence Hermes stamps on session events (replay ring). */
   seq?: number;
 }
 export type Frame =

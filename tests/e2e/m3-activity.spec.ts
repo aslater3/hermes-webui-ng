@@ -48,7 +48,11 @@ test('changed approval details with the same ID block confirmation on every view
     server.onMessage(raw => {
       const frame = JSON.parse(String(raw)); socket.send(raw);
       if (frame.params?.type === 'approval.request') {
-        frame.params.payload.command = 'different operation under a reused ID'; socket.send(JSON.stringify(frame));
+        // A new seq: an identical-seq copy is a duplicate the client drops by design (event-replay.ts); a changed
+        // request arriving as a distinct event must still trip the reused-ID guard.
+        frame.params.payload.command = 'different operation under a reused ID';
+        if (typeof frame.params.seq === 'number') frame.params.seq += 100000;
+        socket.send(JSON.stringify(frame));
       }
     });
   });
