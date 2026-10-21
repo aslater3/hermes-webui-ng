@@ -93,3 +93,21 @@ test('touch targets and 320px layout keep Manage and skill rows usable', async (
   await page.keyboard.press('Escape');
   await expect(manage(page)).toHaveCount(0);
 });
+
+test('a long skill catalogue never squeezes the tab row: tabs stay full height and selectable', async ({ page }) => {
+  // A real Hermes ships dozens of skills; with a short list the flex shrink never showed (the user saw the tabs vanish).
+  await page.route(/\/__hermes\/api\/skills(\?.*)?$/, route => route.fulfill({ contentType: 'application/json',
+    body: JSON.stringify(Array.from({ length: 60 }, (_, i) => ({ name: `fixture-skill-${i}`, description: 'A long description of what this skill does, wrapping onto several lines in a narrow column. '.repeat(2), category: 'fixtures', enabled: true, provenance: 'bundled', usage: 0 }))) }));
+  await login(page);
+  await openManageDialog(page);
+  await expect(manage(page).getByRole('button', { name: /^fixture-skill-59/ })).toBeAttached();
+  const tabs = manage(page).getByRole('tablist', { name: 'Management sections' });
+  expect((await tabs.boundingBox())?.height ?? 0).toBeGreaterThanOrEqual(44);
+  for (const name of ['Skills', 'Memory', 'Cron']) {
+    const tab = manage(page).getByRole('tab', { name, exact: true });
+    expect((await tab.boundingBox())?.height ?? 0).toBeGreaterThanOrEqual(44);
+  }
+  await manage(page).getByRole('tab', { name: 'Memory', exact: true }).click();
+  await expect(manage(page).getByRole('tab', { name: 'Memory', exact: true })).toHaveAttribute('aria-selected', 'true');
+  await page.screenshot({ path: test.info().outputPath('manage-long-catalogue.png') });
+});
