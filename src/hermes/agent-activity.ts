@@ -17,12 +17,13 @@ export interface ToolActivity {
   /** Epoch ms when this client first saw the call running (tool.start); display-only elapsed time. */
   startedAt?: number;
 }
-export interface ReasoningActivity { kind: 'reasoning'; id: string; text: string; truncated: boolean; }
+/** `at` is the epoch ms of the first delta of this segment (display-only; drives "Thought for Ns"). */
+export interface ReasoningActivity { kind: 'reasoning'; id: string; text: string; truncated: boolean; at?: number; }
 export interface ToolTimelineActivity { kind: 'tool'; id: string; }
 /** Where a request appeared in the turn, so a settled card stays at that point instead of floating to the top. */
 export interface InputTimelineActivity { kind: 'input'; id: string; }
 /** Streamed reply text between tool calls; segments let text and tools interleave in the order they happened. */
-export interface TextActivity { kind: 'text'; id: string; text: string; truncated: boolean; }
+export interface TextActivity { kind: 'text'; id: string; text: string; truncated: boolean; at?: number; }
 export type ActivityTimelineEntry = ReasoningActivity | ToolTimelineActivity | InputTimelineActivity | TextActivity;
 export interface ActivityTurn {
   id: number; reasoning: string; thinking: string; tools: ToolActivity[]; timeline: ActivityTimelineEntry[]; truncated: boolean;
@@ -241,7 +242,7 @@ export class AgentActivity {
         if (last?.kind === 'text') {
           const segment = last.text + fragment;
           timeline[timeline.length - 1] = { ...last, text: segment.slice(-ACTIVITY_LIMITS.stream), truncated: last.truncated || segment.length > ACTIVITY_LIMITS.stream };
-        } else timeline.push({ kind: 'text', id: `text-${++this.timelineSequence}`, text: fragment, truncated: false });
+        } else timeline.push({ kind: 'text', id: `text-${++this.timelineSequence}`, text: fragment, truncated: false, at: this.clock() });
         if (timeline.length > ACTIVITY_LIMITS.timeline) { timeline = timeline.slice(-ACTIVITY_LIMITS.timeline); truncated = true; }
         // The session publishes the streamed text itself; no second notification per token.
         this.state = { ...this.state, timeline, truncated }; return false;
@@ -273,7 +274,7 @@ export class AgentActivity {
               truncated: last.truncated || segment.length > ACTIVITY_LIMITS.reasoningSegment };
             timelineTruncated ||= segment.length > ACTIVITY_LIMITS.reasoningSegment;
           } else {
-            timeline.push({ kind:'reasoning', id:`reasoning-${++this.timelineSequence}`,
+            timeline.push({ kind:'reasoning', id:`reasoning-${++this.timelineSequence}`, at: this.clock(),
               text:fragment.slice(-ACTIVITY_LIMITS.reasoningSegment), truncated:fragment.length > ACTIVITY_LIMITS.reasoningSegment });
             timelineTruncated ||= fragment.length > ACTIVITY_LIMITS.reasoningSegment;
           }

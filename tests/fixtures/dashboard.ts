@@ -407,6 +407,27 @@ export async function startFixture(port = 0, options: { agentLoop?: boolean; ses
             later(() => { session.running = false; session.inflight = ''; event('session.info', params.session_id, { running: false }); }, 20); }, 50 + parts.length * 150 + 100);
           return;
         }
+        // A live turn with two calls, narration between them and a reply; it completes with structured history, as Hermes stores it.
+        if (String(params.text).startsWith('[timeline-test]')) {
+          later(() => event('reasoning.delta', params.session_id, { text: 'Planning the timeline check. ' }), 50);
+          later(() => event('tool.start', params.session_id, { tool_id: 'tl-1', name: 'terminal', args: { command: 'cd /work && make timeline' } }), 1200);
+          later(() => event('tool.complete', params.session_id, { tool_id: 'tl-1', name: 'terminal', duration_s: 2.2, result: '{"output":"timeline ok","exit_code":0}' }), 3400);
+          later(() => delta('Timeline check running. '), 3500);
+          later(() => event('tool.start', params.session_id, { tool_id: 'tl-2', name: 'terminal', args: { command: 'make verify' } }), 3600);
+          later(() => event('tool.complete', params.session_id, { tool_id: 'tl-2', name: 'terminal', duration_s: 1.1, result: '{"output":"2 failures","exit_code":2}' }), 4700);
+          later(() => delta('One check failed.'), 4800);
+          later(() => {
+            session.messages.push({ role: 'assistant', text: '', raw: { role: 'assistant', content: '', reasoning_content: 'Planning the timeline check.', tool_calls: [{ id: 'tl-1', type: 'function', function: { name: 'terminal', arguments: '{"command":"cd /work && make timeline"}' } }] } });
+            session.messages.push({ role: 'tool', text: '{"output":"timeline ok","exit_code":0}', raw: { role: 'tool', tool_call_id: 'tl-1', tool_name: 'terminal', content: '{"output":"timeline ok","exit_code":0}' } });
+            session.messages.push({ role: 'assistant', text: 'Timeline check running.', raw: { role: 'assistant', content: 'Timeline check running.', tool_calls: [{ id: 'tl-2', type: 'function', function: { name: 'terminal', arguments: '{"command":"make verify"}' } }] } });
+            session.messages.push({ role: 'tool', text: '{"output":"2 failures","exit_code":2}', raw: { role: 'tool', tool_call_id: 'tl-2', tool_name: 'terminal', content: '{"output":"2 failures","exit_code":2}' } });
+            session.messages.push({ role: 'assistant', text: 'One check failed.', raw: { role: 'assistant', content: 'One check failed.' } });
+            session.updated = Date.now()/1000;
+            event('message.complete', params.session_id, { text: session.inflight });
+            later(() => { session.running = false; session.inflight = ''; event('session.info', params.session_id, { running: false }); }, 20);
+          }, 5000);
+          return;
+        }
         // A tool running for two seconds, then reply text: the Now line shows the tool, then the reply; interrupt clears it.
         if (String(params.text).startsWith('[now-test]')) {
           later(() => event('reasoning.delta', params.session_id, { text: 'Planning the radar check. ' }), 50);
@@ -421,7 +442,12 @@ export async function startFixture(port = 0, options: { agentLoop?: boolean; ses
           later(() => event('tool.start', params.session_id, { tool_id: 'il-1', name: 'terminal', args: { command: 'make' } }), 150);
           later(() => event('tool.complete', params.session_id, { tool_id: 'il-1', name: 'terminal', result: '{"exit_code":0}' }), 250);
           later(() => delta('The build passes.'), 350);
-          later(() => { session.messages.push({ role: 'assistant', text: session.inflight }); session.updated = Date.now()/1000;
+          later(() => {
+            // Saved history keeps the tool call between the two replies, as Hermes stores a turn.
+            session.messages.push({ role: 'assistant', text: 'Checking the build first.', raw: { role: 'assistant', content: 'Checking the build first.', tool_calls: [{ id: 'il-1', type: 'function', function: { name: 'terminal', arguments: '{"command":"make"}' } }] } });
+            session.messages.push({ role: 'tool', text: '{"exit_code":0}', raw: { role: 'tool', tool_call_id: 'il-1', tool_name: 'terminal', content: '{"exit_code":0}' } });
+            session.messages.push({ role: 'assistant', text: 'The build passes.', raw: { role: 'assistant', content: 'The build passes.' } });
+            session.updated = Date.now()/1000;
             event('message.complete', params.session_id, { text: session.inflight });
             later(() => { session.running = false; session.inflight = ''; event('session.info', params.session_id, { running: false }); }, 20); }, 3000);
           return;

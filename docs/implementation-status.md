@@ -384,3 +384,43 @@ Known boundaries:
 - Expanded arguments and outputs keep the existing bounded display (8 KB) and are redacted with the shared helper, but the helper is pattern-based. It is not a guarantee against every secret format.
 - Live tool cards in the chronological activity panel keep their existing layout; only history steps are grouped.
 - Not verified on physical iPhone or Android devices, and WebKit is not run locally; CI covers iPhone.
+
+## CLI-style turn timeline, slice 1: projection and merge (branch `feat/cli-style-timeline`)
+
+Work in progress; the React rendering lands in the following slices.
+
+- `src/hermes/turn-timeline.ts` projects loaded history and the live `AgentActivity` into one timeline per assistant turn: `thought`, `tools` (consecutive calls form one group), `narration` (assistant text before a later call), and `reply` (the last text, when no call follows it). Live and saved steps merge so a step shows once, in order, keyed by Hermes `tool_call_id` (or the live key for text), so a running row keeps its identity when history replaces it.
+- Thought time is measured only when both sides are stored: saved thinking time runs from the previous stored row to the reasoning envelope; live thinking time runs from the first reasoning delta to the next non-reasoning event. A missing side shows no duration.
+- `src/hermes/agent-activity.ts`: reasoning and text timeline entries carry the epoch ms they started (`at`), for display only.
+- Evidence: `tests/unit/turn-timeline.test.ts` (13 tests: saved turns, grouping, durations, live running and failed calls, merge with keys and order, live-only and saved-only tool-free answers, segment keys). Gate: build, typecheck, lint, unit 517 pass, contract 56 pass.
+
+### Slice 2: one timeline in the shell
+
+- `client/TurnTimeline.tsx` (+ `client/turn-timeline.css`) renders each turn once under one Hermes header: thought rows (`∴ Thought for Ns · preview`, live `Thinking… 0:03`), tool rows (kind icon, first call summary in monospace, `+ N commands`, status `✓ 5.0s` / `✗ exit 1 · 2.1s` / spinner with a ticking clock), narration as prose, and the reply. Rows are disclosure buttons (44 px, `aria-expanded`, Enter/Space). Expanded tool rows show each call's full command, bounded output (200 lines, "Show all"), verdict and duration. The last eight rows show by default, with "Show N earlier items".
+- The live turn and the saved turn use the same rows. Expanded state is keyed by row, so an opened row stays open when its running call completes or history replaces the live copy.
+- Removed duplicate surfaces: the `Agent steps (N)` blocks (`client/AgentSteps.tsx`, `agent-steps.css`); the live "Agent activity and input" timeline (the shell keeps only approval/clarify/credential cards, via `AgentView` with `inputsOnly`; the diagnostic page still uses the full view); the "Earlier activity in this tab" archive; the detached "Working" bubble while the timeline holds the streamed reply (kept for tool-free replies).
+- Now line: shown only while the running row is scrolled out of view (IntersectionObserver); activating it brings the row back.
+- Specs changed because they asserted removed markup: `agent-steps.spec.ts` (saved long turn now one turn with 26 rows; Now test waits for the running row and scrolls it out of view), `reply-interleave.spec.ts` (narration/tools/reply rows; the interleave fixture now stores the tool call in history, as Hermes does), `reasoning-placement.spec.ts` (thought rows and order), `m3-activity.spec.ts` (the archive panel is removed; the test asserts it is absent), `history-content.spec.ts` (tool and reasoning rows).
+- Known limit: earlier turns' live-only tool rows (no saved counterpart, e.g. fixture turns) are dropped when the next turn starts, as the archive was bounded to six turns anyway.
+
+### Slice 3: evidence, boundaries
+
+Merge rule (`src/hermes/turn-timeline.ts`, `mergeAtoms`), in short:
+1. Saved and live steps are flattened to atoms (thought, text, call) in order.
+2. The last call present in both is the anchor; live steps before it are already in history.
+3. A live call whose `tool_call_id` history holds is dropped; the saved row keeps the key, and a live duration fills a missing saved one.
+4. Live text or thoughts are dropped when a saved step of the same kind contains them (after the anchor, or anywhere before it); the saved step takes the live key so the row keeps its DOM node.
+5. Consecutive calls form one group across the handover; a text is the reply only when no call follows it.
+
+Evidence (synthetic fixture on the probe harness; not vanilla-Hermes evidence):
+
+- Unit: `tests/unit/turn-timeline.test.ts` (15 tests: saved turn shape, grouping, timing from timestamps, live running and failed calls, merge with keys and order, duration carry-over, tool-free answers, segment keys, labels). Gate: build, typecheck, lint, unit 519 pass, contract 56 pass.
+- E2E, `tests/e2e/turn-timeline.spec.ts`: a saved long turn (one header, 8 rows then 26, dividers, 44 px rows, full command and output when expanded, failing call marked by text); a live turn where a running call ticks, is opened, and becomes `ok` in place with its duration and output (node identity checked), the narration and failing call appear once, the history refresh and a reload show the same five rows; the Now line hidden while the row is on screen and shown when it is scrolled out, with its jump control. `reply-interleave`, `reasoning-placement`, `history-content`, `agent-steps` (saved long turn), `m3-activity`, `shell*`, `session-attention`, `approval-attention`, `steering`, `peer-requests`, `thinking-indicator`, `attachments`, `voice`, `agent-hit-area`, `session-usage`, `conversation-details` pass on desktop-chromium, android-chromium and narrow-320 (axe clean on the timeline, no horizontal overflow at 320 px).
+- Not run on this harness, and failing before and after the change: `agent-inputs`, `chat-layout` and other legacy diagnostic specs that wait for `#auth-state` (the probe harness does not serve the diagnostic page).
+- Screenshots: `test-results/turn-timeline-saved-{desktop-chromium,android-chromium,narrow-320}.png` (the turn), `test-results/turn-timeline-saved-page-*.png` (the page), `test-results/turn-timeline-live-*.png`, `test-results/turn-timeline-now-*.png`, `test-results/agent-steps-*.png`.
+
+Deferred or not verified:
+
+- Earlier turns no longer keep a bounded in-tab archive of live-only tool rows; saved history is the record. A fixture turn with no saved tool rows loses its tool rows when the next turn starts.
+- Thought durations for saved turns depend on stored timestamps on the previous row and the reasoning row; a Hermes history without them shows "Thought" with no duration.
+- Not verified on a physical iPhone or Android device; WebKit is not run locally (CI covers iPhone). Approval and credential cards still use the bounded `AgentView` input cards, not the timeline.
