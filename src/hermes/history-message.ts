@@ -16,10 +16,27 @@ export interface DisplayMessage {
   toolCallId?: string;
   /** Tool rows (native projection): the gateway's short call preview (`context`). */
   toolContext?: string;
+  /** Tool rows (native projection): the call's full arguments, as Hermes ships them alongside `context`. */
+  toolArgs?: string;
   /** Unix seconds when Hermes stored the row; display-only, used for "N s ago" wording. */
   timestamp?: number;
 }
 const MAX_TOOL_CALLS = 32, TOOL_ARGS_LIMIT = 8192;
+/** Arguments are capped for display; put the fields a summary needs first so a large payload (write_file
+ *  content) cannot push the path past the cap. Unparseable input is returned unchanged. */
+function summaryFirst(args: string): string {
+  if (args.length <= TOOL_ARGS_LIMIT) return args;
+  try {
+    const parsed: unknown = JSON.parse(args);
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return args;
+    const source = parsed as Record<string, unknown>, ordered: Record<string, unknown> = {};
+    for (const key of SUMMARY_ARG_KEYS) if (key in source) ordered[key] = source[key];
+    for (const [key, value] of Object.entries(source)) if (!(key in ordered)) ordered[key] = value;
+    return JSON.stringify(ordered);
+  } catch { return args; }
+}
+/** Native tool-row argument fields a one-line step summary may show (agent-steps.ts keyArgument). */
+const SUMMARY_ARG_KEYS = ['command', 'cmd', 'path', 'file_path', 'filename', 'offset', 'limit', 'query', 'pattern', 'q', 'url', 'search'] as const;
 const TEXT = new Set(['text', 'input_text', 'output_text', 'summary_text', 'reasoning_text']);
 const MEDIA = new Set(['image', 'image_url', 'input_image', 'audio', 'input_audio', 'file', 'input_file']);
 function object(value: unknown): Record<string, unknown> | undefined {
@@ -84,6 +101,16 @@ export function displayMessage(input: unknown, source: 'native' | 'rest'): Displ
     if (callId) result.toolCallId = callId;
     const context = short(data.context, 2048);
     if (context) result.toolContext = context;
+    // Native `session.history` sends the call's `args` (most outputs are omitted). Keep only the fields a step
+    // summary uses, never the arbitrary payload (file contents, credentials in other keys).
+    if (data.args && typeof data.args === 'object' && !Array.isArray(data.args)) {
+      const source = data.args as Record<string, unknown>, kept: Record<string, unknown> = {};
+      for (const key of SUMMARY_ARG_KEYS) {
+        const value = source[key];
+        if ((typeof value === 'string' && value.length <= 2048) || (typeof value === 'number' && Number.isFinite(value))) kept[key] = value;
+      }
+      if (Object.keys(kept).length) result.toolArgs = JSON.stringify(kept);
+    }
     // Gateway deliberately omits tool result bodies. Do not invent a completion/output verdict.
     if (!result.text.trim()) result.text = context ?? 'Tool activity recorded by Hermes. Output is not included in this history response.';
     return result;
@@ -108,7 +135,7 @@ export function displayMessage(input: unknown, source: 'native' | 'rest'): Displ
         if (calls.length === MAX_TOOL_CALLS) { result.truncated = true; break; }
         const raw = fn?.arguments;
         const args = typeof raw === 'string' ? raw : raw !== undefined && raw !== null ? JSON.stringify(raw) ?? '' : '';
-        calls.push({ id: short(item?.id, 256) ?? '', name, args: args.slice(0, TOOL_ARGS_LIMIT) });
+        calls.push({ id: short(item?.id, 256) ?? '', name, args: summaryFirst(args).slice(0, TOOL_ARGS_LIMIT) });
       }
       if (calls.length) result.toolCalls = calls;
     }

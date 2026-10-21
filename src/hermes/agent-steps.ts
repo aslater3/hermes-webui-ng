@@ -38,6 +38,17 @@ export function reasoningPreview(value: string): string {
   return redact(compact.length > REASONING_PREVIEW ? `${compact.slice(0, REASONING_PREVIEW - 3)}…` : compact, REASONING_PREVIEW + 8);
 }
 
+/** Arguments are stored bounded, so a large call (write_file with its content) can be cut off mid-JSON.
+ *  Recover the short leading string/number fields a summary needs from the raw text. */
+function leadingFields(value: string): Record<string, unknown> | undefined {
+  const fields: Record<string, unknown> = {};
+  for (const match of value.matchAll(/"([a-z_]{1,24})"\s*:\s*("(?:[^"\\]|\\.){0,2048}"|-?\d+(?:\.\d+)?)/g)) {
+    const key = match[1], raw = match[2];
+    if (!key || raw === undefined || key in fields) continue;
+    try { fields[key] = JSON.parse(raw); } catch { /* skip a field that is itself cut off */ }
+  }
+  return Object.keys(fields).length ? fields : undefined;
+}
 function parseObject(value: string): Record<string, unknown> | undefined {
   try {
     const parsed: unknown = JSON.parse(value);
@@ -51,7 +62,8 @@ const PATH_KEYS = ['path', 'file_path', 'filename'], SEARCH_KEYS = ['query', 'pa
 /** The one argument worth showing in a collapsed row. Unknown tools fall back to their first short string argument. */
 export function keyArgument(name: string, args: Record<string, unknown>): string {
   const first = (keys: string[]) => keys.map(key => args[key]).find((value): value is string => typeof value === 'string' && value.trim() !== '');
-  if (TERMINAL.test(name)) return first(['command']) ?? '';
+  // A leading `cd <dir>;` / `cd <dir> &&` is noise in a one-line summary; the full command stays in the details.
+  if (TERMINAL.test(name)) return (first(['command']) ?? '').replace(/^\s*cd\s+(?:"[^"]*"|'[^']*'|\S+)\s*(?:;|&&)\s*/, '');
   if (FILE.test(name)) {
     const path = first(PATH_KEYS) ?? '';
     const offset = typeof args.offset === 'number' ? args.offset : undefined, limit = typeof args.limit === 'number' ? args.limit : undefined;
@@ -68,9 +80,15 @@ export function keyArgument(name: string, args: Record<string, unknown>): string
 }
 /** Verdict from a stored tool result. Only a parsed result object yields ok/failed; anything else stays unknown. */
 export function toolVerdict(output: string | undefined, hasResult: boolean): { outcome: ToolOutcome; verdict: string; duration?: string } {
-  if (!hasResult || output === undefined || output === FALLBACK_OUTPUT || !output.trim()) return { outcome: 'unknown', verdict: 'no result recorded' };
+  // No stored result (native history omits most outputs): say nothing rather than imply something went missing.
+  if (!hasResult || output === undefined || output === FALLBACK_OUTPUT || !output.trim()) return { outcome: 'unknown', verdict: '' };
   const result = output.trim().startsWith('{') ? parseObject(output) : undefined;
-  if (!result) return { outcome: 'unknown', verdict: 'result not structured' };
+  if (!result) {
+    // A long result is stored cut off, so it no longer parses; its exit code usually still reads plainly.
+    const exit = /"exit_code"\s*:\s*(-?\d+)/.exec(output);
+    if (exit) { const code = Number(exit[1]); return { outcome: code === 0 ? 'ok' : 'failed', verdict: code === 0 ? `exit ${code}` : `exit ${code} · failed` }; }
+    return { outcome: 'unknown', verdict: '' };
+  }
   const exit = typeof result.exit_code === 'number' && Number.isFinite(result.exit_code) ? result.exit_code : undefined;
   const hasError = result.error !== undefined && result.error !== null && result.error !== '' && result.error !== false;
   const failed = result.success === false || hasError || (exit !== undefined && exit !== 0);
@@ -82,12 +100,16 @@ export function toolVerdict(output: string | undefined, hasResult: boolean): { o
   return { outcome: 'ok', verdict: bytes !== undefined ? `${bytes} bytes written` : 'done', duration };
 }
 function toolStep(key: string, name: string, argsJson: string | undefined, call: DisplayMessage | undefined, result: DisplayMessage | undefined, timestamp: number | undefined): ToolStep {
-  const cleanArgs = argsJson ? redact(argsJson, ARGS_LIMIT) : '';
-  const object = parseObject(cleanArgs) ?? {};
+  // A native-history row has no paired call but carries the call's own arguments.
+  const sourceArgs = argsJson || (!call ? result?.toolArgs : undefined);
+  const cleanArgs = sourceArgs ? redact(sourceArgs, ARGS_LIMIT) : '';
+  // Pick the key argument from the parsed raw arguments (redacting first can leave invalid JSON);
+  // the summary built from it is redacted below, and only redacted arguments are kept for display.
+  const object = (sourceArgs ? parseObject(sourceArgs) ?? leadingFields(sourceArgs) : undefined) ?? {};
   const orphan = !call;
-  // Native history carries only the gateway's preview for a call (`context`), never its arguments or output;
-  // that preview is the text of an orphan row and is not a result.
-  const detail = call ? keyArgument(name, object) : result?.toolContext ?? '';
+  // Native history carries the call's arguments (`args`) and a short preview (`context`) but omits most outputs;
+  // the preview is the text of such a row and is not a result.
+  const detail = call || result?.toolArgs ? keyArgument(name, object) || (result?.toolContext ?? '') : result?.toolContext ?? '';
   const output = result && result.text !== result.toolContext ? result.text : '';
   const verdict = toolVerdict(output || undefined, !!result);
   return { kind: 'tool', key, name: redact(name, 128), summary: redact(oneLine(detail), SUMMARY_LIMIT + 8),

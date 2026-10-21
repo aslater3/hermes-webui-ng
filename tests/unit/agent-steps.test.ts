@@ -69,10 +69,10 @@ test('failures are marked with words, not colour alone; missing results are unkn
   assert.equal(toolVerdict('{"output":"x","error":"boom"}', true).verdict, 'error');
   assert.equal(toolVerdict('{"success":false}', true).outcome, 'failed');
   assert.equal(toolVerdict('{"exit_code":0,"duration_s":1.84}', true).duration, '1.8s');
-  assert.deepEqual(toolVerdict(undefined, false), { outcome: 'unknown', verdict: 'no result recorded' });
+  assert.deepEqual(toolVerdict(undefined, false), { outcome: 'unknown', verdict: '' });
   assert.equal(toolVerdict('plain words', true).outcome, 'unknown');
   const pending = stepsOf([rest({ id: 1, role: 'assistant', content: '', tool_calls: [call('p', 'terminal', { command: 'sleep 9' })] })]);
-  assert.equal(tools(pending)[0]!.verdict, 'no result recorded');
+  assert.equal(tools(pending)[0]!.verdict, '');
 });
 test('summaries: terminal command, file path and line range, search query, unknown first string argument', () => {
   assert.equal(keyArgument('terminal', { command: 'make test\nmake lint' }), 'make test\nmake lint');
@@ -122,9 +122,28 @@ test('current action: running tool with elapsed start, then reply, then thinking
     toolRow('w', 'write_file', { bytes_written: 10 }, { timestamp: 1000 })]);
   assert.equal(currentAction({ running: true, activity: fresh.state, streaming: '', history })?.label, 'Last step: write_file — tools/radar_math.py');
 });
-test('native rows: the gateway preview is the summary and is never treated as a result', () => {
-  const native = displayMessage({ role: 'tool', name: 'terminal', context: 'git status', tool_call_id: 'n', args: { deliberately: 'PRIVATE_ARG' } }, 'native') as DisplayMessage;
+test('native rows: the summary comes from the shipped args, the preview is not a result, and secrets are redacted', () => {
+  const native = displayMessage({ role: 'tool', name: 'terminal', context: 'python tools/eval…', tool_call_id: 'n',
+    args: { command: 'python tools/eval.py --token=sk-livefixture0123456789abcdef' } }, 'native') as DisplayMessage;
   const [step] = tools(stepsOf([native]));
-  assert.equal(step!.summary, 'git status'); assert.equal(step!.orphan, true); assert.equal(step!.verdict, 'no result recorded');
-  assert.ok(!JSON.stringify(step).includes('PRIVATE_ARG'));
+  assert.match(step!.summary, /^python tools\/eval\.py --token=/); assert.equal(step!.orphan, true); assert.equal(step!.verdict, '');
+  assert.ok(!JSON.stringify(step).includes('sk-livefixture0123456789abcdef'), 'secret-looking values are redacted');
+  const previewOnly = displayMessage({ role: 'tool', name: 'terminal', context: 'git status', tool_call_id: 'p' }, 'native') as DisplayMessage;
+  assert.equal(tools(stepsOf([previewOnly]))[0]!.summary, 'git status');
+});
+
+test('real-data robustness: truncated JSON still yields exit codes and paths, and a leading cd is dropped', () => {
+  assert.deepEqual(toolVerdict('{"output": "a very long log that was cut off', true), { outcome: 'unknown', verdict: '' });
+  assert.deepEqual(toolVerdict('{"output": "x", "exit_code": 2, "error": null, "tail": "cut off...', true), { outcome: 'failed', verdict: 'exit 2 · failed' });
+  assert.equal(keyArgument('terminal', { command: 'cd ~/workspace/radar; timeout 600 python -m pytest -q' }), 'timeout 600 python -m pytest -q');
+  assert.equal(keyArgument('terminal', { command: 'cd "/tmp/a b" && make test' }), 'make test');
+  const cut = displayMessage({ role: 'assistant', content: '', tool_calls: [{ id: 'w', function: { name: 'write_file',
+    arguments: '{"path": "tools/radar_math.py", "content": "def f():\\n    return 1' } }] }, 'rest') as DisplayMessage;
+  assert.equal(tools(stepsOf([cut]))[0]!.summary, 'tools/radar_math.py');
+});
+
+test('a large write_file still names its path when the content comes first', () => {
+  const args = JSON.stringify({ content: 'x'.repeat(20000), path: 'tools/radar_math.py' });
+  const call = displayMessage({ role: 'assistant', content: '', tool_calls: [{ id: 'w', function: { name: 'write_file', arguments: args } }] }, 'rest') as DisplayMessage;
+  assert.equal(tools(stepsOf([call]))[0]!.summary, 'tools/radar_math.py');
 });

@@ -5,6 +5,8 @@ import { STEPS_VISIBLE, type AgentStep, type ToolStep } from '../src/hermes/agen
 import './agent-steps.css';
 
 function Outcome({ step }: { step: ToolStep }) {
+  // No stored result (native history omits most outputs): show no badge rather than a contentless one.
+  if (!step.verdict) return null;
   const Icon = step.outcome === 'ok' ? CircleCheck : step.outcome === 'failed' ? CircleX : CircleDashed;
   // The verdict text carries the meaning; the icon is decoration, so colour and shape never stand alone.
   return <span className="step-outcome" data-outcome={step.outcome}><Icon size={14} aria-hidden="true" focusable="false"/>{step.verdict}</span>;

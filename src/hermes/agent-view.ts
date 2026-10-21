@@ -1,3 +1,4 @@
+import { keyArgument, oneLine, redact } from './agent-steps.js';
 import { interleavedText, type AgentInput, type Question, type ToolActivity, type ActivityTurn, type ReasoningActivity } from './agent-activity.js';
 import { ApprovalAttentionTone } from './attention-tone.js';
 import type { NativeSession } from './native-session.js';
@@ -10,6 +11,13 @@ function node<K extends keyof HTMLElementTagNameMap>(tag: K, text?: string, clas
 }
 function button(label: string, action: () => void): HTMLButtonElement {
   const control = node('button', label); control.type = 'button'; control.addEventListener('click', action); return control;
+}
+function liveKeyArgument(name: string, input: string): string {
+  try {
+    const parsed: unknown = JSON.parse(input);
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return '';
+    return redact(oneLine(keyArgument(name, parsed as Record<string, unknown>)), 96);
+  } catch { return ''; }
 }
 function reasoningSummary(value: string, truncated = false): string {
   const compact = value.replace(/[*_`#]+/g, '').replace(/\s+/g, ' ').trim();
@@ -323,7 +331,9 @@ export class AgentView {
       root.dataset.toolId=tool.id;root.append(summary,node('p','Arguments','agent-field-label'),input,node('p','Output','agent-field-label'),output,note);card={root,summary,input,output,note};this.toolCards.set(tool.id,card);
     }
     card.root.dataset.state=tool.state;
-    card.summary.textContent=`${tool.name} · ${tool.state}${tool.duration!==undefined?` · ${tool.duration.toFixed(2)}s`:''}${tool.context?` · ${tool.context}`:''}`;
+    // Hermes' own preview when it sends one; otherwise the same key argument the saved steps show (command, path).
+    const detail = tool.context || liveKeyArgument(tool.name, tool.input);
+    card.summary.textContent=`${tool.name} · ${tool.state}${tool.duration!==undefined?` · ${tool.duration.toFixed(2)}s`:''}${detail?` · ${detail}`:''}`;
     card.input.textContent=tool.input||'No arguments provided';card.output.textContent=tool.output||'No output supplied yet';
     card.note.textContent=tool.truncated?'Display truncated. This is not the full tool output.':'Untrusted tool output is shown as text, never executed.';
     return card;
