@@ -128,7 +128,7 @@ function ToolRow({ item, open, now, onToggle }: { item: ToolGroupItem; open: boo
 }
 
 function NarrationRow({ item }: { item: NarrationItem }) {
-  return <li className="turn-narration" data-row="narration" data-role="assistant" data-running={item.running ? 'true' : undefined}>
+  return <li className="turn-narration" data-row="narration" data-role="assistant" data-live-row={item.running ? 'true' : undefined} data-running={item.running ? 'true' : undefined}>
     {item.running ? <pre className="turn-prose">{item.text}<span className="stream-cursor"/></pre>
       : <Suspense fallback={<pre className="turn-prose">{item.text}</pre>}><div className="turn-prose"><Markdown text={item.text}/></div></Suspense>}
   </li>;
@@ -137,7 +137,7 @@ function NarrationRow({ item }: { item: NarrationItem }) {
 function ReplyRow({ item }: { item: ReplyItem }) {
   const speech = useContext(SpeechContext), speechKey = useId();
   const [copied, setCopied] = useState(false), [note, setNote] = useState('');
-  return <li className="turn-reply" data-row="reply" data-role="assistant" data-running={item.running ? 'true' : undefined}>
+  return <li className="turn-reply" data-row="reply" data-role="assistant" data-live-row={item.running ? 'true' : undefined} data-running={item.running ? 'true' : undefined}>
     <div className="message-content">
       {item.truncated && <p className="muted small">This message reached the display limit.</p>}
       {item.running ? <pre className="plain-message">{item.text}<span className="stream-cursor"/></pre>

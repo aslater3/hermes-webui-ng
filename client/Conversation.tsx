@@ -148,14 +148,17 @@ export function Conversation({ runtime: rt, revision }: { runtime: AppRuntime; r
   useEffect(() => {
     const container = scroller.current;
     if (!container || !running) { setLiveOffscreen(false); return; }
-    const row = container.querySelector<HTMLElement>('[data-live-row="true"]');
-    if (!row) { setLiveOffscreen(true); return; }
+    // The row doing the work now; between steps (a tool just finished, the reply not started) the latest row stands in.
+    const rows = container.querySelectorAll<HTMLElement>('[data-live-row="true"], [data-row]');
+    const row = container.querySelector<HTMLElement>('[data-live-row="true"]') ?? rows[rows.length - 1];
+    if (!row) { setLiveOffscreen(false); return; }
     const observer = new IntersectionObserver(([entry]) => setLiveOffscreen(!entry?.isIntersecting), { root: container });
     observer.observe(row);
     return () => observer.disconnect();
   }, [running, segments]);
   const jumpToLive = () => {
-    const row = scroller.current?.querySelector<HTMLElement>('[data-live-row="true"]');
+    const rows = scroller.current?.querySelectorAll<HTMLElement>('[data-row]');
+    const row = scroller.current?.querySelector<HTMLElement>('[data-live-row="true"]') ?? rows?.[rows.length - 1];
     following.current = false;
     row?.scrollIntoView({ block: 'center' });
   };
