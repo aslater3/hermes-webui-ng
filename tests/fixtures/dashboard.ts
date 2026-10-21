@@ -102,9 +102,9 @@ export async function startFixture(port = 0, options: { sessionToken?: string; b
   // Delegated child transcripts: stored like Hermes subagent sessions, readable by id but never listed.
   const childSessions = new Map<string, { key: string; profile: string; messages: {role:string; text:string}[] }>();
   const timers = new Set<ReturnType<typeof setTimeout>>();
-  // Hermes-like event replay: per-session seq + bounded ring; events route to the session's current client.
+  // Hermes-like event replay: per-session seq + bounded ring; events go to the clients attached to the session.
   const replayRing = new Map<string, { seq: number; events: Record<string, unknown>[] }>();
-  const owners = new Map<string, WebSocket>();
+  const subscribers = new Map<string, Set<WebSocket>>();
   const replayEpoch = randomUUID();
   let upgradesPausedUntil = 0;
   let closed = false;
@@ -267,8 +267,8 @@ export async function startFixture(port = 0, options: { sessionToken?: string; b
     // Mirrors Hermes transport authority: process-wide active_list is readable, but a child roster requires
     // this exact client to have created/resumed/activated the parent runtime.
     const attached = new Set<string>();
-    const attach = (sid: string) => { attached.add(sid); owners.set(sid, client); };
-    client.on('close', () => { for (const [sid, owner] of owners) if (owner === client) owners.delete(sid); });
+    const attach = (sid: string) => { attached.add(sid); subscribers.set(sid, (subscribers.get(sid) ?? new Set()).add(client)); };
+    client.on('close', () => { for (const set of subscribers.values()) set.delete(client); });
     const event = (type: string, session_id?: string, payload: unknown = {}) => {
       const params: Record<string, unknown> = { type, session_id, payload };
       if (session_id) {
@@ -276,8 +276,9 @@ export async function startFixture(port = 0, options: { sessionToken?: string; b
         params.seq = ++ring.seq; ring.events.push(params); if (ring.events.length > 512) ring.events.shift();
         replayRing.set(session_id, ring);
       }
-      const target = session_id ? owners.get(session_id) ?? client : client;
-      if (target.readyState === 1) target.send(JSON.stringify({ jsonrpc: '2.0', method: 'event', params }));
+      // Every client attached to the session gets its events; with none attached (a drop) they exist only in the ring.
+      const targets = session_id ? subscribers.get(session_id) ?? new Set([client]) : new Set([client]);
+      for (const target of targets) if (target.readyState === 1) target.send(JSON.stringify({ jsonrpc: '2.0', method: 'event', params }));
     };
     event('gateway.ready', undefined, { heartbeat: true, change_events: true, replay_epoch: replayEpoch });
     client.on('message', (raw) => {
