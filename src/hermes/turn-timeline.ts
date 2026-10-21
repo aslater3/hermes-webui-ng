@@ -112,7 +112,8 @@ function projectSaved(messages: readonly DisplayMessage[]): (MessageSegment | Sa
       const result = resultIndex === undefined ? undefined : messages[resultIndex];
       const step = toolStep(`${index}-call-${position}`, call.name, call.args, message, result, message.timestamp);
       const key = call.id ? `call:${call.id}` : `call:pos-${index}-${position}`;
-      target.atoms.push(savedCall(step, key, call.id || undefined, result ? toolSeconds(step.output) : undefined));
+      const fromStamps = result?.timestamp !== undefined && message.timestamp !== undefined && result.timestamp >= message.timestamp ? result.timestamp - message.timestamp : undefined;
+      target.atoms.push(savedCall(step, key, call.id || undefined, result ? toolSeconds(step.output) ?? fromStamps : undefined));
     });
   });
   return out;
@@ -296,4 +297,19 @@ export function toolLabel(seconds: number | undefined): string {
 export function clock(seconds: number): string {
   const whole = Math.max(0, Math.floor(seconds));
   return `${Math.floor(whole / 60)}:${String(whole % 60).padStart(2, '0')}`;
+}
+
+/** What a person wants to read from a stored result: a command's text output (plus any error), a file's content,
+ *  otherwise the result pretty-printed. Non-JSON output is shown as it is. Input is already redacted and bounded. */
+export function readableOutput(name: string, output: string): string {
+  const trimmed = output.trim();
+  if (!trimmed.startsWith('{')) return output;
+  let value: unknown;
+  try { value = JSON.parse(trimmed); } catch { return output; }
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return output;
+  const result = value as Record<string, unknown>, text = (key: string) => typeof result[key] === 'string' ? result[key] as string : '';
+  const error = text('error') || text('stderr');
+  if (typeof result.output === 'string') return [result.output, error ? `[error] ${error}` : ''].filter(Boolean).join('\n');
+  if (typeof result.content === 'string') return [result.content, error ? `[error] ${error}` : ''].filter(Boolean).join('\n');
+  return JSON.stringify(result, null, 2);
 }

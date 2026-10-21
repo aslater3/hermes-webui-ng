@@ -31,7 +31,8 @@ export function redact(value: string, max: number): string {
 }
 /** First line only, bounded: summaries are one short line in a single row. */
 export function oneLine(value: string, max = SUMMARY_LIMIT): string {
-  const line = value.split('\n').find(part => part.trim())?.trim() ?? '';
+  // A multi-line command (python3 -c "…", heredocs) is joined so its first line alone does not stand in for it.
+  const line = value.split('\n').map(part => part.trim()).filter(Boolean).join(' ');
   return line.length > max ? `${line.slice(0, max - 1)}…` : line;
 }
 /** Reasoning preview (same rule as the live cards): markdown stripped, whitespace collapsed, ~100 characters. */

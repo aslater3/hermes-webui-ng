@@ -2,7 +2,7 @@ import { lazy, memo, Suspense, useContext, useEffect, useId, useState, type Reac
 import { Check, CircleCheck, CircleX, Copy, FileText, LoaderCircle, Pencil, Search, Terminal, Wrench } from 'lucide-react';
 import { HermesMark } from './HermesMark.js';
 import { SpeechContext, ReadAloudButton } from './voice.js';
-import { clock, thoughtLabel, toolLabel, type CallStatus, type ToolCall, type ToolGroupItem, type ThoughtItem, type NarrationItem, type ReplyItem, type TimelineItem } from '../src/hermes/turn-timeline.js';
+import { clock, readableOutput, thoughtLabel, toolLabel, type CallStatus, type ToolCall, type ToolGroupItem, type ThoughtItem, type NarrationItem, type ReplyItem, type TimelineItem } from '../src/hermes/turn-timeline.js';
 import './turn-timeline.css';
 
 const Markdown = lazy(() => import('./Markdown.js'));
@@ -60,13 +60,14 @@ function Glyph({ status }: { status: CallStatus }) {
   if (status === 'failed') return <CircleX size={14} aria-hidden="true" focusable="false"/>;
   return null;
 }
-const statusWord: Record<CallStatus, string> = { running: 'running', ok: 'done', failed: 'failed', unknown: 'no result recorded' };
+const statusWord: Record<CallStatus, string> = { running: 'running', ok: 'done', failed: 'failed', unknown: '' };
 
 /** One call inside an expanded group: full arguments, bounded output, outcome and duration. */
 function CallDetail({ call, now }: { call: ToolCall; now: number }) {
   const [all, setAll] = useState(false);
-  const lines = call.output.split('\n');
-  const shown = all || lines.length <= OUTPUT_LINES ? call.output : lines.slice(0, OUTPUT_LINES).join('\n');
+  const output = readableOutput(call.name, call.output);
+  const lines = output.split('\n');
+  const shown = all || lines.length <= OUTPUT_LINES ? output : lines.slice(0, OUTPUT_LINES).join('\n');
   const time = call.status === 'running' ? elapsed(call.startedAt, now) : toolLabel(call.seconds);
   return <li className="turn-call" data-status={call.status} data-call-id={call.callId}>
     <div className="turn-call-head">
@@ -77,7 +78,7 @@ function CallDetail({ call, now }: { call: ToolCall; now: number }) {
     <pre className="turn-code turn-command">{fullArguments(call) || call.summary}</pre>
     <p className="turn-field">Output</p>
     {call.status === 'running' ? <p className="turn-empty">Running · {elapsed(call.startedAt, now)}</p>
-      : call.output ? <pre className="turn-code turn-output">{shown}</pre>
+      : output ? <pre className="turn-code turn-output">{shown}</pre>
         : <p className="turn-empty">No output recorded</p>}
     {lines.length > OUTPUT_LINES && !all && <button type="button" className="turn-more-button" onClick={() => setAll(true)}>Show all {lines.length} lines</button>}
   </li>;

@@ -232,3 +232,17 @@ test('durations are labelled without faking precision', () => {
   assert.equal(toolLabel(5), '5.0s');
   assert.equal(toolLabel(75), '1:15');
 });
+
+test('readable output: command text and errors, file content, pretty JSON, plain text untouched', async () => {
+  const { readableOutput } = await import('../../src/hermes/turn-timeline.js');
+  assert.equal(readableOutput('terminal', '{"output":"timeline ok","exit_code":0}'), 'timeline ok');
+  assert.equal(readableOutput('terminal', '{"output":"","exit_code":2,"error":"boom"}'), '[error] boom');
+  assert.equal(readableOutput('read_file', '{"content":"1|import x"}'), '1|import x');
+  assert.equal(readableOutput('write_file', '{"bytes_written":10}'), '{\n  "bytes_written": 10\n}');
+  assert.equal(readableOutput('terminal', 'plain text output'), 'plain text output');
+  assert.equal(readableOutput('terminal', '{"output": "cut off'), '{"output": "cut off');
+});
+test('a multi-line command summarises as one joined line', async () => {
+  const { oneLine } = await import('../../src/hermes/agent-steps.js');
+  assert.equal(oneLine('python3 -c "\nimport json\nprint(1)"'), 'python3 -c " import json print(1)"');
+});

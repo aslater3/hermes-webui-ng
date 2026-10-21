@@ -47,7 +47,9 @@ test('a long saved agent turn renders as one CLI-style timeline with failures ma
   await expect(diff.locator('.turn-call .turn-command')).toContainText('git diff --stat');
   await expect(diff.locator('.turn-output')).toContainText('tools/radar_math.py | 9 +-');
   await expect(diff).toHaveAttribute('data-status', 'ok');
-  await expect(diff.locator('.turn-status')).toContainText('exit 0');
+  // Like the CLI, a successful row's header shows its duration; the exit code is in the expanded call detail.
+  await expect(diff.locator('.turn-row-toggle')).toContainText('5.0s');
+  await expect(diff.locator('.turn-call')).toContainText('exit 0');
   // Layout, accessibility and no sideways scrolling at the narrowest width.
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   expect((await new AxeBuilder({ page }).include('#conversation-scroll').analyze()).violations).toEqual([]);
