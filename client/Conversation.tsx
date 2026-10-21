@@ -5,12 +5,16 @@ import './m3-activity.css';
 import { HermesMark } from './HermesMark.js';
 import { UsageButton } from './SessionUsage.js';
 import { AgentControls } from './AgentControls.js';
-import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type DragEvent as ReactDragEvent } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type DragEvent as ReactDragEvent } from 'react';
 import { ArrowDown, ArrowUp, ArrowUpRight, Code2, Compass, ListChecks, LoaderCircle, Square, Wrench } from 'lucide-react';
 import type { AppRuntime } from './runtime.js';
 import type { NativeSession } from '../src/hermes/native-session.js';
 import { AgentView } from '../src/hermes/agent-view.js';
 import { interleavedText } from '../src/hermes/agent-activity.js';
+import { groupHistory, type HistoryItem } from '../src/hermes/agent-steps.js';
+import { currentAction } from '../src/hermes/agent-now.js';
+import { AgentSteps } from './AgentSteps.js';
+import { NowLine } from './NowLine.js';
 import { draftKey } from '../src/hermes/chat-controller.js';
 import { enterSends } from '../src/hermes/chat-behaviour.js';
 import { Notice } from './primitives.js';
@@ -133,6 +137,12 @@ export function Conversation({ runtime: rt, revision }: { runtime: AppRuntime; r
   const send = () => { if (rt.steering) return; rt.setDraft(draft); jump(); rt.send(); };
   const useStarter = (value: string) => { setDraft(value); rt.setDraft(value); if (matchMedia('(pointer:fine)').matches) composer.current?.focus(); };
   const activityAt = messages.reduce((last, message, index) => message.role === 'user' ? index + 1 : last, messages.length);
+  // Tool calls and their results render as one agent-steps block per run; a reply with text stays a message.
+  const historyItems = useMemo(() => groupHistory(messages), [messages]);
+  const renderHistory = (items: HistoryItem[]) => items.map(item => item.kind === 'steps'
+    ? <AgentSteps key={`${scope}:steps:${item.start}`} steps={item.steps}/>
+    : <Message key={`${scope}:${item.start}`} {...item.message}/>);
+  const now = currentAction({ running: running && !historical, activity: chat.native.activity.state, streaming, history: historyItems });
   const olderAvailable = !!chat.selected && !busy && !loading && (historical ? saved.page?.returned === 100 : (state.totalMessages ?? saved.page?.returned ?? 0) >= 100);
   const placeholder = chat.subagent ? 'Subagent transcripts are read-only. Steer it from the parent conversation.' : chat.readOnly ? 'This conversation has ended and is read-only' : historical ? 'Return to latest to continue this conversation' : !rt.ready ? 'Connect to Hermes to send a message' : running ? 'Steer Hermes while it works…' : state.phase === 'waiting' ? 'Answer Hermes above or stop the response' : 'Message Hermes…';
   return <SpeechContext.Provider value={speechControls}>
@@ -147,10 +157,10 @@ export function Conversation({ runtime: rt, revision }: { runtime: AppRuntime; r
       {state.deliveryUnknown && <Notice>Delivery was not confirmed. Check the recovered conversation before resending. Nothing has been replayed.</Notice>}
       {empty && <div className="welcome"><div className="welcome-mark"><HermesMark size={30}/></div><p className="eyebrow">A SPACE FOR YOUR NEXT IDEA</p><h1>What are we working on?</h1><p>Think it through. Build it out. Make it happen with Hermes.</p><div className="welcome-suggestions">{starters.map(({ icon: Icon, title, subtitle, draft }) => <button key={title} onClick={() => useStarter(draft)} disabled={!writable} title={`Use “${title}” as a draft`}><Icon size={19}/><span><strong>{title}</strong><small>{subtitle}</small></span><ArrowUpRight size={15}/></button>)}</div></div>}
       {loading && <div className="loading-conversation" role="status"><LoaderCircle size={19} className="spin"/>Opening your conversation…</div>}
-      {messages.slice(0, activityAt).map((message, index) => <Message key={`${scope}:${index}`} {...message}/>)}
+      {renderHistory(historyItems.filter(item => item.start < activityAt))}
       <CommandTaskResults commands={chat.native.commands}/>
       <Activity owner={chat.native} enabled={rt.ready && !loading} historical={snapshot} revision={revision} attention={attention}/>
-      {messages.slice(activityAt).map((message, index) => <Message key={`${scope}:${activityAt + index}`} {...message}/>)}
+      {renderHistory(historyItems.filter(item => item.start >= activityAt))}
       {streaming && !interleaved && <div className="message message-assistant streaming"><div className="message-label"><span className="assistant-mark"><HermesMark size={15}/></span>Hermes <span className="working-label">Working</span></div><pre className="plain-message">{streaming}<span className="stream-cursor"/></pre></div>}
       {busy && !streaming && !pending && <div className="thinking-indicator" role="status"><span/><span/><span/>Hermes is working</div>}
       {state.phase === 'waiting' && !pending && <Notice>Hermes is waiting for input, but no recoverable request is available. Use Stop response to cancel this turn, then ask again for a fresh request.</Notice>}
@@ -165,6 +175,7 @@ export function Conversation({ runtime: rt, revision }: { runtime: AppRuntime; r
     <div className={`composer-dock${dropping ? ' is-dropping' : ''}`} {...dropHandlers}>
       {dropping && <div className="drop-target" aria-hidden="true">{attachEnabled ? 'Drop to attach to your next message' : 'Open an idle conversation to attach files'}</div>}
       {unread && <button className="jump-latest" onClick={jump}><ArrowDown size={15}/>Jump to latest</button>}
+      <NowLine action={now}/>
       {pending > 0 && <button className="attention-strip" onClick={() => { following.current = false; content.current?.querySelector('[data-native-requests], .agent-requests')?.scrollIntoView({ block: 'center', behavior: 'instant' }); }}><span className="attention-dot"/>{pending} request{pending === 1 ? '' : 's'} need your input<ArrowUpRight size={15}/></button>}
       <form className="composer" id="shell-composer" onSubmit={event => { event.preventDefault(); send(); }}>
         {commands.popup}

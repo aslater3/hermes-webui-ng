@@ -75,17 +75,60 @@ const fixtureSystemStats = { os: 'Linux', os_release: '6.8.0-fixture', os_versio
   uptime_seconds: 302400, memory: { total: 17179869184, available: 8589934592, used: 8589934592, percent: 50 }, disk: { total: 500000000000, used: 150000000000, free: 350000000000, percent: 30 },
   process: { pid: 48211, rss: 104857600, create_time: NOW - 300, num_threads: 12 }, psutil: true };
 
+/** A seeded long agent loop, shaped like Hermes' REST /api/sessions/{id}/messages rows: assistant envelopes carry
+ *  reasoning_content and tool_calls with empty content; tool rows carry tool_call_id and a JSON content string.
+ *  Thirteen calls, one failing terminal (exit_code 1), one reply with real text mid-way, a token-looking string in one command. */
+const AGENT_LOOP_START = NOW - 900;
+export const AGENT_LOOP_TITLE = 'Refactor the radar math helpers and verify them.';
+type FixtureRow = { role: string; text: string; raw: Record<string, unknown> };
+function agentLoopRows(): FixtureRow[] {
+  const rows: FixtureRow[] = [];
+  let at = AGENT_LOOP_START;
+  const push = (role: string, text: string, raw: Record<string, unknown>) => { at += 5; rows.push({ role, text, raw: { role, timestamp: at, ...raw } }); };
+  push('user', AGENT_LOOP_TITLE, { content: AGENT_LOOP_TITLE });
+  const calls = (list: [string, string, Record<string, unknown>, Record<string, unknown>][]) => {
+    for (const [reasoning, name, args, result] of list) {
+      const id = `call_${rows.length}`;
+      push('assistant', '', { content: '', reasoning_content: reasoning, tool_calls: [{ id, type: 'function', function: { name, arguments: JSON.stringify(args) } }] });
+      push('tool', JSON.stringify(result), { tool_call_id: id, tool_name: name, content: JSON.stringify(result) });
+    }
+  };
+  calls([
+    ['Reading the helper module before changing anything.', 'read_file', { path: 'tools/radar_math.py', offset: 1, limit: 40 }, { content: '1|"""Radar math helpers."""\n2|import math' }],
+    ['The tests show what the helpers promise.', 'read_file', { path: 'tests/test_radar_math.py', offset: 1, limit: 60 }, { content: '1|import pytest\n2|from tools.radar_math import round_gain' }],
+    ['Running the suite to see the current failure.', 'terminal', { command: 'make test' }, { output: 'FAILED tests/test_radar_math.py::test_rounding - AssertionError: 2 != 3', exit_code: 1, error: null, duration_s: 2.4 }],
+  ]);
+  const reply = 'The rounding case fails because round() uses banker rounding for 2.5. I will fix the helper.';
+  push('assistant', reply, { content: reply });
+  calls([
+    ['Looking at the function that needs the change.', 'read_file', { path: 'tools/radar_math.py', offset: 40, limit: 30 }, { content: '40|def round_gain(value):\n41|    return round(value)' }],
+    ['Replacing the function with half-up rounding.', 'write_file', { path: 'tools/radar_math.py', content: 'def round_gain(value): ...' }, { bytes_written: 10267 }],
+    ['A small patch for the docstring.', 'patch', { path: 'tools/radar_math.py', old_string: 'round', new_string: 'half-up round' }, { success: true }],
+    ['Checking the build target with the local key set for the signer.', 'terminal', { command: 'OPENAI_API_KEY=sk-fixture0123456789abcdef make verify' }, { output: 'verify ok', exit_code: 0, error: null, duration_s: 6.1 }],
+    ['Finding every caller of the helper.', 'search_files', { pattern: 'round_gain', path: 'tools' }, { matches: 2, success: true }],
+    ['Running the unit tests for the module.', 'terminal', { command: 'pytest -q tests/test_radar_math.py' }, { output: '12 passed', exit_code: 0, error: null, duration_s: 1.8 }],
+    ['Reading the changelog entry format.', 'read_file', { path: 'CHANGELOG.md', offset: 1, limit: 20 }, { content: '1|# Changelog' }],
+    ['Recording the fix in the changelog.', 'write_file', { path: 'CHANGELOG.md', content: '# Changelog\n' }, { bytes_written: 512 }],
+    ['Checking the final diff.', 'terminal', { command: 'git diff --stat' }, { output: ' tools/radar_math.py | 9 +-', exit_code: 0, error: null }],
+  ]);
+  const done = 'Done. The rounding fix is in and all 12 radar math tests pass.';
+  push('assistant', done, { content: done });
+  return rows;
+}
+
 function skillMarkdown(name: string): string {
   return `---\nname: ${name}\ndescription: Fixture skill ${name}\n---\n\n# ${name}\n\nUse this skill for **${name}** tasks.\n\n- Step one\n- Step two\n`;
 }
 
-export async function startFixture(port = 0, options: { sessionToken?: string; beforeWsTicket?: () => Promise<void>; beforePromptComplete?: (text: string) => Promise<void>; requireSubagentActivation?: boolean; emptyOwnedSubagentRoster?: boolean; uninitializedSessionStore?: boolean; voiceUnavailable?: boolean } = {}) {
+export async function startFixture(port = 0, options: { agentLoop?: boolean; sessionToken?: string; beforeWsTicket?: () => Promise<void>; beforePromptComplete?: (text: string) => Promise<void>; requireSubagentActivation?: boolean; emptyOwnedSubagentRoster?: boolean; uninitializedSessionStore?: boolean; voiceUnavailable?: boolean } = {}) {
   const cookie = `fixture_auth=${randomBytes(24).toString('hex')}`;
   const tickets = new Set<string>();
   const interactions = new AgentScenarios();
   const models = new ModelScenarios();
   const validCookies = new Set([cookie]);
-  const sessions = new Map<string, { key: string; messages: {role:string; text:string}[]; running: boolean; profile: string; updated: number; turn: number; inflight: string }>();
+  const sessions = new Map<string, { key: string; messages: {role:string; text:string; raw?: Record<string, unknown>}[]; running: boolean; profile: string; updated: number; turn: number; inflight: string }>();
+  // Opt-in so count-based fixtures keep their exact session totals. The dev fixture (Playwright webServer) enables it.
+  if (options.agentLoop) sessions.set('seed-agent-loop', { key: 'agent-loop-fixture', profile: 'default', messages: agentLoopRows(), running: false, updated: AGENT_LOOP_START + 600, turn: 0, inflight: '' });
   const metrics = { tickets: 0, creates: 0, submits: 0, upgrades: 0, cronActions: 0 };
   // Mutable cron state, keyed by the signed-in browser session so parallel e2e logins never share jobs.
   // Trusted-local (token) requests share one 'local' store.
@@ -100,7 +143,7 @@ export async function startFixture(port = 0, options: { sessionToken?: string; b
   // Live child agents per parent runtime, mirroring Hermes' `subagent.list` roster shape.
   const children = new Map<string, Record<string, unknown>[]>();
   // Delegated child transcripts: stored like Hermes subagent sessions, readable by id but never listed.
-  const childSessions = new Map<string, { key: string; profile: string; messages: {role:string; text:string}[] }>();
+  const childSessions = new Map<string, { key: string; profile: string; messages: {role:string; text:string; raw?: Record<string, unknown>}[] }>();
   const timers = new Set<ReturnType<typeof setTimeout>>();
   // Hermes-like event replay: per-session seq + bounded ring; events go to the clients attached to the session.
   const replayRing = new Map<string, { seq: number; events: Record<string, unknown>[] }>();
@@ -245,7 +288,7 @@ export async function startFixture(port = 0, options: { sessionToken?: string; b
       const oldest = url.searchParams.get('order') === 'oldest';
       const end = oldest ? Math.min(session.messages.length, offset + limit) : Math.max(0, session.messages.length - offset);
       const start = oldest ? Math.min(offset, end) : Math.max(0, end - limit);
-      const messages = session.messages.slice(start, end).map((message, i) => ({ id: start + i + 1, role: message.role, content: message.text }));
+      const messages = session.messages.slice(start, end).map((message, i) => message.raw ? { id: start + i + 1, ...message.raw } : { id: start + i + 1, role: message.role, content: message.text });
       send(200, { session_id: session.key, profile: session.profile, messages,
         pagination: { order: oldest ? 'oldest' : 'latest', limit, offset, returned: messages.length } }); return;
     }
@@ -320,7 +363,7 @@ export async function startFixture(port = 0, options: { sessionToken?: string; b
       if (!session) { error(); return; }
       const emitAgent = (type:string,payload:unknown) => event(type,params.session_id,payload);
       if(interactions.respond(params.session_id,method,params,reply))return;
-      if (method === 'session.history') { reply({ messages: session.messages }); return; }
+      if (method === 'session.history') { reply({ messages: session.messages.map(message => message.raw ?? message) }); return; }
       if (method === 'session.activate') { attach(String(params.session_id)); reply({ info: models.info(String(params.session_id)), running: session.running, status: session.running ? 'working' : 'idle', inflight: { assistant: session.inflight },...interactions.snapshot(params.session_id,emitAgent) }); return; }
       if (method === 'session.interrupt') { interactions.interrupt(params.session_id); session.turn++; session.running = false; session.inflight = ''; reply({ ok: true }); event('session.info', params.session_id, { running: false }); return; }
       if (method === 'prompt.submit') {
@@ -363,6 +406,14 @@ export async function startFixture(port = 0, options: { sessionToken?: string; b
             event('message.complete', params.session_id, { text: session.inflight });
             later(() => { session.running = false; session.inflight = ''; event('session.info', params.session_id, { running: false }); }, 20); }, 50 + parts.length * 150 + 100);
           return;
+        }
+        // A tool running for two seconds, then reply text: the Now line shows the tool, then the reply; interrupt clears it.
+        if (String(params.text).startsWith('[now-test]')) {
+          later(() => event('reasoning.delta', params.session_id, { text: 'Planning the radar check. ' }), 50);
+          later(() => event('tool.start', params.session_id, { tool_id: 'now-1', name: 'terminal', args: { command: 'make radar-check' } }), 200);
+          later(() => event('tool.complete', params.session_id, { tool_id: 'now-1', name: 'terminal', result: '{"exit_code":0}' }), 2200);
+          later(() => delta('Radar check is passing.'), 2400);
+          return; // Held until interrupted, like [held-test].
         }
         // Text, a tool, then more text: the order a real turn produces between tool calls.
         if (String(params.text).startsWith('[interleave-test]')) {

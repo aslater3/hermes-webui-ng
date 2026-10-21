@@ -357,3 +357,30 @@ A socket drop (most often an iPhone backgrounding the app) used to lose whatever
 - Identical-`seq` duplicates are dropped by design; a changed request on a new `seq` still reaches the existing reused-ID guard (`m3-activity.spec.ts`).
 
 Evidence: `tests/unit/event-replay.test.ts` (dedupe, ordered merge, truncation, epoch change, fetch failure, hold timeout); `tests/contract/event-replay.test.ts` drives a real `GatewayClient` + `NativeSession` through the proxy while the fixture (now with a Hermes-like ring and owner routing) drops the socket mid-reasoning — the full reasoning arrives exactly once; with replay disabled the same test fails. Not verified on a physical iPhone.
+
+## Readable agent steps (branch `feat/readable-agent-steps`)
+
+What landed. Long agent turns read as one run instead of a wall of collapsed cards:
+
+- Projection (`src/hermes/history-message.ts`, `src/hermes/agent-steps.ts`): assistant `tool_calls` (id, name, bounded JSON arguments) and tool rows (`tool_call_id`, `name`, JSON `content`) are paired by id across the loaded page. A result with no matching call stays as its own step. Verdicts come only from a parsed result object: `exit N` / `exit N · failed`, `failed`, `error`, `N bytes written`, or `no result recorded` when the page has no result. Nothing is inferred from text.
+- Summaries: terminal → first line of `command`; read_file/write_file/patch → `path` (read_file adds `:start–end` from offset/limit); search/web → query, pattern, or url; unknown tools → their first short string argument. Every summary, expanded argument and output passes through `safeText` (the Phase 8 redaction helper) after JSON credential members are blanked.
+- Grouping: consecutive assistant envelopes without reply text (reasoning and/or calls) and their results form one `Agent steps (N)` block with one Hermes header. A reply with real text is an ordinary message, in order; calls requested with it follow it. Rows are reasoning previews (same ~100-character rule as the live cards) and tool summaries, each expandable to its arguments and output. Blocks show the last six rows and a 44 px "Show N earlier steps" control.
+- Now line (`src/hermes/agent-now.ts`, `client/NowLine.tsx`): pinned above the composer only while a turn is running. It shows `Running <tool>: <summary>` with an elapsed time from `tool.start`, `Writing reply…`, or `Thinking…` with the latest reasoning preview in visual-only text. When the page attached mid-turn and live activity is empty, it shows `Last step: <name> — <summary>` from the newest saved step. Only the label is in the `role="status"` region, so the timer and reasoning deltas are not re-announced. The line is hidden when idle.
+- Narration: unchanged in behaviour. A streamed reply that is fully covered by the live timeline still interleaves with tool cards (`reply-interleave.spec.ts`); the bottom "Working" box still appears only when the timeline does not cover the stream.
+
+Evidence (synthetic fixture on the probe harness; not vanilla-Hermes evidence):
+
+- Unit: `tests/unit/agent-steps.test.ts` (12 tests: envelope and result shapes, id pairing out of order, orphan results, text-message ordering, failure and unknown verdicts, summaries, redaction of key=value / bearer / provider keys / JSON credential members, reasoning preview, grouping of 24 rows, last-step fallback, Now-line selection, native gateway rows). Suite total 502 pass.
+- Contract: unchanged, 56 pass.
+- E2E: `tests/e2e/agent-steps.spec.ts` on desktop-chromium, android-chromium and narrow-320 (6 passed): grouped blocks with counts and the reply between them; collapsed summaries (command, path with range, `exit 1 · failed`); last six rows plus show-earlier at ≥44 px; a token-looking command rendered as `OPENAI_API_KEY=[redacted] make verify` with the key absent from the page; expansion by keyboard shows arguments and output; axe clean; no horizontal overflow at 320 px. The Now test checks the running tool with its elapsed time, the change to "Writing reply…", and removal on Stop response, with axe on the line.
+- Screenshots: `test-results/agent-steps-{desktop-chromium,android-chromium,narrow-320}.png` and `test-results/agent-now-{desktop-chromium,android-chromium,narrow-320}.png`.
+- Regression, same probe harness: `history-content`, `reply-interleave`, `reasoning-placement`, `session-attention`, `m3-activity`, `shell*`, `thinking-indicator`, `steering`, `peer-requests`, `agent-hit-area`, `session-usage`, `conversation-details`, `approval-attention`, `attachments`, `voice`, `command-list`, `commands`, `startup` all pass on the three viewports. The legacy diagnostic specs (`chat`, `turn-settle` and the other specs that use `#auth-state` or `#gateway-state`) fail as expected on this harness and were not used as evidence.
+
+Known boundaries:
+
+- The seeded agent loop is opt-in (`startFixture(port, { agentLoop: true })`, enabled by `scripts/dev-fixture.mjs`) so count-based contract fixtures keep their totals.
+- Fallback steps show a relative time only when Hermes stores a timestamp on the row. The fixture supplies one; unit tests cover the "N s ago" source value, not the rendered wording.
+- The Now line is not shown in the Active sessions row (deferred; the composer line is the single source for this slice). It is not shown for a `waiting` turn; the attention strip owns that state.
+- Expanded arguments and outputs keep the existing bounded display (8 KB) and are redacted with the shared helper, but the helper is pattern-based. It is not a guarantee against every secret format.
+- Live tool cards in the chronological activity panel keep their existing layout; only history steps are grouped.
+- Not verified on physical iPhone or Android devices, and WebKit is not run locally; CI covers iPhone.
