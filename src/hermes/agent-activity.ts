@@ -14,6 +14,8 @@ export interface AgentInput {
 export interface ToolActivity {
   id: string; name: string; state: 'running' | 'complete' | 'error' | 'unknown';
   input: string; output: string; context: string; duration?: number; truncated: boolean;
+  /** Epoch ms when this client first saw the call running (tool.start); display-only elapsed time. */
+  startedAt?: number;
 }
 export interface ReasoningActivity { kind: 'reasoning'; id: string; text: string; truncated: boolean; }
 export interface ToolTimelineActivity { kind: 'tool'; id: string; }
@@ -141,6 +143,8 @@ export class AgentActivity {
    *  arrives after that with no tool or reply in between is a retried attempt of the same step. */
   private callEnded = false;
   private terminal = new Set<string>();
+  /** Injected for tests; the live elapsed time of a running tool is measured from here. */
+  clock: () => number = () => Date.now();
   private archiveTurn(): void {
     const s = this.state;
     if (s.tools.length || s.reasoning || s.thinking) {
@@ -294,7 +298,8 @@ export class AgentActivity {
         const tool: ToolActivity = { id:toolId, name:text(p.name ?? old?.name ?? 'Tool',128), input, output,
           context:text(p.context ?? p.preview ?? old?.context,2048), state:event.type === 'tool.complete' ? failed?'error':'complete' : 'running',
           duration:typeof p.duration_s === 'number' && Number.isFinite(p.duration_s) && p.duration_s >= 0 ? p.duration_s : old?.duration,
-          truncated:input.length >= ACTIVITY_LIMITS.input || output.length >= ACTIVITY_LIMITS.text || !!old?.truncated };
+          truncated:input.length >= ACTIVITY_LIMITS.input || output.length >= ACTIVITY_LIMITS.text || !!old?.truncated,
+          startedAt: old?.startedAt ?? (event.type === 'tool.complete' ? undefined : this.clock()) };
         let tools = this.state.tools.filter((t) => t.id !== toolId); tools.push(tool);
         const dropped = Math.max(0,tools.length - ACTIVITY_LIMITS.tools); tools = tools.slice(-ACTIVITY_LIMITS.tools);
         const liveToolIds = new Set(tools.map(item => item.id));

@@ -1,6 +1,8 @@
 import { record, textField } from './protocol.js';
 
 export const HISTORY_TEXT_LIMIT = 131072;
+/** One assistant tool call as Hermes stored it (`tool_calls[]`). `args` is the bounded JSON argument string. */
+export interface ToolCallRef { id: string; name: string; args: string; }
 export interface DisplayMessage {
   role: string;
   text: string;
@@ -8,7 +10,16 @@ export interface DisplayMessage {
   rowId?: number;
   toolName?: string;
   reasoning?: string;
+  /** Assistant envelopes: the tool calls they requested, paired later by `id` with tool result rows. */
+  toolCalls?: ToolCallRef[];
+  /** Tool rows: the call this result answers (`tool_call_id`). */
+  toolCallId?: string;
+  /** Tool rows (native projection): the gateway's short call preview (`context`). */
+  toolContext?: string;
+  /** Unix seconds when Hermes stored the row; display-only, used for "N s ago" wording. */
+  timestamp?: number;
 }
+const MAX_TOOL_CALLS = 32, TOOL_ARGS_LIMIT = 8192;
 const TEXT = new Set(['text', 'input_text', 'output_text', 'summary_text', 'reasoning_text']);
 const MEDIA = new Set(['image', 'image_url', 'input_image', 'audio', 'input_audio', 'file', 'input_file']);
 function object(value: unknown): Record<string, unknown> | undefined {
@@ -61,14 +72,20 @@ export function displayMessage(input: unknown, source: 'native' | 'rest'): Displ
   if (data.display_kind === 'hidden') return null;
   const body = contentText(source === 'native' ? data.text ?? data.content : data.content ?? data.text);
   const row = source === 'native' ? data.row_id : data.id;
+  const timestamp = typeof data.timestamp === 'number' && Number.isFinite(data.timestamp) && data.timestamp > 0 ? data.timestamp : undefined;
   const result: DisplayMessage = { role, text: body.text,
     ...(body.truncated ? { truncated: true } : {}),
     ...(typeof row === 'number' && Number.isSafeInteger(row) && row >= 0 ? { rowId: row } : {}),
+    ...(timestamp !== undefined ? { timestamp } : {}),
   };
   if (role === 'tool') {
     result.toolName = short(data.name ?? data.tool_name, 128) ?? 'Tool';
+    const callId = short(data.tool_call_id, 256);
+    if (callId) result.toolCallId = callId;
+    const context = short(data.context, 2048);
+    if (context) result.toolContext = context;
     // Gateway deliberately omits tool result bodies. Do not invent a completion/output verdict.
-    if (!result.text.trim()) result.text = short(data.context, 8192) ?? 'Tool activity recorded by Hermes. Output is not included in this history response.';
+    if (!result.text.trim()) result.text = context ?? 'Tool activity recorded by Hermes. Output is not included in this history response.';
     return result;
   }
   if (role === 'assistant') {
@@ -81,14 +98,21 @@ export function displayMessage(input: unknown, source: 'native' | 'rest'): Displ
       const detail = contentText(value, 32768);
       if (detail.text.trim()) { result.reasoning = detail.text; if (detail.truncated) result.truncated = true; break; }
     }
-    if (!result.text.trim() && !result.reasoning && Array.isArray(data.tool_calls) && data.tool_calls.length) {
-      const names = data.tool_calls.slice(0, 32).flatMap(call => {
-        const fn = object(object(call)?.function);
-        const name = short(fn?.name, 128); return name ? [name] : [];
-      });
-      result.text = names.length ? `Requested tools: ${names.join(', ')}` : 'Requested tool activity';
+    if (Array.isArray(data.tool_calls) && data.tool_calls.length) {
+      // Calls with no name are dropped (they cannot be shown or paired) before the cap. Arguments stay a bounded JSON string.
+      const calls: ToolCallRef[] = [];
+      for (const call of data.tool_calls) {
+        const item = object(call), fn = object(item?.function);
+        const name = short(fn?.name, 128);
+        if (!name) continue;
+        if (calls.length === MAX_TOOL_CALLS) { result.truncated = true; break; }
+        const raw = fn?.arguments;
+        const args = typeof raw === 'string' ? raw : raw !== undefined && raw !== null ? JSON.stringify(raw) ?? '' : '';
+        calls.push({ id: short(item?.id, 256) ?? '', name, args: args.slice(0, TOOL_ARGS_LIMIT) });
+      }
+      if (calls.length) result.toolCalls = calls;
     }
   }
-  // Empty assistant envelopes are not messages. No generic placeholder for them.
-  return result.text.trim() || result.reasoning ? result : null;
+  // Empty assistant envelopes are not messages. Tool requests alone are steps (see agent-steps.ts), not text.
+  return result.text.trim() || result.reasoning || result.toolCalls?.length ? result : null;
 }
