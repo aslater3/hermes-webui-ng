@@ -8,7 +8,7 @@ import { AgentActivity, inputRpc } from './agent-activity.js';
 import type { ConnectionState, GatewayClient } from './gateway-client.js';
 import { ClientError, record, textField, type GatewayEvent } from './protocol.js';
 
-type Transport = Pick<GatewayClient, 'call' | 'onEvent' | 'onState' | 'state'> & Partial<Pick<GatewayClient, 'requests'>>;
+type Transport = Pick<GatewayClient, 'call' | 'onEvent' | 'onState' | 'state'> & Partial<Pick<GatewayClient, 'requests' | 'holdForReplay' | 'releaseReplay' | 'replay'>>;
 export type Message = DisplayMessage;
 export interface SessionState {
   phase: 'empty' | 'attaching' | 'idle' | 'running' | 'waiting' | 'unknown' | 'error';
@@ -45,6 +45,8 @@ export class NativeSession {
   private usageRevision = 0;
   private disposed = false;
   private foreground = true;
+  /** Runtime whose live events are held for replay after a reconnect. */
+  private replayRuntime?: string;
   private flight?: { epoch: number; promise: Promise<void> };
   private listeners = new Set<(state: SessionState) => void>();
   private unsubscribe: (() => void)[];
@@ -110,6 +112,8 @@ export class NativeSession {
   }
   private connection(connection: ConnectionState): void {
     if (connection.phase !== 'ready') {
+      // Remember the live runtime so its missed events can be replayed once it is re-attached.
+      if (this.state.runtimeId && !this.replayRuntime) { this.replayRuntime = this.state.runtimeId; this.gateway.holdForReplay?.(this.state.runtimeId); }
       this.commands.reset(true);
       this.settings.reset();
       this.activity.disconnect();
@@ -176,6 +180,15 @@ export class NativeSession {
         throw new ClientError('protocol', 'Hermes omitted the durable session key');
       const info = typeof result.info === 'object' && result.info !== null ? record(result.info) : {};
       this.publish({ runtimeId, storedId: key, usage: this.foreground ? infoUsage(info) : undefined, agent: agentMetadata(info), agentStarting: info.lazy === true, profile: typeof info.profile_name === 'string' ? info.profile_name : profile });
+      const held = this.replayRuntime; this.replayRuntime = undefined;
+      if (reconnect && held) {
+        if (held === runtimeId) {
+          // Same live runtime: deliver what streamed while disconnected before reconciling the snapshot.
+          const outcome = await this.gateway.replay?.(runtimeId).catch(() => 'gap' as const);
+          this.valid(epoch);
+          if (outcome === 'gap') { this.activity.missed(); this.publish({}); }
+        } else this.gateway.releaseReplay?.(held);
+      } else if (held) this.gateway.releaseReplay?.(held);
       await this.refresh();
     } catch (error) {
       this.failure(epoch, error);
@@ -439,6 +452,7 @@ export class NativeSession {
   }
   dispose(): void {
     this.disposed = true;
+    if (this.replayRuntime) { this.gateway.releaseReplay?.(this.replayRuntime); this.replayRuntime = undefined; }
     this.state = { ...this.state, usage: undefined };
     this.commands.reset();
     this.settings.reset();

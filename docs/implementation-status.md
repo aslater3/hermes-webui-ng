@@ -347,3 +347,13 @@ Evidence (local, synthetic fixture on the probe harness, not vanilla Hermes):
 - Regression sample (attachments, voice, browser-commands, steering, shell; three viewports): 148 pass, 2 skipped (drag-and-drop is desktop-only by design).
 
 Known boundaries: no real microphone or audio output was exercised. iPhone autoplay and microphone prompts, the installed Home Screen PWA, and Android hardware are not verified. Voice conversation mode is not implemented. `voice-config` does not prove an STT/TTS provider is configured; an unconfigured provider appears on first use as copy. WebKit is not run locally; CI covers iPhone.
+
+## Live event replay after reconnect
+
+A socket drop (most often an iPhone backgrounding the app) used to lose whatever Hermes streamed meanwhile, so reasoning and replies could stop mid-way. NG now uses Hermes' bounded replay ring (`session.events.since`, per-session `seq`, `replay_epoch` in `gateway.ready`; `tui_gateway/event_replay.py` at the certified ref):
+
+- `src/hermes/event-replay.ts` (`EventSequencer`) delivers each (session, `seq`) once. When a session's connection drops it holds that session's live events after the next ready; after `session.resume` returns the same runtime, NG fetches everything after the held floor, merges it with what arrived live meanwhile, and delivers it in `seq` order before reconciling the snapshot.
+- A truncated ring, a changed `replay_epoch` (backend restart), or a failed fetch is reported in the activity panel ("Some live activity was missed while disconnected; the saved conversation is complete.") and the saved transcript remains authoritative. An unclaimed hold is released after 15 s so live events are never stranded. Nothing is persisted.
+- Identical-`seq` duplicates are dropped by design; a changed request on a new `seq` still reaches the existing reused-ID guard (`m3-activity.spec.ts`).
+
+Evidence: `tests/unit/event-replay.test.ts` (dedupe, ordered merge, truncation, epoch change, fetch failure, hold timeout); `tests/contract/event-replay.test.ts` drives a real `GatewayClient` + `NativeSession` through the proxy while the fixture (now with a Hermes-like ring and owner routing) drops the socket mid-reasoning — the full reasoning arrives exactly once; with replay disabled the same test fails. Not verified on a physical iPhone.

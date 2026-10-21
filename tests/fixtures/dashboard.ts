@@ -102,6 +102,11 @@ export async function startFixture(port = 0, options: { sessionToken?: string; b
   // Delegated child transcripts: stored like Hermes subagent sessions, readable by id but never listed.
   const childSessions = new Map<string, { key: string; profile: string; messages: {role:string; text:string}[] }>();
   const timers = new Set<ReturnType<typeof setTimeout>>();
+  // Hermes-like event replay: per-session seq + bounded ring; events go to the clients attached to the session.
+  const replayRing = new Map<string, { seq: number; events: Record<string, unknown>[] }>();
+  const subscribers = new Map<string, Set<WebSocket>>();
+  const replayEpoch = randomUUID();
+  let upgradesPausedUntil = 0;
   let closed = false;
   const ws = new WebSocketServer({ noServer: true, handleProtocols: () => options.sessionToken ? false : WS_PROTOCOL });
   const server = createServer((req, res) => {
@@ -247,6 +252,7 @@ export async function startFixture(port = 0, options: { sessionToken?: string; b
     send(404, {});
   });
   server.on('upgrade', (req, socket, head) => {
+    if (Date.now() < upgradesPausedUntil) { socket.end('HTTP/1.1 503 Service Unavailable\r\nConnection: close\r\nContent-Length: 0\r\n\r\n'); return; }
     const protocols = (req.headers['sec-websocket-protocol'] ?? '').split(',').map((part) => part.trim());
     const ticket = protocols.find((part) => part.startsWith('hermes-gateway-ticket.'))?.slice(22);
     const localUrl = new URL(req.url ?? '', 'http://local');
@@ -261,9 +267,20 @@ export async function startFixture(port = 0, options: { sessionToken?: string; b
     // Mirrors Hermes transport authority: process-wide active_list is readable, but a child roster requires
     // this exact client to have created/resumed/activated the parent runtime.
     const attached = new Set<string>();
-    const event = (type: string, session_id?: string, payload: unknown = {}) =>
-      client.send(JSON.stringify({ jsonrpc: '2.0', method: 'event', params: { type, session_id, payload } }));
-    event('gateway.ready', undefined, { heartbeat: true, change_events: true });
+    const attach = (sid: string) => { attached.add(sid); subscribers.set(sid, (subscribers.get(sid) ?? new Set()).add(client)); };
+    client.on('close', () => { for (const set of subscribers.values()) set.delete(client); });
+    const event = (type: string, session_id?: string, payload: unknown = {}) => {
+      const params: Record<string, unknown> = { type, session_id, payload };
+      if (session_id) {
+        const ring = replayRing.get(session_id) ?? { seq: 0, events: [] };
+        params.seq = ++ring.seq; ring.events.push(params); if (ring.events.length > 512) ring.events.shift();
+        replayRing.set(session_id, ring);
+      }
+      // Every client attached to the session gets its events; with none attached (a drop) they exist only in the ring.
+      const targets = session_id ? subscribers.get(session_id) ?? new Set([client]) : new Set([client]);
+      for (const target of targets) if (target.readyState === 1) target.send(JSON.stringify({ jsonrpc: '2.0', method: 'event', params }));
+    };
+    event('gateway.ready', undefined, { heartbeat: true, change_events: true, replay_epoch: replayEpoch });
     client.on('message', (raw) => {
       const request = JSON.parse(raw.toString()); const { id, method, params = {} } = request;
       const reply = (result: unknown) => client.send(JSON.stringify({ jsonrpc: '2.0', id, result }));
@@ -282,24 +299,29 @@ export async function startFixture(port = 0, options: { sessionToken?: string; b
         reply({ subagents: options.emptyOwnedSubagentRoster ? [] : children.get(String(params.session_id)) ?? [], delegations: [] }); return;
       }
       if (method === 'gateway.ping') { reply({ ok: true }); return; }
+      if (method === 'session.events.since') {
+        const ring = replayRing.get(String(params.session_id)), last = Number(params.last_seen ?? 0);
+        const events = (ring?.events ?? []).filter(row => Number(row.seq) > last);
+        reply({ events, latest_seq: ring?.seq ?? 0, truncated: false, count: events.length, epoch: replayEpoch, open_requests: [] }); return;
+      }
       if (method === 'session.create') {
         const sid = randomUUID(); const key = randomUUID(); metrics.creates++;
         models.create(sid, typeof params.profile === 'string' ? params.profile : 'default');
-        sessions.set(sid, { key, messages: [], running: false, profile: typeof params.profile === 'string' ? params.profile : 'default', updated: Date.now()/1000, turn: 0, inflight: '' }); attached.add(sid); reply({ session_id: sid, stored_session_id: key, info: models.info(sid) }); return;
+        sessions.set(sid, { key, messages: [], running: false, profile: typeof params.profile === 'string' ? params.profile : 'default', updated: Date.now()/1000, turn: 0, inflight: '' }); attach(sid); reply({ session_id: sid, stored_session_id: key, info: models.info(sid) }); return;
       }
       if (method === 'session.resume') {
         const entry = [...sessions].find(([sid, session]) => sid === params.session_id || session.key === params.session_id);
         if (!entry || (params.profile && entry[1].profile !== params.profile)) { error(); return; }
         if (!('model' in models.info(entry[0]))) models.create(entry[0], entry[1].profile);
-        attached.add(entry[0]);
+        attach(entry[0]);
         reply({ session_id: entry[0], session_key: entry[1].key, info: { ...models.info(entry[0]), profile_name: entry[1].profile } }); return;
       }
       const session = sessions.get(params.session_id);
       if (!session) { error(); return; }
-      const emitAgent = (type:string,payload:unknown) => {if(client.readyState===1)event(type,params.session_id,payload);};
+      const emitAgent = (type:string,payload:unknown) => event(type,params.session_id,payload);
       if(interactions.respond(params.session_id,method,params,reply))return;
       if (method === 'session.history') { reply({ messages: session.messages }); return; }
-      if (method === 'session.activate') { attached.add(String(params.session_id)); reply({ info: models.info(String(params.session_id)), running: session.running, status: session.running ? 'working' : 'idle', inflight: { assistant: session.inflight },...interactions.snapshot(params.session_id,emitAgent) }); return; }
+      if (method === 'session.activate') { attach(String(params.session_id)); reply({ info: models.info(String(params.session_id)), running: session.running, status: session.running ? 'working' : 'idle', inflight: { assistant: session.inflight },...interactions.snapshot(params.session_id,emitAgent) }); return; }
       if (method === 'session.interrupt') { interactions.interrupt(params.session_id); session.turn++; session.running = false; session.inflight = ''; reply({ ok: true }); event('session.info', params.session_id, { running: false }); return; }
       if (method === 'prompt.submit') {
         if (session.running) { error(); return; }
@@ -317,7 +339,7 @@ export async function startFixture(port = 0, options: { sessionToken?: string; b
           const timer = setTimeout(() => { timers.delete(timer); if (session.turn === turn) callback(); }, delay);
           timers.add(timer);
         };
-        const delta = (text: string) => { session.inflight += text; if (client.readyState === 1) event('message.delta', params.session_id, {text}); };
+        const delta = (text: string) => { session.inflight += text; event('message.delta', params.session_id, {text}); };
         if (slow) delta('Controlled turn is running…');
         // Nested child agents: the roster arrives by hydration AND the streamed frames exercise the live path.
         if (childAgent) {
@@ -332,6 +354,15 @@ export async function startFixture(port = 0, options: { sessionToken?: string; b
           later(() => { child.tool_name = 'read_file'; child.tool_count = 4; event('subagent.tool', params.session_id, { subagent_id: child.subagent_id, tool_name: 'read_file', tool_count: 4, child_session_id: childKey }); }, 500);
           // The child keeps working after the operator opens it: the view must pick this up without a reload.
           later(() => { childSessions.get(childKey)?.messages.push({ role: 'assistant', text: 'FIXTURE_CHILD_LATE_STEP' }); }, 5000);
+        }
+        // Reasoning streamed across a disconnect: the missed middle must come back through session.events.since.
+        if (String(params.text).startsWith('[replay-test]')) {
+          const parts = ['Part one. ', 'Part two. ', 'Part three. ', 'Part four. ', 'Part five.'];
+          parts.forEach((text, i) => later(() => event('reasoning.delta', params.session_id, { text }), 50 + i * 150));
+          later(() => { delta('Replay done.'); session.messages.push({ role: 'assistant', text: session.inflight }); session.updated = Date.now()/1000;
+            event('message.complete', params.session_id, { text: session.inflight });
+            later(() => { session.running = false; session.inflight = ''; event('session.info', params.session_id, { running: false }); }, 20); }, 50 + parts.length * 150 + 100);
+          return;
         }
         // Text, a tool, then more text: the order a real turn produces between tool calls.
         if (String(params.text).startsWith('[interleave-test]')) {
@@ -393,6 +424,8 @@ export async function startFixture(port = 0, options: { sessionToken?: string; b
       return { sid, key };
     },
     disconnect: () => { for (const client of ws.clients) client.terminate(); },
+    /** Kill every open socket and refuse reconnects for pauseMs, so events emitted meanwhile are only in the ring. */
+    dropClients: (pauseMs: number) => { upgradesPausedUntil = Date.now() + pauseMs; ws.clients.forEach(client => client.terminate()); },
     close: async () => {
       closed = true;
       interactions.close();timers.forEach(clearTimeout); ws.clients.forEach((client) => client.terminate()); ws.close();

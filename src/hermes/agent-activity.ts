@@ -28,6 +28,8 @@ export interface ActivityTurn {
 export interface ActivityState {
   reasoning: string; thinking: string; tools: ToolActivity[]; timeline: ActivityTimelineEntry[]; inputs: AgentInput[];
   truncated: boolean; droppedTools: number; recoveryGap: boolean; malformed: boolean;
+  /** Some live events were lost during a disconnect and Hermes' replay ring no longer covered them. */
+  missedLive?: boolean;
 }
 export const ACTIVITY_LIMITS = {
   tools: 40, timeline: 96, inputs: 16, text: 32768, reasoningSegment: 8192, archiveReasoning: 4096, archiveTimeline: 24,
@@ -164,6 +166,8 @@ export class AgentActivity {
   }
   private empty(): ActivityState { return { reasoning: '', thinking: '', tools: [], timeline: [], inputs: [], truncated: false, droppedTools: 0, recoveryGap: false, malformed: false }; }
   reset(): void { this.state = this.empty(); this.archive = []; this.terminal.clear(); this.turn = 0; this.timelineSequence = 0; }
+  /** The replay after a reconnect could not cover everything missed: say so; the saved transcript stays authoritative. */
+  missed(): void { this.state = { ...this.state, missedLive: true }; }
   disconnect(): void {
     this.state = { ...this.state, recoveryGap: this.state.inputs.some((p) => ['pending','sending','unknown'].includes(p.status) && ['sudo','secret'].includes(p.kind)),
       inputs: this.state.inputs.map((p) => ['pending','sending'].includes(p.status) ? {...p, status:'unknown'} : p),
