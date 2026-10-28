@@ -3,7 +3,7 @@ import { WsAuthClient } from './ws-auth.js';
 import { skillList, skillDocument, skillName, type SkillDocument, type SkillRow } from './skills.js';
 import { memoryStatus, type MemoryStatus } from './memory.js';
 import { cronJob, cronJobId, cronJobList, cronRunPage, CRON_ACTIONS, type CronActionKind, type CronJob, type CronRun } from './cron.js';
-import { sessionQuery, sessionPage, searchPage, historyPage, firstMessage, sessionId, profileName, HISTORY_LIMIT, type SessionQuery, type SessionRef } from './session-rest.js';
+import { sessionQuery, sessionPage, searchPage, mergeSearch, profileNames, historyPage, firstMessage, sessionId, profileName, HISTORY_LIMIT, type SessionQuery, type SessionRef } from './session-rest.js';
 import type { DiagnosticsRing } from './diagnostics.js';
 import { mcpServerList, type McpServer } from './mcp.js';
 import { hermesStatus, hermesHealth, systemStats, type HermesStatus, type HermesHealth, type SystemStats } from './hermes-status.js';
@@ -22,7 +22,8 @@ const ROUTES = {
   identity: '/__hermes/api/auth/me', ticket: '/__hermes/api/auth/ws-ticket',
   login: '/__hermes/auth/password-login', logout: '/__hermes/auth/logout',
   schema: '/__hermes/openapi.json', capabilities: '/api/webui/capabilities',
-  sessions: '/__hermes/api/sessions', sessionSearch: '/__hermes/api/sessions/search', sessionHistory: '/__hermes/api/sessions',
+  sessions: '/__hermes/api/sessions', allSessions: '/__hermes/api/profiles/sessions', profileList: '/__hermes/api/profiles',
+  sessionSearch: '/__hermes/api/sessions/search', sessionHistory: '/__hermes/api/sessions',
   audioTranscribe: '/__hermes/api/audio/transcribe', audioSpeak: '/__hermes/api/audio/speak', audioVoice: '/__hermes/api/audio/voice-config',
   skills: '/__hermes/api/skills', skillContent: '/__hermes/api/skills/content',
   memory: '/__hermes/api/memory',
@@ -182,18 +183,44 @@ export class DashboardClient {
   credential(signal?: AbortSignal) { return new WsAuthClient(this).credential(signal); }
   schema(signal?: AbortSignal) { return this.request('schema', 'GET', undefined, signal); }
   capabilities(signal?: AbortSignal) { return this.request('capabilities', 'GET', undefined, signal); }
+  /** No profile = every profile, merged by recency (upstream `/api/profiles/sessions`). A Hermes
+   * without that route (404) falls back to the serving profile's own list. */
   async sessions(options: SessionQuery = {}, signal?: AbortSignal) {
     const query = sessionQuery(options);
-    const page = sessionPage(await this.request('sessions', 'GET', undefined, signal, `?${query}`), options.profile);
+    let input: Record<string, unknown>;
+    if (profileName(options.profile)) input = await this.request('sessions', 'GET', undefined, signal, `?${query}`);
+    else {
+      query.set('profile', 'all');
+      try { input = await this.request('allSessions', 'GET', undefined, signal, `?${query}`); }
+      catch (error) {
+        if (!(error instanceof HttpError && error.status === 404)) throw error;
+        query.delete('profile');
+        input = await this.request('sessions', 'GET', undefined, signal, `?${query}`);
+      }
+    }
+    const page = sessionPage(input, options.profile);
     if (page.offset !== (options.offset ?? 0) || page.limit !== (options.limit ?? 20))
       throw new ClientError('protocol', 'Unexpected Hermes session pagination');
     return page;
   }
+  /** Upstream search reads one profile's store. No profile = fan out to every profile and merge;
+   * a profile that fails is skipped unless every profile fails. */
   async searchSessions(text: string, profile?: string, signal?: AbortSignal) {
     if (!text.trim() || text.length > 512) throw new ClientError('protocol', 'Search must contain 1–512 characters');
-    const query = new URLSearchParams({ q: text.trim(), limit: '50' });
-    if (profileName(profile)) query.set('profile', profile!);
-    return searchPage(await this.request('sessionSearch', 'GET', undefined, signal, `?${query}`), profile);
+    const one = async (name?: string) => {
+      const query = new URLSearchParams({ q: text.trim(), limit: '50' });
+      if (name) query.set('profile', name);
+      return searchPage(await this.request('sessionSearch', 'GET', undefined, signal, `?${query}`), name);
+    };
+    if (profileName(profile)) return one(profile);
+    let names: string[];
+    try { names = profileNames(await this.request('profileList', 'GET', undefined, signal)); }
+    catch (error) { if (error instanceof HttpError && error.status === 404) return one(); throw error; }
+    if (!names.length) return one();
+    const settled = await Promise.allSettled(names.map(name => one(name)));
+    const ok = settled.flatMap(item => item.status === 'fulfilled' ? [item.value] : []);
+    if (!ok.length) throw (settled[0] as PromiseRejectedResult).reason;
+    return mergeSearch(ok);
   }
   async sessionMessages(ref: SessionRef, offset = 0, signal?: AbortSignal) {
     sessionQuery({ offset });

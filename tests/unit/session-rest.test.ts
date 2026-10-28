@@ -40,7 +40,9 @@ test('session rows retain optional lifecycle and durable resume metadata without
 test('search and history use supported routes and canonical upstream session/profile', async () => {
   const client = new DashboardClient('http://localhost:8787', async (input) => {
     const url = new URL(String(input));
+    if (url.pathname === '/__hermes/api/profiles') return Response.json({ profiles: [{ name: 'default' }] });
     if (url.pathname.endsWith('/search')) {
+      assert.equal(url.searchParams.get('profile'), 'default');
       assert.equal(url.searchParams.get('q'), 'alpha & ? beta');
       return Response.json({ results: [{ session_id: 'tip', snippet: '<b>untrusted</b>', title: 'Test' }] });
     }
