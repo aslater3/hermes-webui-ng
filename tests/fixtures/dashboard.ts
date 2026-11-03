@@ -223,8 +223,10 @@ export async function startFixture(port = 0, options: { agentLoop?: boolean; ses
     if (req.url === '/echo-headers') { send(200, req.headers); return; }
     if (req.url === '/consume') { req.resume(); req.on('end', () => send(200, {})); return; }
     const url = new URL(req.url ?? '/', 'http://fixture');
+    const scope = url.searchParams.get('profile');
+    // Upstream `/api/profiles/sessions` reads `profile=all` as every profile.
     const rows = [...sessions.values()].filter((session) => session.messages.length &&
-      (!url.searchParams.get('profile') || session.profile === url.searchParams.get('profile')))
+      (!scope || scope === 'all' || session.profile === scope))
       .sort((a,b) => b.updated - a.updated).map((session) => ({ id: session.key, profile: session.profile,
         title: session.messages[0]?.text.slice(0,80) ?? '', preview: session.messages.at(-1)?.text.slice(0,120),
         last_active: session.updated, message_count: session.messages.length, source: 'webui-ng' }));
@@ -235,7 +237,7 @@ export async function startFixture(port = 0, options: { agentLoop?: boolean; ses
       send(503, { detail: "Session store is not initialized. Start this profile's gateway to initialize it." }); return;
     }
     if (req.method === 'GET' && url.pathname === '/api/profiles') { send(200, { profiles: [{ name: 'default' }] }); return; }
-    if (req.method === 'GET' && url.pathname === '/api/sessions') {
+    if (req.method === 'GET' && (url.pathname === '/api/sessions' || url.pathname === '/api/profiles/sessions')) {
       send(200, { sessions: rows.slice(offset, offset + limit), total: rows.length, limit, offset }); return;
     }
     if (req.method === 'GET' && url.pathname === '/api/sessions/search') {

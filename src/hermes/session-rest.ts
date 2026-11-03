@@ -35,7 +35,8 @@ function number(value: unknown): number {
 export function sessionQuery(options: SessionQuery = {}): URLSearchParams {
   const limit = number(options.limit ?? 20), offset = number(options.offset ?? 0);
   if (limit < 1 || limit > 100) throw new ClientError('protocol', 'Session page limit must be 1–100');
-  const query = new URLSearchParams({ limit: String(limit), offset: String(offset), order: 'recent' });
+  // Scheduled runs (cron) stay out of the conversation list, as in the desktop recents; search still finds them.
+  const query = new URLSearchParams({ limit: String(limit), offset: String(offset), order: 'recent', exclude_sources: 'cron' });
   const profile = profileName(options.profile);
   if (profile) query.set('profile', profile);
   return query;
@@ -64,7 +65,8 @@ function row(input: unknown, profile?: string, search = false): SessionRow {
 export function sessionPage(input: unknown, profile?: string): SessionPage {
   const data = record(input);
   const limit = number(data.limit), offset = number(data.offset), total = number(data.total);
-  if (!Array.isArray(data.sessions) || limit < 1 || limit > 100 || data.sessions.length > limit)
+  // Upstream back-fills pinned rows past the page window, so a page may exceed `limit` by its pins.
+  if (!Array.isArray(data.sessions) || limit < 1 || limit > 100 || data.sessions.length > limit + PINNED_SLACK)
     throw new ClientError('protocol', 'Invalid Hermes session page');
   return { rows: data.sessions.map((item: unknown) => row(item, profile)), limit, offset, total };
 }
@@ -74,6 +76,25 @@ export function searchPage(input: unknown, profile?: string): SessionRow[] {
     throw new ClientError('protocol', 'Invalid Hermes search results');
   const rows = data.results.map((item: unknown) => row(item, profile, true));
   return [...new Map(rows.map((item) => [JSON.stringify([item.profile, item.id]), item])).values()];
+}
+const PINNED_SLACK = 50;
+export const SEARCH_LIMIT = 100;
+const MAX_PROFILES = 64;
+/** Profile names from `GET /api/profiles`; malformed entries are dropped, not guessed. */
+export function profileNames(input: unknown): string[] {
+  const data = record(input);
+  if (!Array.isArray(data.profiles)) throw new ClientError('protocol', 'Invalid Hermes profile list');
+  const names = data.profiles.flatMap((item: unknown) => {
+    const name = item && typeof item === 'object' ? (item as Record<string, unknown>).name : undefined;
+    try { return typeof name === 'string' && profileName(name) ? [name] : []; } catch { return []; }
+  });
+  return [...new Set(names)].slice(0, MAX_PROFILES);
+}
+/** Per-profile relevance ranks are not comparable, so cross-profile results merge by recency. */
+export function mergeSearch(pages: SessionRow[][]): SessionRow[] {
+  const rows = new Map<string, SessionRow>();
+  for (const item of pages.flat()) { const key = JSON.stringify([item.profile ?? 'default', item.id]); if (!rows.has(key)) rows.set(key, item); }
+  return [...rows.values()].sort((a, b) => b.lastActive - a.lastActive).slice(0, SEARCH_LIMIT);
 }
 /** The oldest stored message of a session (a subagent's initial prompt), from an `order=oldest&limit=1` read. */
 export function firstMessage(input: unknown): HistoryMessage | undefined {
