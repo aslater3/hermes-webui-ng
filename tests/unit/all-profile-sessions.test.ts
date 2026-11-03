@@ -19,6 +19,7 @@ test('an unscoped session list reads every profile and keeps each row\'s owning 
   assert.equal(calls[0]!.pathname, '/__hermes/api/profiles/sessions');
   assert.equal(calls[0]!.searchParams.get('profile'), 'all');
   assert.equal(calls[0]!.searchParams.get('order'), 'recent');
+  assert.equal(calls[0]!.searchParams.get('exclude_sources'), 'cron');
   assert.deepEqual(page.rows.map(r => [r.id, r.profile]), [['a', 're'], ['b', 'default']]);
 });
 
@@ -27,6 +28,7 @@ test('a scoped session list stays on the single-profile route', async () => {
   await client(() => Response.json({ sessions: [], total: 0, offset: 0, limit: 20 }), calls).sessions({ profile: 're' });
   assert.equal(calls[0]!.pathname, '/__hermes/api/sessions');
   assert.equal(calls[0]!.searchParams.get('profile'), 're');
+  assert.equal(calls[0]!.searchParams.get('exclude_sources'), 'cron');
 });
 
 test('a Hermes without the cross-profile route falls back to the serving profile list', async () => {

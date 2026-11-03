@@ -35,7 +35,8 @@ function number(value: unknown): number {
 export function sessionQuery(options: SessionQuery = {}): URLSearchParams {
   const limit = number(options.limit ?? 20), offset = number(options.offset ?? 0);
   if (limit < 1 || limit > 100) throw new ClientError('protocol', 'Session page limit must be 1–100');
-  const query = new URLSearchParams({ limit: String(limit), offset: String(offset), order: 'recent' });
+  // Scheduled runs (cron) stay out of the conversation list, as in the desktop recents; search still finds them.
+  const query = new URLSearchParams({ limit: String(limit), offset: String(offset), order: 'recent', exclude_sources: 'cron' });
   const profile = profileName(options.profile);
   if (profile) query.set('profile', profile);
   return query;
