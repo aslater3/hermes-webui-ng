@@ -1,5 +1,6 @@
 import { NativeQuestions } from './NativeQuestions.js';
 import { CommandTaskResults } from './CommandTaskResults.js';
+import { AutomationNotices, GoalStrip } from './SessionAutomation.js';
 import { useCommands } from './Commands.js';
 import './m3-activity.css';
 import { HermesMark } from './HermesMark.js';
@@ -180,6 +181,7 @@ export function Conversation({ runtime: rt, revision }: { runtime: AppRuntime; r
         ? <Message key={`${scope}:${segment.key}`} {...segment.message}/>
         : <TurnTimeline key={`${scope}:${segment.key}`} items={segment.items}/>)}
       <CommandTaskResults commands={chat.native.commands}/>
+      {!historical && <AutomationNotices owner={chat.native}/>}
       <Activity owner={chat.native} enabled={rt.ready && !loading} historical={snapshot} revision={revision} attention={attention}/>
       {streaming && !interleaved && <div className="message message-assistant streaming"><div className="message-label"><span className="assistant-mark"><HermesMark size={15}/></span>Hermes <span className="working-label">Working</span></div><pre className="plain-message">{streaming}<span className="stream-cursor"/></pre></div>}
       {busy && !streaming && !pending && <div className="thinking-indicator" role="status"><span/><span/><span/>Hermes is working</div>}
@@ -196,6 +198,7 @@ export function Conversation({ runtime: rt, revision }: { runtime: AppRuntime; r
       {dropping && <div className="drop-target" aria-hidden="true">{attachEnabled ? 'Drop to attach to your next message' : 'Open an idle conversation to attach files'}</div>}
       {unread && <button className="jump-latest" onClick={jump}><ArrowDown size={15}/>Jump to latest</button>}
       <NowLine action={liveOffscreen ? now : undefined} onJump={jumpToLive}/>
+      {!historical && !chat.subagent && <GoalStrip owner={chat.native}/>}
       {pending > 0 && <button className="attention-strip" onClick={() => { following.current = false; content.current?.querySelector('[data-native-requests], .agent-requests')?.scrollIntoView({ block: 'center', behavior: 'instant' }); }}><span className="attention-dot"/>{pending} request{pending === 1 ? '' : 's'} need your input<ArrowUpRight size={15}/></button>}
       <form className="composer" id="shell-composer" onSubmit={event => { event.preventDefault(); send(); }}>
         {commands.popup}

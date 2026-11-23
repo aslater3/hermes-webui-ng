@@ -7,6 +7,7 @@ import { agentMetadata, yoloSetParams, type AgentMetadata } from './model-catalo
 import { AgentActivity, inputRpc } from './agent-activity.js';
 import type { ConnectionState, GatewayClient } from './gateway-client.js';
 import { ClientError, record, textField, type GatewayEvent } from './protocol.js';
+import { automationNoticeText, goalSummary, NOTICE_LIMIT, type AutomationNotice, type GoalSummary } from './session-automation.js';
 
 type Transport = Pick<GatewayClient, 'call' | 'onEvent' | 'onState' | 'state'> & Partial<Pick<GatewayClient, 'requests' | 'holdForReplay' | 'releaseReplay' | 'replay'>>;
 export type Message = DisplayMessage;
@@ -25,6 +26,10 @@ export interface SessionState {
   agent?: AgentMetadata;
   agentStarting?: boolean;
   usage?: SessionUsage;
+  /** Goal/loop verdict lines and command acks Hermes sent while this view was attached (not persisted). */
+  notices?: AutomationNotice[];
+  /** The session's /goal from Hermes' control snapshot; undefined when unknown or unsupported. */
+  goal?: GoalSummary;
 }
 
 /** ``count`` is the whole transcript even when the reply is a bounded window; older Hermes sends only the window. */
@@ -43,6 +48,7 @@ export class NativeSession {
   private revision = 0;
   private streamRevision = 0;
   private usageRevision = 0;
+  private noticeId = 0;
   private disposed = false;
   private foreground = true;
   /** Runtime whose live events are held for replay after a reconnect. */
@@ -70,6 +76,7 @@ export class NativeSession {
       notify: () => this.publish({}),
       refresh: () => this.refresh(),
       submitGenerated: message => this.submitGenerated(message),
+      notice: text => this.addNotice('command', text),
     });
     this.unsubscribe = [
       ...(gateway.requests ? [gateway.requests.subscribe(() => this.publish({}))] : []),
@@ -92,6 +99,22 @@ export class NativeSession {
     if (value !== this.foreground) { ++this.revision; ++this.usageRevision; }
     this.foreground = value;
     if (!value) { this.commands.reset(true); this.settings.reset(); this.publish({ messages: [], streaming: '', usage: undefined }); }
+  }
+  dismissNotice(id: number): void {
+    this.publish({ notices: (this.state.notices ?? []).filter(notice => notice.id !== id) });
+  }
+  private addNotice(kind: AutomationNotice['kind'], text: string): void {
+    const notices = [...(this.state.notices ?? []), { id: ++this.noticeId, kind, text }].slice(-NOTICE_LIMIT);
+    this.publish({ notices });
+  }
+  /** Seed the goal strip. Older Hermes lacks session.control.read: the strip just stays hidden. */
+  private async readControl(epoch: number, runtimeId: string): Promise<void> {
+    try {
+      const result = record(await this.gateway.call('session.control.read', { session_id: runtimeId }));
+      if (epoch !== this.epoch || this.state.runtimeId !== runtimeId) return;
+      const goal = goalSummary(result.control);
+      if (goal !== undefined) this.publish({ goal: goal ?? undefined });
+    } catch { /* optional capability */ }
   }
   subscribe(listener: (state: SessionState) => void): () => void {
     this.listeners.add(listener);
@@ -151,6 +174,7 @@ export class NativeSession {
       error: undefined,
       deliveryUnknown: reconnect && this.state.deliveryUnknown,
       submitting: false, interrupting: false, totalMessages: 0,
+      ...(reconnect ? {} : { notices: [], goal: undefined }),
     });
     try {
       this.valid(epoch);
@@ -189,6 +213,7 @@ export class NativeSession {
           if (outcome === 'gap') { this.activity.missed(); this.publish({}); }
         } else this.gateway.releaseReplay?.(held);
       } else if (held) this.gateway.releaseReplay?.(held);
+      void this.readControl(epoch, runtimeId);
       await this.refresh();
     } catch (error) {
       this.failure(epoch, error);
@@ -286,6 +311,13 @@ export class NativeSession {
       }
     }
     if (this.activity.receive(event)) this.publish({});
+    const notice = automationNoticeText(event);
+    if (notice) this.addNotice(notice.kind, notice.text);
+    if (event.type === 'session.control.update') {
+      const payload = event.payload && typeof event.payload === 'object' && !Array.isArray(event.payload) ? record(event.payload) : {};
+      const goal = goalSummary(payload.control);
+      if (goal !== undefined) this.publish({ goal: goal ?? undefined });
+    }
     // New agent activity means the turn moved on; a 'waiting' phase with no open request is stale.
     if (this.state.phase === 'waiting' && !this.hasPeerRequest() &&
         ['reasoning.delta', 'message.delta', 'tool.start', 'tool.progress', 'tool.complete'].includes(event.type) &&

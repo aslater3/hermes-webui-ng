@@ -13,6 +13,8 @@ interface Target {
   notify(): void;
   refresh?(): Promise<void>;
   submitGenerated?(message: string): Promise<void>;
+  /** Surface a command's acknowledgement (e.g. "Goal set") in the conversation. */
+  notice?(text: string): void;
 }
 export interface CommandsState {
   catalogue?: CommandCatalogue;
@@ -172,6 +174,7 @@ export class NativeCommands {
       } else if (result.kind === 'send') {
         if (!this.target.submitGenerated) throw new ClientError('protocol', 'The native prompt hand-off is unavailable. Check native state before retrying.');
         await this.target.refresh?.(); current();
+        if (result.notice) this.target.notice?.(result.notice);
         await this.target.submitGenerated(result.message); current();
       } else {
         await this.target.refresh?.(); current();
