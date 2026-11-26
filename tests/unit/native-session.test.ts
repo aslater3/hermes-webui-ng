@@ -245,3 +245,21 @@ test('settled session.info invalidates a snapshot already fetching while ignorin
   assert.equal(session.state.messages.at(-1)?.text, 'settled while fetching');
   session.dispose();
 });
+
+test('a turn Hermes starts itself loads its prompt row instead of merging into the finished turn', async () => {
+  const rpc = new Rpc();
+  const session = new NativeSession(rpc);
+  await session.create();
+  rpc.messages.push({ role: 'assistant', text: 'I will report when the copy completes.' });
+  await session.refresh();
+  assert.equal(session.state.phase, 'idle');
+  // A background-process notification starts a new turn: its user row is persisted before message.start.
+  rpc.messages.push({ role: 'user', text: '[IMPORTANT: Background process matched watch pattern]' });
+  rpc.running = true;
+  rpc.emit('message.start');
+  await tick(); await tick();
+  assert.equal(session.state.phase, 'running');
+  assert.equal(session.state.messages.at(-1)?.text, '[IMPORTANT: Background process matched watch pattern]',
+    'without the prompt row the new turn\'s live steps render under the previous reply');
+  session.dispose();
+});

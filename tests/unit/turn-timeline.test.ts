@@ -246,3 +246,49 @@ test('a multi-line command summarises as one joined line', async () => {
   const { oneLine } = await import('../../src/hermes/agent-steps.js');
   assert.equal(oneLine('python3 -c "\nimport json\nprint(1)"'), 'python3 -c " import json print(1)"');
 });
+
+/** Native `session.history` rows: tool results carry the call id but (for most tools) no output. */
+const nativeRow = (row: Record<string, unknown>) => displayMessage(row, 'native') as DisplayMessage;
+
+test('a native result row without output reads as finished, not "no result recorded"', () => {
+  const messages = [
+    nativeRow({ role: 'user', text: 'Kill the transfer.' }),
+    nativeRow({ role: 'assistant', text: '', tool_calls: [call('k1', 'terminal', { command: 'pkill -f storbinary' })] }),
+    nativeRow({ role: 'tool', name: 'terminal', context: 'pkill -f storbinary', tool_call_id: 'k1' }),
+    nativeRow({ role: 'assistant', text: 'Switched.' }),
+  ];
+  const [group] = groups(turnOf(conversationSegments(messages)).items);
+  assert.equal(group?.status, 'unknown', 'no outcome can be read without the output');
+  assert.equal(group?.finished, true, 'but the stored result row proves the step finished');
+  assert.equal(group?.calls[0]?.finished, true);
+});
+
+test('a call with no result row is not marked finished', () => {
+  const messages = [
+    nativeRow({ role: 'user', text: 'Run it.' }),
+    nativeRow({ role: 'assistant', text: '', tool_calls: [call('n1', 'terminal', { command: 'make' })] }),
+  ];
+  const [group] = groups(turnOf(conversationSegments(messages)).items);
+  assert.equal(group?.status, 'unknown');
+  assert.notEqual(group?.finished, true);
+});
+
+test('after a reconnect the live call wins over its output-less saved row (running, then complete)', () => {
+  // History fetched mid-turn: the assistant row holding the call is persisted, its result is not.
+  const messages = [
+    nativeRow({ role: 'user', text: 'Wait a bit.' }),
+    nativeRow({ role: 'assistant', text: '', tool_calls: [call('s1', 'terminal', { command: 'sleep 25' })] }),
+  ];
+  const running = liveActivity([['message.start', {}], ['tool.start', { tool_id: 's1', name: 'terminal', args: { command: 'sleep 25' } }]], [1000, 1000, 1000]);
+  let [group] = groups(turnOf(conversationSegments(messages, { activity: running.state, running: true, interleaved: false })).items);
+  assert.equal(group?.calls.length, 1, 'the call is shown once');
+  assert.equal(group?.status, 'running', 'a saved row with no result must not hide the running timer');
+  assert.equal(group?.calls[0]?.key, 'call:s1', 'the saved key is kept so the row keeps its DOM node');
+
+  const done = liveActivity([['message.start', {}], ['tool.start', { tool_id: 's1', name: 'terminal', args: { command: 'sleep 25' } }],
+    ['tool.complete', { tool_id: 's1', name: 'terminal', duration_s: 25, result: '{"output":"two","exit_code":0}' }]], [1000, 1000, 1000, 1000]);
+  [group] = groups(turnOf(conversationSegments(messages, { activity: done.state, running: true, interleaved: false })).items);
+  assert.equal(group?.status, 'ok', 'the live completion is not masked by the saved "unknown" row');
+  assert.equal(group?.calls[0]?.seconds, 25);
+  assert.match(group?.calls[0]?.output ?? '', /two/);
+});
