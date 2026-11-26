@@ -125,3 +125,28 @@ test('read-only history never submits and disconnected browsing never creates a 
   assert.equal(h.resumed(),''); assert.equal(h.chat.browser.history.phase,'ready'); h.chat.setDraft('not sent'); await h.chat.send();
   assert.equal(h.prompts(),0); h.chat.dispose();
 });
+test('a profile-less link resumes in the profile that owns the session, and the link gains that profile',async()=>{
+  const state: ConnectionState = {phase:'ready', generation:1, attempt:0};
+  const resumes:Record<string,unknown>[]=[]; const probes:string[]=[];
+  const gateway = { state, onState:(cb:(state:ConnectionState)=>void)=>{cb(state);return()=>{};}, onEvent:()=>()=>{},
+    call: async (method:string, params:Record<string,unknown>={}) => {
+      if(method==='session.resume') { resumes.push(params); if(params.profile!=='safe') throw new ClientError('rpc','Hermes RPC rejected (4007)',4007);
+        return {session_id:'live',session_key:params.session_id,info:{profile_name:'safe'}}; }
+      if(method==='session.history') return {messages:[]};
+      if(method==='session.activate') return {running:false};
+      return {};
+    } };
+  const reader = {sessions:async()=>({rows:[],total:0,limit:20,offset:0}),searchSessions:async()=>[],
+    sessionProfiles:async(id:string)=>{probes.push(id); return ['safe'];},
+    sessionMessages:async (ref:{id:string;profile?:string}):Promise<HistoryPage>=>{
+      if(ref.profile!=='safe') throw new HttpError(404);
+      return {id:ref.id,profile:'safe',messages:[],returned:0,offset:0,limit:100};
+    }};
+  const chat = new ChatController(reader,gateway); chat.setEnabled(true);
+  await chat.open({id:'safe-session'});
+  assert.deepEqual(probes,['safe-session']);
+  assert.equal(resumes.at(-1)?.profile,'safe'); assert.equal(chat.error,undefined);
+  assert.equal(chat.selected?.profile,'safe');
+  assert.equal(navigation(chat.selected),'#session=safe-session&profile=safe');
+  chat.dispose();
+});

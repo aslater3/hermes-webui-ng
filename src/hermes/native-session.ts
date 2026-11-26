@@ -334,6 +334,10 @@ export class NativeSession {
     } else if (event.type === 'message.start') {
       ++this.revision;
       this.publish({ phase: 'running', streaming: '' });
+      // A turn Hermes starts itself (background-process notification, queued prompt, goal continuation) has a
+      // prompt row this client has not loaded. Without it the live steps merge into the previous turn, so its
+      // finished reply looks like it is still working. The user row is persisted before the turn starts.
+      void this.refresh().catch(() => {});
     } else if (
       // Completion precedes upstream cleanup; settled session.info must invalidate the
       // current snapshot too. Do not guess idle from message.complete alone.

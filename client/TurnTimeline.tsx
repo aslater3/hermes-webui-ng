@@ -71,7 +71,7 @@ function CallDetail({ call, now }: { call: ToolCall; now: number }) {
   const time = call.status === 'running' ? elapsed(call.startedAt, now) : toolLabel(call.seconds);
   return <li className="turn-call" data-status={call.status} data-call-id={call.callId}>
     <div className="turn-call-head">
-      <span className="turn-call-state"><Glyph status={call.status}/>{call.verdict || statusWord[call.status]}</span>
+      <span className="turn-call-state"><Glyph status={call.status}/>{call.verdict || (call.finished ? 'finished' : statusWord[call.status])}</span>
       {time && <span className="turn-call-time">{time}</span>}
     </div>
     <p className="turn-field">Command</p>
@@ -79,7 +79,7 @@ function CallDetail({ call, now }: { call: ToolCall; now: number }) {
     <p className="turn-field">Output</p>
     {call.status === 'running' ? <p className="turn-empty">Running · {elapsed(call.startedAt, now)}</p>
       : output ? <pre className="turn-code turn-output">{shown}</pre>
-        : <p className="turn-empty">No output recorded</p>}
+        : <p className="turn-empty">{call.finished ? 'Finished. The saved transcript view does not include this output.' : 'No output recorded'}</p>}
     {lines.length > OUTPUT_LINES && !all && <button type="button" className="turn-more-button" onClick={() => setAll(true)}>Show all {lines.length} lines</button>}
   </li>;
 }
@@ -112,6 +112,7 @@ function ToolRow({ item, open, now, onToggle }: { item: ToolGroupItem; open: boo
   if (item.status === 'running') status = <><Glyph status="running"/><span className="turn-status-text">{elapsed(item.startedAt, now)}</span></>;
   else if (item.status === 'ok') status = <><Glyph status="ok"/><span className="turn-status-text">{seconds !== undefined ? toolLabel(seconds) : item.calls.map(call => call.verdict).find(Boolean) ?? 'done'}</span></>;
   else if (item.status === 'failed') status = <><Glyph status="failed"/><span className="turn-status-text">{failed?.verdict || 'failed'}{seconds !== undefined ? ` · ${toolLabel(seconds)}` : ''}</span></>;
+  else if (item.finished) status = <span className="turn-status-text">{seconds !== undefined ? `finished · ${toolLabel(seconds)}` : 'finished'}</span>;
   else status = <span className="turn-status-text">no result recorded</span>;
   return <li className="turn-row turn-tools" data-row="tools" data-status={item.status} data-live-row={item.running ? 'true' : undefined} data-running={item.running ? 'true' : undefined}>
     <button type="button" className="turn-row-toggle" aria-expanded={open} aria-controls={id} onClick={onToggle}>

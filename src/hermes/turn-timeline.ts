@@ -34,11 +34,15 @@ export interface ToolCall {
   startedAt?: number;
   /** No assistant call matched this result. */
   orphan: boolean;
+  /** History holds this call's result row, but the compact native projection omitted its output. */
+  finished?: boolean;
 }
 export interface ThoughtItem { kind: 'thought'; key: string; text: string; preview: string; truncated: boolean; seconds?: number; running: boolean; startedAt?: number; }
 export interface NarrationItem { kind: 'narration'; key: string; text: string; truncated: boolean; running: boolean; }
 export interface ReplyItem { kind: 'reply'; key: string; text: string; truncated: boolean; running: boolean; }
-export interface ToolGroupItem { kind: 'tools'; key: string; calls: ToolCall[]; status: CallStatus; seconds?: number; running: boolean; startedAt?: number; }
+export interface ToolGroupItem { kind: 'tools'; key: string; calls: ToolCall[]; status: CallStatus; seconds?: number; running: boolean; startedAt?: number;
+  /** Every call without a readable outcome still has a stored result: the step finished, its output was not sent. */
+  finished?: boolean; }
 export type TimelineItem = ThoughtItem | NarrationItem | ReplyItem | ToolGroupItem;
 
 /** Internal flat atoms; grouping into rows happens after merging so calls can join across the saved/live boundary. */
@@ -62,10 +66,10 @@ export type ConversationSegment = MessageSegment | TurnSegment;
 interface SavedTurn { kind: 'turn'; start: number; atoms: Atom[]; }
 
 /** Saved tool step to a call atom. Native history omits most outputs, so `unknown` means "nothing recorded", not failure. */
-function savedCall(step: ToolStep, key: string, callId: string | undefined, seconds: number | undefined): Atom {
+function savedCall(step: ToolStep, key: string, callId: string | undefined, seconds: number | undefined, hasResult = false): Atom {
   const status: CallStatus = step.outcome === 'ok' ? 'ok' : step.outcome === 'failed' ? 'failed' : 'unknown';
   const call: ToolCall = { key, callId, name: step.name, summary: step.summary, args: step.args, output: step.output,
-    status, verdict: step.verdict, seconds, orphan: step.orphan };
+    status, verdict: step.verdict, seconds, orphan: step.orphan, ...(hasResult && status === 'unknown' ? { finished: true } : {}) };
   return { kind: 'call', key, call, live: false };
 }
 
@@ -90,7 +94,7 @@ function projectSaved(messages: readonly DisplayMessage[]): (MessageSegment | Sa
     if (message.role === 'tool') {
       if (absorbed.has(index)) return;
       const step = toolStep(`${index}-result`, message.toolName ?? 'Tool', undefined, undefined, message, message.timestamp);
-      open(index).atoms.push(savedCall(step, `call:orphan-${index}`, message.toolCallId, toolSeconds(step.output)));
+      open(index).atoms.push(savedCall(step, `call:orphan-${index}`, message.toolCallId, toolSeconds(step.output), true));
       return;
     }
     if (message.role !== 'assistant') {
@@ -113,7 +117,7 @@ function projectSaved(messages: readonly DisplayMessage[]): (MessageSegment | Sa
       const step = toolStep(`${index}-call-${position}`, call.name, call.args, message, result, message.timestamp);
       const key = call.id ? `call:${call.id}` : `call:pos-${index}-${position}`;
       const fromStamps = result?.timestamp !== undefined && message.timestamp !== undefined && result.timestamp >= message.timestamp ? result.timestamp - message.timestamp : undefined;
-      target.atoms.push(savedCall(step, key, call.id || undefined, result ? toolSeconds(step.output) ?? fromStamps : undefined));
+      target.atoms.push(savedCall(step, key, call.id || undefined, result ? toolSeconds(step.output) ?? fromStamps : undefined, !!result));
     });
   });
   return out;
@@ -190,12 +194,21 @@ export function mergeAtoms(saved: readonly Atom[], live: readonly Atom[]): Atom[
     if (atom.kind === 'call' && atom.call.callId && savedCall.has(atom.call.callId)) { anchorLive = index; anchorSaved = savedCall.get(atom.call.callId)!; }
   });
   const result = saved.map(atom => ({ ...atom }) as Atom);
-  // A shared call keeps the duration the live event measured when the stored result carries none.
   for (const atom of live) {
-    if (atom.kind !== 'call' || !atom.call.callId || atom.call.seconds === undefined) continue;
+    if (atom.kind !== 'call' || !atom.call.callId) continue;
     const index = savedCall.get(atom.call.callId);
     const target = index === undefined ? undefined : result[index];
-    if (target?.kind === 'call' && target.call.seconds === undefined) target.call = { ...target.call, seconds: atom.call.seconds };
+    if (target?.kind !== 'call') continue;
+    // Native history omits most tool outputs, and a call persisted mid-turn has no result row yet. When the
+    // saved row could not read an outcome, the live call (running timer, output, verdict) is the better
+    // record: keep the saved key and arguments so the row keeps its DOM node.
+    if (target.call.status === 'unknown' && atom.call.status !== 'unknown') {
+      target.call = { ...atom.call, key: target.call.key, summary: target.call.summary || atom.call.summary,
+        args: target.call.args || atom.call.args, seconds: atom.call.seconds ?? target.call.seconds };
+      continue;
+    }
+    // A shared call keeps the duration the live event measured when the stored result carries none.
+    if (atom.call.seconds !== undefined && target.call.seconds === undefined) target.call = { ...target.call, seconds: atom.call.seconds };
   }
   const tail = result.filter((_, index) => index > anchorSaved);
   const claimed = new Set<Atom>();
@@ -250,6 +263,7 @@ function finishGroup(group: ToolGroupItem): void {
   const seconds = calls.map(call => call.seconds);
   group.seconds = seconds.every((value): value is number => value !== undefined) ? seconds.reduce((sum, value) => sum + value, 0) : undefined;
   group.startedAt = calls.find(call => call.status === 'running')?.startedAt;
+  group.finished = group.status === 'unknown' && calls.every(call => call.status !== 'unknown' || call.finished);
 }
 
 /** Turn items for one turn. Saved only when `live` is undefined; otherwise the merged saved and live steps. */

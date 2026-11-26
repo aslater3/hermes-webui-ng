@@ -7,7 +7,7 @@ import { ClientError } from './protocol.js';
 import { profileName, sessionId, type HistoryMessage, type SessionRef, type SessionRow } from './session-rest.js';
 
 type Gateway = Pick<GatewayClient, 'call' | 'onEvent' | 'onState' | 'state'>;
-type Reader = Pick<DashboardClient, 'sessions' | 'searchSessions' | 'sessionMessages'> & Partial<Pick<DashboardClient, 'sessionFirstMessage'>>;
+type Reader = Pick<DashboardClient, 'sessions' | 'searchSessions' | 'sessionMessages'> & Partial<Pick<DashboardClient, 'sessionFirstMessage' | 'sessionProfiles'>>;
 
 /**
  * A delegated child run opened for inspection. Its transcript is Dashboard REST history only: the child
@@ -52,6 +52,7 @@ export function draftKey(ref?: SessionRef): string { return JSON.stringify([ref?
 /** Selection and composer state only. NativeSession remains the disposable upstream projection. */
 export class ChatController {
   readonly browser: SessionBrowser;
+  private openIntent = 0;
   native: NativeSession;
   selected?: SessionRef;
   draft = '';
@@ -199,8 +200,23 @@ export class ChatController {
     try { await this.native.create(profile); } catch (error) { this.fail(error, scope); }
     finally { if (scope === this.scope) { this.busy = false; this.publish(); } }
   }
+  /** A ref without a profile is resolved to the one profile that owns the id: the listed row, else a store probe. */
+  private async owningProfile(ref: SessionRef): Promise<SessionRef> {
+    if (profileName(ref.profile)) return ref;
+    const listed = [...new Set(this.browser.index.rows.filter(row => row.id === ref.id).map(row => row.profile))];
+    if (listed.length === 1 && profileName(listed[0])) return { ...ref, profile: listed[0] };
+    try {
+      const owners = await this.dashboard.sessionProfiles?.(ref.id) ?? [];
+      // Ambiguous (the same timestamp id in two stores) or unknown: keep the ref as given.
+      return owners.length === 1 ? { ...ref, profile: owners[0] } : ref;
+    } catch { return ref; }
+  }
   async open(ref: SessionRef): Promise<void> {
     if (!this.enabled) return;
+    // A newer open() during the lookup wins: never let a slower resolution replace the user's latest choice.
+    const intent = ++this.openIntent;
+    ref = await this.owningProfile(ref);
+    if (!this.enabled || intent !== this.openIntent) return;
     const listed = this.listedRow(ref);
     const scope = this.reset(ref); this.busy = true; this.publish();
     try {

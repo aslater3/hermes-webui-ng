@@ -222,6 +222,22 @@ export class DashboardClient {
     if (!ok.length) throw (settled[0] as PromiseRejectedResult).reason;
     return mergeSearch(ok);
   }
+  /**
+   * The profiles whose store holds this session id. Hermes resumes a profile's session only when that profile
+   * is named, and a profile-less link (an active-session row, whose `session.active_list` entry carries no
+   * profile, or an old bookmark) would otherwise resume against the default store and fail with 4007.
+   */
+  async sessionProfiles(id: string, signal?: AbortSignal): Promise<string[]> {
+    let names: string[];
+    try { names = profileNames(await this.request('profileList', 'GET', undefined, signal)); }
+    catch (error) { if (error instanceof HttpError && error.status === 404) return []; throw error; }
+    const suffix = (name: string) => `/${encodeURIComponent(sessionId(id))}/messages?${new URLSearchParams({ limit: '1', offset: '0', order: 'latest', profile: name })}`;
+    const found = await Promise.all(names.map(async name => {
+      try { await this.request('sessionHistory', 'GET', undefined, signal, suffix(name)); return name; }
+      catch (error) { if (error instanceof HttpError && error.status === 404) return undefined; throw error; }
+    }));
+    return found.filter((name): name is string => name !== undefined);
+  }
   async sessionMessages(ref: SessionRef, offset = 0, signal?: AbortSignal) {
     sessionQuery({ offset });
     const query = new URLSearchParams({ limit: String(HISTORY_LIMIT), offset: String(offset), order: 'latest' });
